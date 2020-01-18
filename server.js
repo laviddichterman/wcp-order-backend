@@ -4,7 +4,7 @@ const socketIo = require("socket.io");
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const mongoose = require('mongoose');
-const WDateUtils = require("./utils");
+const WDateUtils = require("@wcp/wcpshared");
 
 const app = express();
 const server = http.createServer(app);
@@ -144,3 +144,5 @@ io.on('connection', function(socket) {
 server.listen(PORT, function() {
     console.log("Server is running on Port: " + PORT);
 });
+
+module.exports = server;
