@@ -1,5 +1,3 @@
 {
-  "_id": { "$oid": "5e109c4b3057cf0a9812ed2b" },
-  "services": ["Pick-up", "Dine-In", "Delivery"],
-  "__v": 0
+  "services": ["Pick-up", "Dine-In", "Delivery"]
 }

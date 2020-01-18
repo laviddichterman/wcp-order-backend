@@ -1,15 +1,15 @@
 {
-  "_id": { "$oid": "5e16cf142105b51b53c3c153" },
   "pipeline_info": {
     "baking_pipeline": [
-      { "_id": { "$oid": "5e21996fb2143823101eef2b" }, "slots": 3, "time": 3 },
+      { 
+        "slots": 3, 
+        "time": 3 
+      },
       {
-        "_id": { "$oid": "5e21996fb2143823101eef2a" },
         "slots": 12,
         "time": 11
       },
       {
-        "_id": { "$oid": "5e21996fb2143823101eef29" },
         "slots": 10,
         "time": 12.5
       }
@@ -45,7 +45,6 @@
       [[720, 1380]]
     ]
   ],
-  "__v": 16,
   "additional_pizza_lead_time": 5,
   "time_step": 15
 }
