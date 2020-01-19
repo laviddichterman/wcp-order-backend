@@ -5,9 +5,9 @@ var BlockedOffSchema = new Schema({
   blocked_off: [
     {
       service: Number,
-      exclusion_date: Date,
+      exclusion_date: String,
       // only hours and minutes of the interval dates matter
-      excluded_intervals: [{start: Date, end: Date}]
+      excluded_intervals: [{start: Number, end: Number}]
     }
   ]
 });
