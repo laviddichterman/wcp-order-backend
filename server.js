@@ -110,23 +110,26 @@ function BootstrapDatabase() {
 
     // populate blocked off array
     WCP_BLOCKED_OFF = Array(WCP_SERVICES.length).fill([]);
-    BlockedOffSchema.find(function (err, blocked) {
-      if (err || !blocked || !blocked.length) {
+    BlockedOffSchema.findOne(function (err, blocked) {
+      if (err || !blocked) {
         logger.debug("No blocked off entries found. Creating blocked off array of length %o", WCP_SERVICES.length);
-        WCP_BLOCKED_OFF = Array(WCP_SERVICES.length).fill([]);
         const blocked_off = new BlockedOffSchema({blocked_off: []});
         blocked_off.save()
           .then(e => { logger.debug("Saved blocked off %o", blocked_off) })
           .catch(err => { logger.error("Error saving blocked off %o", err) });
       }
       else {
-        for (var i in blocked) {
-          const interval = [blocked[i].start, blocked[i].end];
-          logger.debug("Added blocked off: %o", blocked[i]);
-          WDateUtils.AddIntervalToService(blocked[i].service,
-            blocked[i].exclusion_date,
-            interval,
-            WCP_BLOCKED_OFF);
+        logger.debug("Found blocked off: %o", blocked);
+        for (var i in blocked.blocked_off) {
+          const entry = blocked.blocked_off[i];
+          logger.debug("Adding blocked off: %o", entry[i]);
+          for (var j in entry.excluded_intervals) {
+            const interval = [entry.excluded_intervals[j].start, entry.excluded_intervals[j].end];
+            WDateUtils.AddIntervalToService(entry.service,
+              entry.exclusion_date,
+              interval,
+              WCP_BLOCKED_OFF);
+          }
         }
       }
     });
@@ -162,10 +165,12 @@ io.on('connection', function (socket) {
       }
     }
     logger.debug("Generated blocked off array: %o", blocked_off);
-    BlockedOffSchema.replaceOne(function (err, blocked) {
-
+    BlockedOffSchema.findOne(function (err, db_blocked) {
+      Object.assign(db_blocked, {blocked_off: blocked_off});
+      db_blocked.save()
+        .then(e => { logger.debug("Saved blocked off %o", db_blocked) })
+        .catch(err => { logger.error("Error saving blocked off %o", err) });
     });
-
   });
   socket.on('WCP_LEAD_TIMES', function (msg) {
     logger.debug("Got socket message on WCP_LEAD_TIMES channel: %o", msg);
