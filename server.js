@@ -1,4 +1,6 @@
 const express = require('express');
+const path = require('path');
+const session = require('express-session');
 const http = require("http");
 const socketIo = require("socket.io");
 const bodyParser = require('body-parser');
@@ -18,7 +20,14 @@ let SettingsSchema = require('./models/settings.model');
 let StringListSchema = require('./models/string_list.model');
 
 app.use(cors());
+app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
+app.use(session({ 
+  secret: 'passport-tutorial', 
+  cookie: { maxAge: 60000 }, 
+  resave: false, 
+  saveUninitialized: false }));
+
 
 mongoose.connect('mongodb://127.0.0.1:27017/wcp_05',
   { useNewUrlParser: true, useUnifiedTopology: true });
