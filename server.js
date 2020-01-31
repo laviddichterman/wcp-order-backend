@@ -119,7 +119,6 @@ function BootstrapDatabase() {
       }
       else {
         logger.info("Found settings: %o", settings);
-        console.log(settings);
         WCP_SETTINGS = settings;
       }
     });
@@ -158,7 +157,6 @@ function BootstrapDatabase() {
 //   return JWTKEYSTORE(req, decodedToken, jwtheader, callback);
 // }
 const wrapper = x => {
-  console.log(x);
   return socketioJwt.authorize({
     secret: JWTKEYSTORE,
     timeout: 15000
@@ -168,8 +166,7 @@ BootstrapDatabase();
 
 io.sockets.on('connect', wrapper)
   .on('authenticated', (socket) => {
-    logger.info("New client authenticated. %o", socket.decoded_token);
-
+    logger.debug("New client authenticated. %o", socket.decoded_token.sub);
     socket.emit('WCP_SERVICES', WCP_SERVICES);
     socket.emit('WCP_LEAD_TIMES', WCP_LEAD_TIMES);
     socket.emit('WCP_BLOCKED_OFF', WCP_BLOCKED_OFF);
