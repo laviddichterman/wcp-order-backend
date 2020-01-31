@@ -6,35 +6,16 @@ const cors = require('cors');
 const WDateUtils = require("@wcp/wcpshared");
 const logger = require("./logging");
 const app = express();
-const jwt = require('express-jwt');
-const jwks = require('jwks-rsa');
-const jwtAuthz = require('express-jwt-authz');
-const socketioJwt = require('./forked-socketiojwt');
-
-const authConfig = {
-  domain: "lavid.auth0.com",
-  audience: "https://wario.windycitypie.com"
-};
-
-const JWTKEYSTORE = jwks.expressJwtSecret({
-  cache: true,
-  rateLimit: true,
-  jwksRequestsPerMinute: 5,
-  jwksUri: `https://${authConfig.domain}/.well-known/jwks.json`
-});
-
-var checkJwt = jwt({
-  secret: JWTKEYSTORE,
-  audience: authConfig.audience,
-  issuer: `https://${authConfig.domain}/`,
-  algorithms: ['RS256']
-});
-
-
+const routes = require('./routes');
 
 const server = http.createServer(app);
 const io = socketIo(server);
 const PORT = 4001;
+const { CheckJWT, JWTKeyStore } = require('./config/authorization');
+const socketioJwt = require('./forked-socketiojwt');
+const jwtAuthz = require('express-jwt-authz');
+
+
 
 let LeadTimeSchema = require('./models/lead_time.model');
 let BlockedOffSchema = require('./models/blocked_off.model');
@@ -44,6 +25,7 @@ const connection = require("./config/database");
 
 app.use(cors());
 app.use(bodyParser.json());
+app.use('/', routes);
 
 let WCP_SERVICES;
 let WCP_LEAD_TIMES;
@@ -151,20 +133,13 @@ function BootstrapDatabase() {
   });
 }
 
-// const functiontogetthedamnkey = (req, decodedToken, jwtheader, callback) => {
-//   console.log("DECIDED TOKEN");
-//   console.log(jwtheader);
-//   return JWTKEYSTORE(req, decodedToken, jwtheader, callback);
-// }
-const wrapper = x => {
-  return socketioJwt.authorize({
-    secret: JWTKEYSTORE,
-    timeout: 15000
-  })(x);
-}
 BootstrapDatabase();
 
-io.sockets.on('connect', wrapper)
+io.sockets.
+  on('connect', socketioJwt.authorize({
+    secret: JWTKeyStore,
+    timeout: 15000
+  }))
   .on('authenticated', (socket) => {
     logger.debug("New client authenticated. %o", socket.decoded_token.sub);
     socket.emit('WCP_SERVICES', WCP_SERVICES);
@@ -224,7 +199,7 @@ io.sockets.on('connect', wrapper)
     });
   });
 
-app.get("/external", checkJwt, jwtAuthz(['write:order_config']), (req, res) => {
+app.get("/external", CheckJWT, jwtAuthz(['write:order_config']), (req, res) => {
   logger.info("hi!!! i'm in buddies!");
   res.send({
     msg: "Your Access Tokasdsadasden was successfully validated!"
