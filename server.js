@@ -36,8 +36,8 @@ io.sockets.
     socket.emit('WCP_BLOCKED_OFF', DataProvider.BlockedOff);
     socket.emit('WCP_SETTINGS', DataProvider.Settings);
     socket.on('WCP_SERVICES', function (msg) {
-      logger.debug("Got socket message on DataProvider.Services channel: %o", msg);
-      socket.broadcast.emit('WCP_SERVICES', DataProvider.Services);
+      logger.error("SOMEHOW Got socket message on DataProvider.Services channel: %o", msg);
+      //socket.broadcast.emit('WCP_SERVICES', DataProvider.Services);
     });
     socket.on('WCP_BLOCKED_OFF', function (msg) {
       logger.debug("Got socket message on WCP_BLOCKED_OFF channel: %o", msg);
@@ -46,28 +46,13 @@ io.sockets.
     });
     socket.on('WCP_LEAD_TIMES', function (msg) {
       logger.debug("Got socket message on WCP_LEAD_TIMES channel: %o", msg);
-      WCP_LEAD_TIMES = msg;
+      DataProvider.LeadTimes = msg;
       socket.broadcast.emit('WCP_LEAD_TIMES', WCP_LEAD_TIMES);
-      LeadTimeSchema.find(function (err, leadtimes) {
-        for (var i in leadtimes) {
-          leadtimes[i].lead = WCP_LEAD_TIMES[leadtimes[i].service];
-          leadtimes[i].save()
-            .then(x => { logger.debug("Saved leadtime: %o", leadtimes[i]) })
-            .catch(err => { logger.error("Error saving lead time %o", err); });
-        }
-        return leadtimes;
-      });
     });
     socket.on('WCP_SETTINGS', function (msg) {
       logger.debug("Got socket message on WCP_SETTINGS channel: %o", msg);
-      WCP_SETTINGS = msg;
+      DataProvider.Settings = msg;
       socket.broadcast.emit('WCP_SETTINGS', WCP_SETTINGS);
-      SettingsSchema.findOne(function (err, db_settings) {
-        Object.assign(db_settings, WCP_SETTINGS);
-        db_settings.save()
-          .then(e => { logger.debug("Saved settings %o", db_settings) })
-          .catch(err => { logger.error("Error saving settings %o", err) });
-      });
     });
   });
 

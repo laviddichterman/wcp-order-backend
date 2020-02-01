@@ -168,9 +168,26 @@ class DataProvider {
   }
   set Settings(da) {
     this.#settings = da;
+    SettingsSchema.findOne(function (err, db_settings) {
+      Object.assign(db_settings, da);
+      db_settings.save()
+        .then(e => { logger.debug("Saved settings %o", db_settings) })
+        .catch(err => { logger.error("Error saving settings %o", err) });
+    });
+
   }
   set LeadTimes(da) {
     this.#leadtimes = da;
+    LeadTimeSchema.find(function (err, leadtimes) {
+      for (var i in leadtimes) {
+        leadtimes[i].lead = da[leadtimes[i].service];
+        leadtimes[i].save()
+          .then(x => { logger.debug("Saved leadtime: %o", leadtimes[i]) })
+          .catch(err => { logger.error("Error saving lead time %o", err); });
+      }
+      return leadtimes;
+    });
+
   }
   set Services(da) {
     this.#services = da;
