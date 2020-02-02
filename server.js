@@ -9,26 +9,22 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 const PORT = 4001;
-const { CheckJWT, JWTKeyStore } = require('./config/authorization');
-const socketioJwt = require('./forked-socketiojwt');
-const jwtAuthz = require('express-jwt-authz');
+const { /*CheckJWT,*/ SocketIoJwtAuthenticateAndAuthorize } = require('./config/authorization');
+//const jwtAuthz = require('express-jwt-authz');
 
 const DataProvider = require("./config/database");
 
 app.use(cors());
 app.use(bodyParser.json());
 
-const SOCKETIO_JWT_AUTHORIZATION_CALLBACK = socketioJwt.authorize({
-  secret: JWTKeyStore,
-  timeout: 15000
-});
+
 const socket_auth = io.of("/nsAuth");
 const socket_ro = io.of("/nsRO");
 
 // handle authenticated socketIO
-socket_auth.on('connect', SOCKETIO_JWT_AUTHORIZATION_CALLBACK)
+socket_auth.on('connect', SocketIoJwtAuthenticateAndAuthorize(['read:order_config', 'write:order_config']))
   .on('authenticated', (socket) => {
-    logger.debug("New client authenticated. %o", socket.decoded_token);
+    logger.info("New client authenticated. %o", socket.decoded_token);
     socket.on('AUTH_SERVICES', function (msg) {
       logger.error("SOMEHOW Got socket message on AUTH_SERVICES channel: %o", msg);
       //socket_ro.emit('WCP_SERVICES', DataProvider.Services);
@@ -51,6 +47,7 @@ socket_auth.on('connect', SOCKETIO_JWT_AUTHORIZATION_CALLBACK)
   });
 
 socket_ro.on('connect',(socket) => { 
+  logger.info("client info: %o ", socket.client.request.headers);
   socket.emit('WCP_SERVICES', DataProvider.Services);
   socket.emit('WCP_LEAD_TIMES', DataProvider.LeadTimes);
   socket.emit('WCP_BLOCKED_OFF', DataProvider.BlockedOff);
