@@ -182,7 +182,7 @@ class DataProvider {
       for (var i in leadtimes) {
         leadtimes[i].lead = da[leadtimes[i].service];
         leadtimes[i].save()
-          .then(x => { logger.debug("Saved leadtime: %o", leadtimes[i]) })
+          .then(x => { logger.debug("Saved leadtime: %o", leadtimes) })
           .catch(err => { logger.error("Error saving lead time %o", err); });
       }
       return leadtimes;
