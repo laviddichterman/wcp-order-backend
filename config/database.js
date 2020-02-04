@@ -1,10 +1,10 @@
 const mongoose = require('mongoose');
 const logger = require('../logging');
 const process = require('process');
-const LeadTimeSchema = require('../models/lead_time.model');
-const BlockedOffSchema = require('../models/blocked_off.model');
-const SettingsSchema = require('../models/settings.model');
-const StringListSchema = require('../models/string_list.model');
+const LeadTimeSchema = require('../models/settings/lead_time.model');
+const BlockedOffSchema = require('../models/settings/blocked_off.model');
+const SettingsSchema = require('../models/settings/settings.model');
+const StringListSchema = require('../models/settings/string_list.model');
 const DEFAULT_LEAD_TIMES = require("../data/leadtimeschemas.default.json");
 const DEFAULT_SETTINGS = require("../data/settingsschemas.default.json");
 const DEFAULT_SERVICES = require("../data/servicesschemas.default.json");
@@ -38,7 +38,7 @@ class DataProvider {
     this.#leadtimes = [];
   }
   BootstrapDatabase = () => {
-    logger.info("Loading from and bootstrapping to database %o", this);
+    logger.info("Loading from and bootstrapping to database.");
     // look for services
     StringListSchema.findOne((err, doc) => {
       if (err || !doc || !doc.services.length) {
