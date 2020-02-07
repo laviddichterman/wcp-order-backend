@@ -5,7 +5,7 @@ const logger = require('../../logging');
 
 const CHEESE_OPTIONS = [];
 const SAUCE_OPTIONS = [];
-const TOPPING_OPTIONS = [];
+const WCP_TOPPING_OPTIONS = [];
 
 var WOptionSchema = new Schema({
   // inheritance by composition
@@ -19,42 +19,14 @@ var WOptionSchema = new Schema({
   // option type enumeration
   option_type: {
     type: String,
-    enum: [ 'CHEESE', 'CRUST', 'TOPPING', 'SAUCE', 'MODIFIER' ]
+    enum: ['CHEESE', 'CRUST', 'WCP_TOPPING', 'SAUCE', 'MODIFIER']
   }
 });
 
-WOptionSchema.find({option_type: 'CHEESE'}, (err, docs) => {
+WOptionSchema.find({ option_type: 'CHEESE' }, (err, docs) => {
   if (err || !docs || !docs.length) {
-    let REGULAR_CHEESE = new WOptionSchema({
-      product: {
-        shortcode: "regular",
-        description: "Mozzarella Cheese",
-        display_name: "Mozzarella",
-        price: 0,
-        external_id: "",
-        enable_function_name: ""
-      },
-      flavor_factor: 0,
-      bake_factor: 0,
-      index: 0,
-      option_type: "CHEESE"
-    });
-    let EXTRA_MOZZARELLA = new WOptionSchema({
-      product: {
-        shortcode: "ex_mozz",
-        description: "Extra Mozzarella Cheese",
-        display_name: "Extra Mozzarella",
-        price: 2,
-        external_id: "",
-        enable_function_name: ""
-      },
-      flavor_factor: 0,
-      bake_factor: 1,
-      index: 0,
-      option_type: "CHEESE"
-    });
-    CHEESE_OPTIONS.push(REGULAR_CHEESE);
-    CHEESE_OPTIONS.push(EXTRA_MOZZARELLA);
+    //CHEESE_OPTIONS.push(new WOptionSchema());
+    const CHEESE_DEFAULTS = require("../../data/ordering/woption.cheese.wcp.default.json");
   }
   else {
     // found cheese options
@@ -62,42 +34,25 @@ WOptionSchema.find({option_type: 'CHEESE'}, (err, docs) => {
   }
 }).then(x => { });
 
-WOptionSchema.find({option_type: 'SAUCE'}, (err, docs) => {
+WOptionSchema.find({ option_type: 'SAUCE' }, (err, docs) => {
   if (err || !docs || !docs.length) {
-    let RED_SAUCE = new WOptionSchema({
-      product: {
-        shortcode: "red",
-        description: "Red Sauce",
-        display_name: "Red Sauce",
-        price: 0,
-        external_id: "",
-        enable_function_name: ""
-      },
-      flavor_factor: 0,
-      bake_factor: 0,
-      index: 0,
-      option_type: "SAUCE"
-    });
-    let WHITE_SAUCE = new WOptionSchema({
-      product: {
-        shortcode: "white",
-        description: "White Sauce",
-        display_name: "White Sauce",
-        price: 2,
-        external_id: "",
-        enable_function_name: ""
-      },
-      flavor_factor: 0,
-      bake_factor: 0,
-      index: 0,
-      option_type: "SAUCE"
-    });
-    SAUCE_OPTIONS.push(RED_SAUCE);
-    SAUCE_OPTIONS.push(WHITE_SAUCE);
+    const SAUCE_DEFAULTS = require("../../data/ordering/woption.sauce.wcp.default.json");
+    //SAUCE_OPTIONS.push(new WOptionSchema());
   }
   else {
     // found sauce options
     SAUCE_OPTIONS = docs;
+  }
+}).then(x => { });
+
+WOptionSchema.find({ option_type: 'WCP_TOPPING' }, (err, docs) => {
+  if (err || !docs || !docs.length) {
+    var idx = 0;
+
+  }
+  else {
+    // found wcp toppings options
+    WCP_TOPPING_OPTIONS = docs;
   }
 }).then(x => { });
 
