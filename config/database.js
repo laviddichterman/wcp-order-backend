@@ -10,10 +10,12 @@ const DEFAULT_SETTINGS = require("../data/settingsschemas.default.json");
 const DEFAULT_SERVICES = require("../data/servicesschemas.default.json");
 const WDateUtils = require("@wcp/wcpshared");
 
+const DBTABLE = process.env.DBTABLE || "wcp_05";
+
 
 mongoose.Promise = global.Promise;
 
-mongoose.connect('mongodb://127.0.0.1:27017/wcp_05',
+mongoose.connect(`mongodb://127.0.0.1:27017/${DBTABLE}`,
   { useNewUrlParser: true, useUnifiedTopology: true })
   .then(
     () => {

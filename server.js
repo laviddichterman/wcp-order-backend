@@ -8,7 +8,8 @@ const app = express();
 
 const server = http.createServer(app);
 const io = socketIo(server);
-const PORT = 4001;
+
+const PORT = process.env.PORT || 4001;
 const { /*CheckJWT,*/ SocketIoJwtAuthenticateAndAuthorize } = require('./config/authorization');
 //const jwtAuthz = require('express-jwt-authz');
 

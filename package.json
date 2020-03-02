@@ -1,7 +1,7 @@
 {
   "name": "@wcp/wcp-order-backend",
   "version": "0.1.0",
-  "main": "index.js",
+  "main": "server.js",
   "scripts": {
     "test": "mocha",
     "start": "node server.js",
