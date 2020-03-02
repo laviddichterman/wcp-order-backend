@@ -11,12 +11,13 @@ const DEFAULT_SERVICES = require("../data/servicesschemas.default.json");
 const WDateUtils = require("@wcp/wcpshared");
 
 const DBTABLE = process.env.DBTABLE || "wcp_05";
-
+const DBUSER = process.env.DBUSER || null;
+const DBPASS = process.env.DBPASS || null;
 
 mongoose.Promise = global.Promise;
 
 mongoose.connect(`mongodb://127.0.0.1:27017/${DBTABLE}`,
-  { useNewUrlParser: true, useUnifiedTopology: true })
+  { useNewUrlParser: true, useUnifiedTopology: true, user: DBUSER, pass: DBPASS })
   .then(
     () => {
       logger.info("MongoDB database connection established successfully");
