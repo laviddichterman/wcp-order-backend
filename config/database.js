@@ -62,7 +62,7 @@ class DataProvider {
         if (err || !leadtimes || !leadtimes.length) {
           logger.info("Intializing LeadTimes with defaults.");
           for (var i in DEFAULT_LEAD_TIMES) {
-            this.leadtimes[DEFAULT_LEAD_TIMES[i].service] = DEFAULT_LEAD_TIMES[i].lead;
+            this.#leadtimes[DEFAULT_LEAD_TIMES[i].service] = DEFAULT_LEAD_TIMES[i].lead;
             let lt = new LeadTimeSchema({ service: i, lead: DEFAULT_LEAD_TIMES[i].lead });
             lt.save()
               .then(x => { logger.debug("Saved lead time of %o", lt) })
