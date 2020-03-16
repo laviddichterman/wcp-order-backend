@@ -1,4 +1,6 @@
 const winston = require('winston');
+const pjson = require('./package.json');
+
 
 const logger = winston.createLogger({
   level: 'info',
@@ -10,7 +12,7 @@ const logger = winston.createLogger({
     winston.format.splat(),
     winston.format.json()
   ),
-  defaultMeta: { service: "wcp-order-backend" },
+  defaultMeta: { service: pjson.name },
   transports: [
     //
     // - Write to all logs with level `info` and below to `quick-start-combined.log`.

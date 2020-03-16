@@ -4,7 +4,7 @@ const socketioJwt = require('../forked-socketiojwt');
 
 const authConfig = {
   domain: "lavid.auth0.com",
-  audience: "https://wario.windycitypie.com"
+  audience: process.env.AUTH_AUDIENCE || "https://wario.windycitypie.com"
 };
 
 const JWTKeyStore = jwks.expressJwtSecret({
