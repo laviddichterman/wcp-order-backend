@@ -174,7 +174,7 @@ class DataProvider {
   set Settings(da) {
     this.#settings = da;
     SettingsSchema.findOne(function (err, db_settings) {
-      logger.error("found db settings in the db: %o" ,db_settings);
+      delete da.__v;
       Object.assign(db_settings, da);
       db_settings.save()
         .then(e => { logger.debug("Saved settings %o", db_settings) })
