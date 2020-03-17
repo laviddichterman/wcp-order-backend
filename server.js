@@ -23,7 +23,6 @@ app.use(expressWinston.logger({
   msg: '{{res.statusCode}} {{req.method}} {{req.url}} {{res.responseTime}}ms',
   meta: false,
 }));
-io.set("logger", logger);
 const socket_auth = io.of("/nsAuth");
 const socket_ro = io.of("/nsRO");
 
