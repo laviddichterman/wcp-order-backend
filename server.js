@@ -6,6 +6,7 @@ const cors = require('cors');
 const logger = require("./logging");
 const app = express();
 const expressWinston = require('express-winston')
+const router = require('./routes/')()
 
 const server = http.createServer(app);
 const io = socketIo(server);
@@ -18,11 +19,13 @@ const DataProvider = require("./config/database");
 
 app.use(cors());
 app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: false }));
 app.use(expressWinston.logger({
   winstonInstance: logger,
   msg: '{{res.statusCode}} {{req.method}} {{req.url}} {{res.responseTime}}ms',
   meta: false,
 }));
+app.use('/api', router);
 const socket_auth = io.of("/nsAuth");
 const socket_ro = io.of("/nsRO");
 
