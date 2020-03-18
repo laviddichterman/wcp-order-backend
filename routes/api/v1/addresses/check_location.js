@@ -5,6 +5,8 @@ const Client = require("@googlemaps/google-maps-services-js").Client;
 const client = new Client({});
 const DELIVERY_AREA = require('../../../../data/deliveryarea.wcp');
 const turf = require('@turf/turf');
+const logger = require("../../../../logging");
+
 //const { check, validationResult } = require('express-validator');
 
 
@@ -25,11 +27,11 @@ module.exports = Router({ mergeParams: true })
         timeout: 1000 //ms
       }).then( r => {
         const result = r.data.results[0]; 
-        console.log(result.address_components[0]);
         const address_point = turf.point([
           result.geometry.location.lng, 
           result.geometry.location.lat]);
         const in_area = turf.booleanPointInPolygon(address_point, DELIVERY_POLY);
+        logger.info(`Found address ${result.formatted_address}. In area: ${in_area}`);
         res.status(200).send({ validated_address: result.formatted_address,
           in_area,
           found: 
@@ -38,7 +40,7 @@ module.exports = Router({ mergeParams: true })
         });
       })
       .catch (e => {
-        console.log(e);
+        logger.error(e);
         res.status(500).send(e);
       })
     } catch (error) {
