@@ -25,6 +25,12 @@ app.use(expressWinston.logger({
   msg: '{{res.statusCode}} {{req.method}} {{req.url}} {{res.responseTime}}ms',
   meta: false,
 }));
+app.use((req, res, next) => {
+  req.base = `${req.protocol}://${req.get('host')}`
+  req.logger = logger
+  req.db = DataProvider
+  return next()
+});
 app.use('/api', router);
 const socket_auth = io.of("/nsAuth");
 const socket_ro = io.of("/nsRO");

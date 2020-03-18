@@ -5,9 +5,11 @@ const LeadTimeSchema = require('../models/settings/lead_time.model');
 const BlockedOffSchema = require('../models/settings/blocked_off.model');
 const SettingsSchema = require('../models/settings/settings.model');
 const StringListSchema = require('../models/settings/string_list.model');
+const DeliveryAreaSchema = require('../models/settings/delivery_area.model');
 const DEFAULT_LEAD_TIMES = require("../data/leadtimeschemas.default.json");
 const DEFAULT_SETTINGS = require("../data/settingsschemas.default.json");
 const DEFAULT_SERVICES = require("../data/servicesschemas.default.json");
+const DEFAULT_DELIVERY_AREA = require("../data/deliveryareaschemas.default.json");
 const WDateUtils = require("@wcp/wcpshared");
 
 const DBTABLE = process.env.DBTABLE || "wcp_05";
@@ -31,19 +33,37 @@ mongoose.connect(`${DBENDPOINT}/${DBTABLE}`,
   );
 const connection = mongoose.connection;
 
-class DataProvider { 
+class DataProvider {
   #services;
   #settings;
   #blocked_off;
   #leadtimes;
+  #delivery_area;
   constructor() {
     this.#services = null;
     this.#settings = null;
     this.#blocked_off = [];
     this.#leadtimes = [];
+    this.#delivery_area = {};
   }
   BootstrapDatabase = () => {
     logger.info("Loading from and bootstrapping to database.");
+
+    // look for delivery area:
+    DeliveryAreaSchema.findOne((err, doc) => {
+      if (err || !doc) {
+        this.#delivery_area = DEFAULT_DELIVERY_AREA;
+        let delivery_area_document = new DeliveryAreaSchema(DEFAULT_DELIVERY_AREA);
+        delivery_area_document.save()
+          .then(x => { logger.info("Added default delivery area: %o", delivery_area_document) })
+          .catch(err => { logger.error("Error adding default delivery area to database.", err); });
+      }
+      else {
+        logger.debug("Found delivery area in database: ", doc);
+        this.#delivery_area = doc;
+      }
+    });
+
     // look for services
     StringListSchema.findOne((err, doc) => {
       if (err || !doc || !doc.services.length) {
@@ -57,7 +77,7 @@ class DataProvider {
         logger.debug("Found services in database: ", doc.services);
         this.#services = doc.services;
       }
-  
+
       // check for and populate lead times
       this.#leadtimes = Array(this.#services.length).fill(null);
       LeadTimeSchema.find((err, leadtimes) => {
@@ -76,10 +96,10 @@ class DataProvider {
             this.#leadtimes[leadtimes[i].service] = leadtimes[i].lead;
           }
         }
-        if (leadtimes.length != this.#services.length) { 
+        if (leadtimes.length != this.#services.length) {
           logger.error("we have a mismatch in service length and leadtimes stored in the DB");
         }
-  
+
         //see if any leadtimes don't have a value yet and populate them
         // this is being extra safe, we shouldn't get here.
         for (var j in this.#leadtimes) {
@@ -94,7 +114,7 @@ class DataProvider {
         }
         return leadtimes;
       }).then(x => { });
-  
+
       // check for and populate settings, including operating hours
       SettingsSchema.findOne((err, settings) => {
         if (err || !settings) {
@@ -110,13 +130,13 @@ class DataProvider {
           this.#settings = settings;
         }
       });
-  
+
       // populate blocked off array
       this.#blocked_off = Array(this.#services.length).fill([]);
       BlockedOffSchema.findOne((err, blocked) => {
         if (err || !blocked) {
           logger.debug("No blocked off entries found. Creating blocked off array of length %o", this.#services.length);
-          const blocked_off = new BlockedOffSchema({blocked_off: []});
+          const blocked_off = new BlockedOffSchema({ blocked_off: [] });
           blocked_off.save()
             .then(e => { logger.debug("Saved blocked off %o", blocked_off) })
             .catch(err => { logger.error("Error saving blocked off %o", err) });
@@ -150,6 +170,9 @@ class DataProvider {
   get Services() {
     return this.#services;
   }
+  get DeliveryArea() {
+    return this.#delivery_area;
+  }
 
   set BlockedOff(da) {
     this.#blocked_off = da;
@@ -158,14 +181,14 @@ class DataProvider {
       for (var j in da[i]) {
         const excluded_intervals = [];
         for (var k in da[i][j][1]) {
-          excluded_intervals.push({start: da[i][j][1][k][0], end: da[i][j][1][k][1]})
+          excluded_intervals.push({ start: da[i][j][1][k][0], end: da[i][j][1][k][1] })
         }
-        new_blocked_off.push({service: i, exclusion_date: da[i][j][0], excluded_intervals: excluded_intervals});
+        new_blocked_off.push({ service: i, exclusion_date: da[i][j][0], excluded_intervals: excluded_intervals });
       }
     }
     logger.debug("Generated blocked off array: %o", new_blocked_off);
     BlockedOffSchema.findOne(function (err, db_blocked) {
-      Object.assign(db_blocked, {blocked_off: new_blocked_off});
+      Object.assign(db_blocked, { blocked_off: new_blocked_off });
       db_blocked.save()
         .then(e => { logger.debug("Saved blocked off %o", db_blocked) })
         .catch(err => { logger.error("Error saving blocked off %o", err) });
@@ -180,8 +203,8 @@ class DataProvider {
         .then(e => { logger.debug("Saved settings %o", db_settings) })
         .catch(err => { logger.error("Error saving settings %o", err) });
     });
-
   }
+
   set LeadTimes(da) {
     this.#leadtimes = da;
     LeadTimeSchema.find(function (err, leadtimes) {
@@ -193,10 +216,33 @@ class DataProvider {
       }
       return leadtimes;
     });
-
   }
+  
   set Services(da) {
     this.#services = da;
+    StringListSchema.findOne((err, doc) => {
+      if (err || !doc || !doc.services.length) {
+        logger.error("Error finding a valid services list to update.");
+      }
+      else {
+        delete da.__v;
+        Object.assign(doc, da);
+        doc.save()
+        .then(e => { logger.debug("Saved services %o", doc) })
+        .catch(err => { logger.error("Error saving services %o", err) });
+      }
+    });
+  }
+
+  set DeliveryArea(da) {
+    this.#delivery_area = da;
+    DeliveryAreaSchema.findOne(function (err, db_delivery_area) {
+      delete da.__v;
+      Object.assign(db_delivery_area, da);
+      db_delivery_area.save()
+        .then(e => { logger.debug("Saved delivery area %o", db_delivery_area) })
+        .catch(err => { logger.error("Error saving delivery area %o", err) });
+    });
   }
 }
 
