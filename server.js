@@ -58,6 +58,11 @@ socket_auth.on('connect', SocketIoJwtAuthenticateAndAuthorize(['read:order_confi
       DataProvider.Settings = msg;
       socket_ro.emit('WCP_SETTINGS', DataProvider.Settings);
     });
+    socket.on('AUTH_DELIVERY_AREA', function (msg) {
+      logger.debug("Got socket message on AUTH_DELIVERY_AREA channel: %o", msg);
+      DataProvider.DeliveryArea = msg;
+      socket_ro.emit('WCP_DELIVERY_AREA', DataProvider.DeliveryArea);
+    });
   });
 
 socket_ro.on('connect',(socket) => { 
@@ -66,6 +71,7 @@ socket_ro.on('connect',(socket) => {
   socket.emit('WCP_LEAD_TIMES', DataProvider.LeadTimes);
   socket.emit('WCP_BLOCKED_OFF', DataProvider.BlockedOff);
   socket.emit('WCP_SETTINGS', DataProvider.Settings);
+  socket.emit('WCP_DELIVERY_AREA', DataProvider.DeliveryArea);
 });
 
 server.listen(PORT, function () {
