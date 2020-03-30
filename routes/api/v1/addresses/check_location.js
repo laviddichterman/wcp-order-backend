@@ -6,8 +6,6 @@ const client = new Client({});
 const turf = require('@turf/turf');
 //const { check, validationResult } = require('express-validator');
 
-
-
 module.exports = Router({ mergeParams: true })
   .get('/v1/addresses/validate', async (req, res, next) => {
     try {
@@ -33,7 +31,8 @@ module.exports = Router({ mergeParams: true })
           in_area,
           found: 
             result.address_components[0].types[0] === "street_number" && 
-            address_line.indexOf(result.address_components[0].long_name) === 0
+            address_line.indexOf(result.address_components[0].long_name) === 0,
+          address_components: result.address_components
         });
       })
       .catch (e => {
