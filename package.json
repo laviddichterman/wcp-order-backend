@@ -19,7 +19,7 @@
   },
   "homepage": "https://github.com/laviddichterman/wcp-order-backend#readme",
   "dependencies": {
-    "@googlemaps/google-maps-services-js": "^2.3.1",
+    "@googlemaps/google-maps-services-js": "^2.4.2",
     "@turf/turf": "^5.1.6",
     "@wcp/wcpshared": "^1.1.0",
     "body-parser": "^1.19.0",
@@ -33,17 +33,19 @@
     "express-winston": "^4.0.3",
     "jsonwebtoken": "^8.5.1",
     "jwks-rsa": "^1.7.0",
-    "mongoose": "^5.9.5",
+    "mongoose": "^5.9.7",
+    "npm": "^6.14.4",
     "passport": "^0.4.1",
     "passport-jwt": "^4.0.0",
     "passport-local": "^1.0.0",
     "passport.socketio": "^3.7.0",
     "socket.io": "^2.3.0",
     "socketio-jwt": "^4.5.0",
+    "square-connect": "^3.20200325.0",
     "winston": "^3.2.1"
   },
   "devDependencies": {
-    "mocha": "^7.1.0",
+    "mocha": "^7.1.1",
     "supertest": "^4.0.2"
   },
   "description": "backend ordering service",
