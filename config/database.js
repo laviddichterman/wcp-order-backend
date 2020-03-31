@@ -17,7 +17,6 @@ const DBUSER = process.env.DBUSER || null;
 const DBPASS = process.env.DBPASS || null;
 const DBENDPOINT = process.env.DBENDPOINT || 'mongodb://127.0.0.1:27017';
 
-
 mongoose.Promise = global.Promise;
 
 mongoose.connect(`${DBENDPOINT}/${DBTABLE}`,
@@ -157,7 +156,8 @@ class DataProvider {
         }
       });
     });
-  }
+  };
+
   get BlockedOff() {
     return this.#blocked_off;
   }
@@ -243,6 +243,14 @@ class DataProvider {
         .then(e => { logger.debug("Saved delivery area %o", db_delivery_area) })
         .catch(err => { logger.error("Error saving delivery area %o", err) });
     });
+  }
+
+  CreateOrder(
+    serialized_products, 
+    customer_info, 
+    order_metadata, 
+    service_info) {
+      //TODO
   }
 }
 

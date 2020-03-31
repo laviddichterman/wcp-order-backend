@@ -64,8 +64,7 @@ class GoogleProvider {
       replyTo: replyto,
       html: htmlbody
     };
-    logger.info("Got request to send email!");
-    logger.info(mailOptions);
+    logger.info("Got request to send email!: %o", mailOptions);
     this.#smtpTransport.sendMail(mailOptions, (error, response) => {
       if (error) {
         logger.error(error);
