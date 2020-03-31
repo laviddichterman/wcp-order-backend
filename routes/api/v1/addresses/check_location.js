@@ -27,7 +27,7 @@ module.exports = Router({ mergeParams: true })
           result.geometry.location.lat]);
         const in_area = turf.booleanPointInPolygon(address_point, DELIVERY_POLY);
         req.logger.info(`Found address ${result.formatted_address}. In area: ${in_area}`);
-        res.status(200).send({ validated_address: result.formatted_address,
+        res.status(200).json({ validated_address: result.formatted_address,
           in_area,
           found: 
             result.address_components[0].types[0] === "street_number" && 
@@ -37,7 +37,7 @@ module.exports = Router({ mergeParams: true })
       })
       .catch (e => {
         req.logger.error(e);
-        res.status(500).send(e);
+        res.status(500).json(e);
       })
     } catch (error) {
       next(error)
