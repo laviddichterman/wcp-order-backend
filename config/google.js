@@ -23,6 +23,7 @@ class GoogleProvider {
   #accessToken;
   #smtpTransport;
   constructor() {
+    console.log("we're in the ctor");
     this.#smtpTransport = nodemailer.createTransport({
       service: "gmail",
       auth: {
