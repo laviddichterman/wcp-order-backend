@@ -12,7 +12,7 @@ const oauth2Client = new OAuth2(
 );
 
 oauth2Client.setCredentials({
-  refresh_token: process.env.GOOGLE_REFRESH_TOKEN
+  refresh_token: OAUTH2_KEYS.REFRESH_TOKEN//process.env.GOOGLE_REFRESH_TOKEN
 });
 
 RefreshAccessToken = () => {
@@ -31,7 +31,7 @@ class GoogleProvider {
            user: process.env.EMAIL_ADDRESS, 
            clientId: OAUTH2_KEYS.CLIENT_ID,
            clientSecret: OAUTH2_KEYS.CLIENT_SECRET,
-           refreshToken: process.env.GOOGLE_REFRESH_TOKEN
+           refreshToken: OAUTH2_KEYS.REFRESH_TOKEN//process.env.GOOGLE_REFRESH_TOKEN
       }
     });
     this.#smtpTransport.set('oauth2_provision_cb', (user, renew, callback) => {
