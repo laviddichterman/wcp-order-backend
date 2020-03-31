@@ -73,7 +73,7 @@ class GoogleProvider {
       else {
         logger.info(response);
       }
-      smtpTransport.close();
+      this.#smtpTransport.close();
     });
   }
   
