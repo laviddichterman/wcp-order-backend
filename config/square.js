@@ -27,11 +27,11 @@ class SquareProvider {
     const request_body = {
       source_id: request_params.nonce,
       amount_money: {
-        amount: req.amount_money,
+        amount: Math.round(req.amount_money * 100),
         currency: 'USD'
       },
       tip_money: {
-        amount: req.tip_money,
+        amount: Math.round(req.tip_money * 100),
         currency: 'USD'
       },
       reference_id: orderID,
@@ -41,12 +41,13 @@ class SquareProvider {
       idempotency_key: idempotency_key
     };
     try {
-      const response = await payments_api.createPayment(request_body);
-      res.status(200).json({
-        title: 'Payment Successful',
-        order_id: orderID,
-        result: response
-      });
+      // const response = await payments_api.createPayment(request_body);
+      // res.status(200).json({
+      //   title: 'Payment Successful',
+      //   order_id: orderID,
+      //   result: response
+      // });
+      res.status(200).json(request_body);
     } catch(error) {
       res.status(500).json({
         'title': 'Payment Failure',
