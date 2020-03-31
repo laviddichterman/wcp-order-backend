@@ -22,7 +22,7 @@ class SquareProvider {
     const idempotency_key = crypto.randomBytes(22).toString('hex');
     const request_params = req.body;
     const orderID = Date.now().toString(36).toUpperCase();
-    console.log(epoch_hex);
+    console.log(orderID);
     const payments_api = new SquareConnect.PaymentsApi();
     const request_body = {
       source_id: request_params.nonce,
