@@ -34,19 +34,19 @@ class GoogleProvider {
            refreshToken: OAUTH2_KEYS.REFRESH_TOKEN//process.env.GOOGLE_REFRESH_TOKEN
       }
     });
-    this.#smtpTransport.set('oauth2_provision_cb', (user, renew, callback) => {
-      if (renew) {
-        this.#accessToken = RefreshAccessToken();
-      }
-      if (!this.#accessToken) { 
-        logger.error("Fucked up the access token situation!");
-        return callback(new Error("Done fukt up."));
-      }
-      else {
-        logger.info("Access token: %o", this.#accessToken);
-        return callback(null, this.#accessToken);
-      }
-    });
+    // this.#smtpTransport.set('oauth2_provision_cb', (user, renew, callback) => {
+    //   if (renew) {
+    //     this.#accessToken = RefreshAccessToken();
+    //   }
+    //   if (!this.#accessToken) { 
+    //     logger.error("Fucked up the access token situation!");
+    //     return callback(new Error("Done fukt up."));
+    //   }
+    //   else {
+    //     logger.info("Access token: %o", this.#accessToken);
+    //     return callback(null, this.#accessToken);
+    //   }
+    // });
   }
 
   set AccessToken(tkn) {
@@ -68,6 +68,7 @@ class GoogleProvider {
     logger.info("Got request to send email!: %o", mailOptions);
     this.#smtpTransport.sendMail(mailOptions, (error, response) => {
       if (error) {
+        logger.error("tried with refresh token: %o ", OAUTH2_KEYS.REFRESH_TOKEN )
         logger.error(error);
       }
       else {
