@@ -24,6 +24,7 @@ class GoogleProvider {
   #smtpTransport;
   constructor() {
     console.log("we're in the ctor");
+    this.#accessToken = RefreshAccessToken();
     this.#smtpTransport = nodemailer.createTransport({
       service: "gmail",
       auth: {
@@ -31,7 +32,8 @@ class GoogleProvider {
            user: process.env.EMAIL_ADDRESS, 
            clientId: OAUTH2_KEYS.CLIENT_ID,
            clientSecret: OAUTH2_KEYS.CLIENT_SECRET,
-           refreshToken: OAUTH2_KEYS.REFRESH_TOKEN//process.env.GOOGLE_REFRESH_TOKEN
+           refreshToken: OAUTH2_KEYS.REFRESH_TOKEN,//process.env.GOOGLE_REFRESH_TOKEN,
+           accessToken: this.#accessToken
       }
     });
     // this.#smtpTransport.set('oauth2_provision_cb', (user, renew, callback) => {
@@ -81,7 +83,6 @@ class GoogleProvider {
 };
 
 const GOOGLE_PROVIDER = new GoogleProvider();
-GOOGLE_PROVIDER.AccessToken = RefreshAccessToken();
 // refreshes token every 45 minutes
 const REFRESH_ACCESS_INTERVAL = setInterval(function() {
   GOOGLE_PROVIDER.AccessToken = RefreshAccessToken();
