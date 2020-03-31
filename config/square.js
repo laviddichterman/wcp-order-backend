@@ -22,16 +22,15 @@ class SquareProvider {
     const idempotency_key = crypto.randomBytes(22).toString('hex');
     const request_params = req.body;
     const orderID = Date.now().toString(36).toUpperCase();
-    console.log(orderID);
     const payments_api = new SquareConnect.PaymentsApi();
     const request_body = {
       source_id: request_params.nonce,
       amount_money: {
-        amount: Math.round(req.amount_money * 100),
+        amount: Math.round(request_params.amount_money * 100),
         currency: 'USD'
       },
       tip_money: {
-        amount: Math.round(req.tip_money * 100),
+        amount: Math.round(request_params.tip_money * 100),
         currency: 'USD'
       },
       reference_id: orderID,
@@ -41,13 +40,12 @@ class SquareProvider {
       idempotency_key: idempotency_key
     };
     try {
-      // const response = await payments_api.createPayment(request_body);
-      // res.status(200).json({
-      //   title: 'Payment Successful',
-      //   order_id: orderID,
-      //   result: response
-      // });
-      res.status(200).json(request_body);
+      const response = await payments_api.createPayment(request_body);
+      res.status(200).json({
+        title: 'Payment Successful',
+        order_id: orderID,
+        result: response
+      });
     } catch(error) {
       res.status(500).json({
         'title': 'Payment Failure',
