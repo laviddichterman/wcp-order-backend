@@ -27,8 +27,8 @@ app.use(expressWinston.logger({
 }));
 app.use((req, res, next) => {
   req.base = `${req.protocol}://${req.get('host')}`
-  req.logger = logger
-  req.db = DataProvider
+  req.logger = logger;
+  req.db = DataProvider;
   return next()
 });
 app.use('/api', router);
