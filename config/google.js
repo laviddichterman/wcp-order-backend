@@ -78,25 +78,26 @@ class GoogleProvider {
     });
   };
 
-  CreateCalendarEvent = () => {
-    this.#calendarAPI.events.list({
+  CreateCalendarEvent = (summary, location, description, start, end) => {
+    const eventjson = {
+      summary: summary,
+      location: location,
+      description: description,
+      start: start,
+      end: end
+    };
+    this.#calendarAPI.events.insert({
       auth: oauth2Client,
       calendarId: 'primary',
-      timeMin: (new Date()).toISOString(),
-      maxResults: 10,
-      singleEvents: true,
-      orderBy: 'startTime',
-    }, (err, res) => {
-      if (err) return console.log('The API returned an error: ' + err + res);
-      const events = res.data.items;
-      if (events.length) {
-        console.log('Upcoming 10 events:');
-        events.map((event, i) => {
-          const start = event.start.dateTime || event.start.date;
-          console.log(`${start} - ${event.summary}`);
-        });
-      } else {
-        console.log('No upcoming events found.');
+      resource: eventjson
+    }, (err, event) => {
+      if (err) {
+        logger.error("event not created: %o", eventjson);
+        logger.error(err);
+        throw(err);
+      } 
+      else {
+        logger.info("Created event: %o", event);
       }
     });
   };

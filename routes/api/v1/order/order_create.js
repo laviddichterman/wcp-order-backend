@@ -2,7 +2,6 @@
 const Router = require('express').Router
 const GoogleProvider = require("../../../../config/google");
 
-const ESCAPED_EVENT_EMAIL_TEMPLATE = process.env.EMAIL_ADDRESS === "eatpie@windycitypie.com" ? "eatpie%40windycitypie.com" : "eat%40breezytownpizza.com"; 
 const STORE_NAME = process.env.EMAIL_ADDRESS === "eatpie@windycitypie.com" ? "Windy City Pie" : "Breezy Town Pizza"; 
 
 const CreateInternalEmail = (
@@ -16,10 +15,6 @@ const CreateInternalEmail = (
   delivery_instructions,
   short_order, 
   referral, 
-  calendar_event_title_escaped, 
-  calendar_event_date,
-  calendar_event_detail_escaped, 
-  calendar_event_address_escaped,
   confirmation_subject_escaped, 
   confirmation_body_escaped, 
   special_instructions, 
@@ -30,13 +25,12 @@ const CreateInternalEmail = (
   useragent) => {
     const emailbody =  `<p>From: ${customer_name} ${user_email}</p>
 
-<p>Message Body:</p>
-<p>${short_order.join("<br />")}</p>
+<p>Message Body:<br />
+${short_order.join("<br />")}</p>
 <p>${special_instructions}<br />
 Phone: ${phonenum}</p>
 <strong style="color: red;">${additional_message}</strong> <br />
 Auto-respond: <a href="mailto:${user_email}?subject=${confirmation_subject_escaped}&body=${confirmation_body_escaped}">Confirmation link</a><br />
-Event: <a href="https://www.google.com/calendar/render?action=TEMPLATE&src=${ESCAPED_EVENT_EMAIL_TEMPLATE}&text=${calendar_event_title_escaped}&dates=${calendar_event_date}&details=${calendar_event_detail_escaped}${calendar_event_address_escaped}">Calendar Link</a>
     
 <p>Referral Information: ${referral}</p>
     
@@ -58,45 +52,58 @@ Submit: ${submittime}<br />
       email_subject, 
       user_email,
       emailbody);
-  }
+}
 
-  const CreateExternalEmail = (
-    service_option, 
-    customer_name, 
-    service_date, 
-    service_time, 
-    phonenum, 
-    user_email, 
-    order_long, 
-    automated_instructions,
-    special_instructions 
-  ) => {
-      const emailbody =  `<p>Thanks so much for ordering Seattle's best Chicago-style pan deep-dish pizza!</p>
+const CreateExternalEmail = (
+  service_option, 
+  customer_name, 
+  service_date, 
+  service_time, 
+  phonenum, 
+  user_email, 
+  order_long, 
+  automated_instructions,
+  special_instructions 
+) => {
+    const emailbody =  `<p>Thanks so much for ordering Seattle's best Chicago-style pan deep-dish pizza!</p>
 <p>We take your health seriously; be assured your order has been prepared with the utmost care.</p>
 <p>Note that all gratuity is shared with the entire Windy City Pie family.</p>
 <p>${automated_instructions}</p>
 <p>Please take some time to ensure the details of your order as they were entered are correct. If the order is fine, there is no need to respond to this message. If you need to make a correction or have a question, please respond to this message as soon as possible.</p>
-      
+    
 <b>Order information:</b><br />
 Service: ${service_option} for ${customer_name} on ${service_date} at ${service_time}.<br />
 Phone: ${phonenum}<br />
 Order contents:<br />
 ${order_long.join("<br />")}<br />
 ${special_instructions}
-      
+    
 <p><b>Location Information:</b>
 We are located at (<a href="http://bit.ly/WindyCityPieMap">5918 Phinney Ave N, 98103</a>). We thank you for your take-out and delivery business at this time.</p>`;
-      const email_subject = `${service_option} for ${customer_name} on ${service_date} - ${service_time}`;
-      GoogleProvider.SendEmail(
-        {
-          name: STORE_NAME,
-          address: process.env.EMAIL_ADDRESS  
-        },
-        user_email,  
-        email_subject, 
-        process.env.EMAIL_ADDRESS, 
-        emailbody);
-    }
+    const email_subject = `${service_option} for ${customer_name} on ${service_date} - ${service_time}`;
+    GoogleProvider.SendEmail(
+      {
+        name: STORE_NAME,
+        address: process.env.EMAIL_ADDRESS  
+      },
+      user_email,  
+      email_subject, 
+      process.env.EMAIL_ADDRESS, 
+      emailbody);
+}
+
+const CreateOrderEvent = (
+  calendar_event_title, 
+  calendar_event_dates, 
+  calendar_event_detail, 
+  calendar_event_address) => {
+  return GoogleProvider.CreateCalendarEvent(calendar_event_title,
+    calendar_event_address ? calendar_event_address : "", 
+    calendar_event_detail, 
+    { dateTime: calendar_event_dates[0] }, 
+    { dateTime: calendar_event_dates[1] });
+}
+
 
 module.exports = Router({ mergeParams: true })
   .post('/v1/order/', async (req, res, next) => {
@@ -124,10 +131,6 @@ module.exports = Router({ mergeParams: true })
         req.body.delivery_instructions,
         req.body.short_order,
         req.body.referral,
-        req.body.calendar_event_title_escaped,
-        req.body.calendar_event_date,
-        req.body.calendar_event_detail_escaped,
-        req.body.calendar_event_address_escaped,
         req.body.confirmation_subject_escaped,
         req.body.confirmation_body_escaped,
         req.body.special_instructions,
@@ -137,10 +140,21 @@ module.exports = Router({ mergeParams: true })
         req.body.submittime,
         req.body.useragent
       );
+      CreateOrderEvent(
+        req.body.calendar_event_title,
+        calendar_event_dates, 
+        calendar_event_detail, 
+        calendar_event_address);
       // send response to user
       res.status(200).send("Looks good buddy");
 
     } catch (error) {
+      GoogleProvider.SendEmail(
+        process.env.EMAIL_ADDRESS,
+        process.env.EMAIL_ADDRESS,   
+        "ERROR IN ORDER PROCESSING. CONTACT DAVE IMMEDIATELY", 
+        "dave@windycitypie.com",
+        String(req.body));
       res.status(500).send(error);
       next(error)
     }
