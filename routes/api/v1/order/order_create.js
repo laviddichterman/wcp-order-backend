@@ -31,17 +31,17 @@ const CreateInternalEmail = (
     const emailbody =  `<p>From: ${customer_name} ${user_email}</p>
 
 <p>Message Body:</p>
-<p>${short_order}</p>
-<p>${special_instructions}</p>
-<p>Phone: ${phonenum}</p>
+<p>${short_order.join("<br />")}</p>
+<p>${special_instructions}<br />
+Phone: ${phonenum}</p>
 <strong style="color: red;">${additional_message}</strong> <br />
 Auto-respond: <a href="mailto:${user_email}?subject=${confirmation_subject_escaped}&body=${confirmation_body_escaped}">Confirmation link</a><br />
 Event: <a href="https://www.google.com/calendar/render?action=TEMPLATE&src=${ESCAPED_EVENT_EMAIL_TEMPLATE}&text=${calendar_event_title_escaped}&dates=${calendar_event_date}&details=${calendar_event_detail_escaped}${calendar_event_address_escaped}">Calendar Link</a>
     
 <p>Referral Information: ${referral}</p>
     
-<p>Address: ${address}</p>
-${delivery_instructions}    
+<p>Address: ${address}<br />
+${delivery_instructions ? "Delivery instructions: " + delivery_instructions : ""}</p>
 
 <p>Debug info:<br />
 Load: ${load_time}<br />
@@ -77,15 +77,15 @@ Submit: ${submittime}<br />
 <p>${automated_instructions}</p>
 <p>Please take some time to ensure the details of your order as they were entered are correct. If the order is fine, there is no need to respond to this message. If you need to make a correction or have a question, please respond to this message as soon as possible.</p>
       
-<b>Order information:</b>
-<p>Service: ${service_option} for ${customer_name} on ${service_date} at ${service_time}.<br />
+<b>Order information:</b><br />
+Service: ${service_option} for ${customer_name} on ${service_date} at ${service_time}.<br />
 Phone: ${phonenum}<br />
 Order contents:<br />
-${order_long}<br />
+${order_long.join("<br />")}<br />
 ${special_instructions}
       
 <p><b>Location Information:</b>
-We are located at (<a href="http://bit.ly/WindyCityPieMap">5918 Phinney Ave N, 98103</a>. We thank you for your take-out and delivery business at this time.</p>`;
+We are located at (<a href="http://bit.ly/WindyCityPieMap">5918 Phinney Ave N, 98103</a>). We thank you for your take-out and delivery business at this time.</p>`;
       const email_subject = `${service_option} for ${customer_name} on ${service_date} - ${service_time}`;
       GoogleProvider.SendEmail(
         {
