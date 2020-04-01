@@ -10,9 +10,9 @@ const ComposePaymentReceivedEmail = (response) => {
   const receipt_url = response.result.payment.receipt_url;
   return `<p>Received payment of: <strong>${total_amount}</strong></p>
   <p>Base Amount: <strong>${base_amount}</strong><br />
-  <p>Tip Amount: <strong>${tip_amount}</strong><br />
-  <p>Confirm the above values in the <a href="${response.result.payment.receipt_url}">receipt</a></p>
-  <p>Order ID: ${response.order_id}</p>`;
+  Tip Amount: <strong>${tip_amount}</strong><br />
+  Confirm the above values in the <a href="${receipt_url}">receipt</a><br />
+  Order ID: ${response.order_id}</p>`;
 }
 
 module.exports = Router({ mergeParams: true })
