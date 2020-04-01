@@ -17,10 +17,9 @@ defaultClient.basePath = SQUARE_ENDPOINT_SANDBOX;
 
 class SquareProvider {
 
-  ProcessPayment = async (req, res) => {      
+  ProcessPayment = async (request_params) => {      
     // length of idempotency_key should be less than 45
     const idempotency_key = crypto.randomBytes(22).toString('hex');
-    const request_params = req.body;
     const orderID = Date.now().toString(36).toUpperCase();
     const payments_api = new SquareConnect.PaymentsApi();
     const request_body = {
@@ -41,17 +40,17 @@ class SquareProvider {
     };
     try {
       const response = await payments_api.createPayment(request_body);
-      res.status(200).json({
+      return [{
         title: 'Payment Successful',
         order_id: orderID,
         result: response
-      });
+        }, 200];
     } catch(error) {
-      res.status(500).json({
+      return [{
         'title': 'Payment Failure',
         order_id: orderID,
         'result': error.response.text
-      });
+      }, 500];
     }
   }
 };

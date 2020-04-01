@@ -12,7 +12,7 @@ const oauth2Client = new OAuth2(
 );
 
 oauth2Client.setCredentials({
-  refresh_token: OAUTH2_KEYS.REFRESH_TOKEN//process.env.GOOGLE_REFRESH_TOKEN
+  refresh_token: process.env.GOOGLE_REFRESH_TOKEN
 });
 
 RefreshAccessToken = () => {
@@ -23,7 +23,6 @@ class GoogleProvider {
   #accessToken;
   #smtpTransport;
   constructor() {
-    console.log("we're in the ctor");
     this.#accessToken = RefreshAccessToken();
     this.#smtpTransport = nodemailer.createTransport({
       service: "gmail",
@@ -32,23 +31,22 @@ class GoogleProvider {
            user: process.env.EMAIL_ADDRESS, 
            clientId: OAUTH2_KEYS.CLIENT_ID,
            clientSecret: OAUTH2_KEYS.CLIENT_SECRET,
-           refreshToken: OAUTH2_KEYS.REFRESH_TOKEN,//process.env.GOOGLE_REFRESH_TOKEN,
-           accessToken: this.#accessToken
+           refreshToken: process.env.GOOGLE_REFRESH_TOKEN
       }
     });
-    // this.#smtpTransport.set('oauth2_provision_cb', (user, renew, callback) => {
-    //   if (renew) {
-    //     this.#accessToken = RefreshAccessToken();
-    //   }
-    //   if (!this.#accessToken) { 
-    //     logger.error("Fucked up the access token situation!");
-    //     return callback(new Error("Done fukt up."));
-    //   }
-    //   else {
-    //     logger.info("Access token: %o", this.#accessToken);
-    //     return callback(null, this.#accessToken);
-    //   }
-    // });
+    this.#smtpTransport.set('oauth2_provision_cb', (user, renew, callback) => {
+      if (renew) {
+        this.#accessToken = RefreshAccessToken();
+      }
+      if (!this.#accessToken) { 
+        logger.error("Fucked up the access token situation!");
+        return callback(new Error("Done fukt up."));
+      }
+      else {
+        logger.info("Access token: %o", this.#accessToken);
+        return callback(null, this.#accessToken);
+      }
+    });
   }
 
   set AccessToken(tkn) {
@@ -67,10 +65,8 @@ class GoogleProvider {
       replyTo: replyto,
       html: htmlbody
     };
-    logger.info("Got request to send email!: %o", mailOptions);
     this.#smtpTransport.sendMail(mailOptions, (error, response) => {
       if (error) {
-        logger.error("tried with refresh token: %o ", OAUTH2_KEYS.REFRESH_TOKEN )
         logger.error(error);
       }
       else {
