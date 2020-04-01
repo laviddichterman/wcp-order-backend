@@ -6,11 +6,11 @@ const GoogleProvider = require("../../../../config/google");
 module.exports = Router({ mergeParams: true })
   .post('/v1/payments/payment', async (req, res, next) => {
     try {
-      const [response, code] = SquareProvider.ProcessPayment(req.body);
-      if (code === 200) {
+      const [response, status] = SquareProvider.ProcessPayment(req.body);
+      if (status === 200) {
         GoogleProvider.SendEmail("laviddichterman@gmail.com", "got me an paymento", process.env.EMAIL_ADDRESS, "GOT EM!");
       }
-      res.status(code).json(response);
+      res.status(status).json(response);
     } catch (error) {
       next(error)
     }
