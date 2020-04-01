@@ -22,6 +22,7 @@ RefreshAccessToken = () => {
 class GoogleProvider {
   #accessToken;
   #smtpTransport;
+  #calendarAPI;
   constructor() {
     this.#accessToken = RefreshAccessToken();
     this.#smtpTransport = nodemailer.createTransport({
@@ -47,6 +48,7 @@ class GoogleProvider {
         return callback(null, this.#accessToken);
       }
     });
+    this.#calendarAPI = google.calendar('v3');
   }
 
   set AccessToken(tkn) {
@@ -77,8 +79,7 @@ class GoogleProvider {
   };
 
   CreateCalendarEvent = () => {
-    calendarAPI = google.calendar({version: 'v3'});
-    calendarAPI.events.list({
+    this.#calendarAPI.events.list({
       auth: oauth2Client,
       calendarId: 'primary',
       timeMin: (new Date()).toISOString(),
