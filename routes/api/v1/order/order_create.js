@@ -132,7 +132,7 @@ module.exports = Router({ mergeParams: true })
         req.body.confirmation_body_escaped,
         req.body.special_instructions,
         req.body.additional_message,
-        req.body.req.body.load_time, 
+        req.body.load_time, 
         req.body.time_selection_time,
         req.body.submittime,
         req.body.useragent
