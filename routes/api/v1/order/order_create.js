@@ -13,6 +13,7 @@ const CreateInternalEmail = (
   phonenum, 
   user_email, 
   address, 
+  delivery_instructions,
   short_order, 
   referral, 
   calendar_event_title_escaped, 
@@ -40,7 +41,8 @@ Event: <a href="https://www.google.com/calendar/render?action=TEMPLATE&src=${ESC
 <p>Referral Information: ${referral}</p>
     
 <p>Address: ${address}</p>
-    
+${delivery_instructions}    
+
 <p>Debug info:<br />
 Load: ${load_time}<br />
 Time select: ${time_selection_time}<br />
@@ -67,7 +69,6 @@ Submit: ${submittime}<br />
     user_email, 
     order_long, 
     automated_instructions,
-    asap_order_notice,
     special_instructions 
   ) => {
       const emailbody =  `<p>Thanks so much for ordering Seattle's best Chicago-style pan deep-dish pizza!</p>
@@ -75,7 +76,6 @@ Submit: ${submittime}<br />
 <p>Note that all gratuity is shared with the entire Windy City Pie family.</p>
 <p>${automated_instructions}</p>
 <p>Please take some time to ensure the details of your order as they were entered are correct. If the order is fine, there is no need to respond to this message. If you need to make a correction or have a question, please respond to this message as soon as possible.</p>
-<p>${asap_order_notice}</p>
       
 <b>Order information:</b>
 <p>Service: ${service_option} for ${customer_name} on ${service_date} at ${service_time}.<br />
@@ -105,32 +105,32 @@ module.exports = Router({ mergeParams: true })
       CreateExternalEmail(req.body.service_option, 
         req.body.customer_name, 
         req.body.service_date, 
-        req.body.service_time, 
+        req.body.service_time,
         req.body.phonenum, 
-        req.body.user_email, 
-        req.body.order_long, 
+        req.body.user_email,
+        req.body.order_long,
         req.body.automated_instructions,
-        req.body.asap_order_notice,
         req.body.special_instructions)
       // send email to eatpie
       CreateInternalEmail(
-        req.body.service_option, 
-        req.body.customer_name, 
-        req.body.service_date, 
-        req.body.service_time, 
-        req.body.phonenum, 
-        req.body.user_email, 
-        req.body.address, 
-        req.body.short_order, 
-        req.body.referral, 
-        req.body.calendar_event_title_escaped, 
+        req.body.service_option,
+        req.body.customer_name,
+        req.body.service_date,
+        req.body.service_time,
+        req.body.phonenum,
+        req.body.user_email,
+        req.body.address,
+        req.body.delivery_instructions,
+        req.body.short_order,
+        req.body.referral,
+        req.body.calendar_event_title_escaped,
         req.body.calendar_event_date,
-        req.body.calendar_event_detail_escaped, 
+        req.body.calendar_event_detail_escaped,
         req.body.calendar_event_address_escaped,
-        req.body.confirmation_subject_escaped, 
-        req.body.confirmation_body_escaped, 
-        req.body.special_instructions, 
-        req.body.additional_message, 
+        req.body.confirmation_subject_escaped,
+        req.body.confirmation_body_escaped,
+        req.body.special_instructions,
+        req.body.additional_message,
         req.body.req.body.load_time, 
         req.body.time_selection_time,
         req.body.submittime,
