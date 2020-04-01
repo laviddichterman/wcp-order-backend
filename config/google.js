@@ -86,7 +86,7 @@ class GoogleProvider {
       singleEvents: true,
       orderBy: 'startTime',
     }, (err, res) => {
-      if (err) return console.log('The API returned an error: ' + err);
+      if (err) return console.log('The API returned an error: ' + err + res);
       const events = res.data.items;
       if (events.length) {
         console.log('Upcoming 10 events:');

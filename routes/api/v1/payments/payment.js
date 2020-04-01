@@ -3,16 +3,28 @@ const Router = require('express').Router
 const SquareProvider = require("../../../../config/square");
 const GoogleProvider = require("../../../../config/google");
 
+const ComposePaymentReceivedEmail = (response) => {
+  const base_amount = "$" + response.result.payment.amount_money.amount / 100;
+  const tip_amount = "$" + response.result.payment.tip_money.amount / 100;
+  const total_amount = "$" + response.result.payment.total_money.amount / 100;
+  return `<p>Received payment of: <strong>${total_amount} (${base_amount} + ${tip_amount})<strong></p>
+  <p>Confirm the above values in the <a href="${response.result.payment.receipt_url}">receipt</a></p>
+  <p>Order ID: ${response.orderID}</p>`;
+}
+
 module.exports = Router({ mergeParams: true })
   .post('/v1/payments/payment', async (req, res, next) => {
     try {
-      const retval = await SquareProvider.ProcessPayment(req.body);
-      console.log(retval);
-      if (retval[1] === 200) {
+      const [response, status] = await SquareProvider.ProcessPayment(req.body);
+      if (status === 200) {
         GoogleProvider.CreateCalendarEvent();
-        GoogleProvider.SendEmail("laviddichterman@gmail.com", "got me an paymento", process.env.EMAIL_ADDRESS, "GOT EM!");
+        GoogleProvider.SendEmail(
+          process.env.EMAIL_ADDRESS, 
+          req.body.email_title, 
+          process.env.EMAIL_ADDRESS, 
+          ComposePaymentReceivedEmail(response));
       }
-      res.status(retval[1]).json(retval[0]);
+      res.status(status).json(response);
     } catch (error) {
       next(error)
     }
