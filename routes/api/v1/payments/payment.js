@@ -7,6 +7,7 @@ module.exports = Router({ mergeParams: true })
   .post('/v1/payments/payment', async (req, res, next) => {
     try {
       const retval = SquareProvider.ProcessPayment(req.body);
+      console.log(retval);
       if (retval[1] === 200) {
         GoogleProvider.SendEmail("laviddichterman@gmail.com", "got me an paymento", process.env.EMAIL_ADDRESS, "GOT EM!");
       }
