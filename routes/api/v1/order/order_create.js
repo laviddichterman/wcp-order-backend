@@ -210,7 +210,7 @@ module.exports = Router({ mergeParams: true })
         req.body.payment_info
       );
       CreateOrderEvent(
-        req.body.calendar_event_title + (req.body.ispaid ? "PAID : UNPAID"),
+        req.body.calendar_event_title + (req.body.ispaid ? "PAID" : "UNPAID"),
         req.body.calendar_event_dates, 
         req.body.calendar_event_detail, 
         req.body.calendar_event_address,
