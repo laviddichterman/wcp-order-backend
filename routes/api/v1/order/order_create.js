@@ -109,7 +109,6 @@ module.exports = Router({ mergeParams: true })
   .post('/v1/order/', async (req, res, next) => {
     try {
       // send email to customer
-      console.log(req);
       CreateExternalEmail(req.body.service_option, 
         req.body.customer_name, 
         req.body.service_date, 
@@ -142,9 +141,9 @@ module.exports = Router({ mergeParams: true })
       );
       CreateOrderEvent(
         req.body.calendar_event_title,
-        calendar_event_dates, 
-        calendar_event_detail, 
-        calendar_event_address);
+        req.body.calendar_event_dates, 
+        req.body.calendar_event_detail, 
+        req.body.calendar_event_address);
       // send response to user
       res.status(200).send("Looks good buddy");
 
@@ -154,7 +153,7 @@ module.exports = Router({ mergeParams: true })
         process.env.EMAIL_ADDRESS,   
         "ERROR IN ORDER PROCESSING. CONTACT DAVE IMMEDIATELY", 
         "dave@windycitypie.com",
-        String(req.body));
+        JSON.stringify(req.body));
       res.status(500).send(error);
       next(error)
     }
