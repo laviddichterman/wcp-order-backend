@@ -99,9 +99,10 @@ We are located at (<a href="http://bit.ly/WindyCityPieMap">5918 Phinney Ave N, 9
     }
 
 module.exports = Router({ mergeParams: true })
-  .post('/v1/order', async (req, res, next) => {
+  .post('/v1/order/', async (req, res, next) => {
     try {
       // send email to customer
+      console.log(req);
       CreateExternalEmail(req.body.service_option, 
         req.body.customer_name, 
         req.body.service_date, 
@@ -110,7 +111,7 @@ module.exports = Router({ mergeParams: true })
         req.body.user_email,
         req.body.order_long,
         req.body.automated_instructions,
-        req.body.special_instructions)
+        req.body.special_instructions);
       // send email to eatpie
       CreateInternalEmail(
         req.body.service_option,
@@ -135,7 +136,7 @@ module.exports = Router({ mergeParams: true })
         req.body.time_selection_time,
         req.body.submittime,
         req.body.useragent
-      )
+      );
       // send response to user
       res.status(200).send("Looks good buddy");
 
