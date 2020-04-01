@@ -20,7 +20,6 @@ module.exports = Router({ mergeParams: true })
     try {
       const [response, status] = await SquareProvider.ProcessPayment(req.body);
       if (status === 200) {
-        GoogleProvider.CreateCalendarEvent();
         GoogleProvider.SendEmail(
           process.env.EMAIL_ADDRESS, // from
           process.env.EMAIL_ADDRESS, // to
