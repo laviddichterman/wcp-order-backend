@@ -7,9 +7,12 @@ const ComposePaymentReceivedEmail = (response) => {
   const base_amount = "$" + response.result.payment.amount_money.amount / 100;
   const tip_amount = "$" + response.result.payment.tip_money.amount / 100;
   const total_amount = "$" + response.result.payment.total_money.amount / 100;
-  return `<p>Received payment of: <strong>${total_amount} (${base_amount} + ${tip_amount})<strong></p>
+  const receipt_url = response.result.payment.receipt_url;
+  return `<p>Received payment of: <strong>${total_amount}</strong></p>
+  <p>Base Amount: <strong>${base_amount}</strong></p>
+  <p>Tip Amount: <strong>${tip_amount}</strong></p>
   <p>Confirm the above values in the <a href="${response.result.payment.receipt_url}">receipt</a></p>
-  <p>Order ID: ${response.orderID}</p>`;
+  <p>Order ID: ${response.order_id}</p>`;
 }
 
 module.exports = Router({ mergeParams: true })
@@ -19,9 +22,10 @@ module.exports = Router({ mergeParams: true })
       if (status === 200) {
         GoogleProvider.CreateCalendarEvent();
         GoogleProvider.SendEmail(
-          process.env.EMAIL_ADDRESS, 
-          req.body.email_title, 
-          process.env.EMAIL_ADDRESS, 
+          process.env.EMAIL_ADDRESS, // from
+          process.env.EMAIL_ADDRESS, // to
+          decodeURIComponent(req.body.email_title), 
+          process.env.EMAIL_ADDRESS, // replyto
           ComposePaymentReceivedEmail(response));
       }
       res.status(status).json(response);
