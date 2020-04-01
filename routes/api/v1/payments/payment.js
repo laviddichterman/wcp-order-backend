@@ -9,6 +9,7 @@ module.exports = Router({ mergeParams: true })
       const retval = await SquareProvider.ProcessPayment(req.body);
       console.log(retval);
       if (retval[1] === 200) {
+        GoogleProvider.CreateCalendarEvent();
         GoogleProvider.SendEmail("laviddichterman@gmail.com", "got me an paymento", process.env.EMAIL_ADDRESS, "GOT EM!");
       }
       res.status(retval[1]).json(retval[0]);
