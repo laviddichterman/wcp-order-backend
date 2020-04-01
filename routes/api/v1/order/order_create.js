@@ -13,7 +13,7 @@ const GeneratePaymentSection = (payment_info) => {
   <p>Base Amount: <strong>${base_amount}</strong><br />
   Tip Amount: <strong>${tip_amount}</strong><br />
   Confirm the above values in the <a href="${receipt_url}">receipt</a><br />
-  Order ID: ${response.order_id}</p>`;
+  Order ID: ${payment_info.order_id}</p>`;
 }
 
 const CreateInternalEmail = (
