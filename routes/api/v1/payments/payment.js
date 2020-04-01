@@ -23,7 +23,7 @@ module.exports = Router({ mergeParams: true })
         GoogleProvider.SendEmail(
           process.env.EMAIL_ADDRESS, // from
           process.env.EMAIL_ADDRESS, // to
-          "PAID: " + decodeURIComponent(req.body.email_title), 
+          "PAID: " + req.body.email_title, 
           process.env.EMAIL_ADDRESS, // replyto
           ComposePaymentReceivedEmail(response));
       }
