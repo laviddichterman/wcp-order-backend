@@ -96,10 +96,14 @@ const CreateOrderEvent = (
   calendar_event_title, 
   calendar_event_dates, 
   calendar_event_detail, 
-  calendar_event_address) => {
+  calendar_event_address,
+  address,
+  delivery_instructions) => {
+
+  const calendar_details = `${calendar_event_detail}${address ? "<br />Address: " + address : ""}${delivery_instructions ? "<br />Delivery Instructions: " + delivery_instructions : ""}`;
   return GoogleProvider.CreateCalendarEvent(calendar_event_title,
     calendar_event_address ? calendar_event_address : "", 
-    calendar_event_detail, 
+    calendar_details, 
     { dateTime: calendar_event_dates[0] }, 
     { dateTime: calendar_event_dates[1] });
 }
@@ -143,7 +147,10 @@ module.exports = Router({ mergeParams: true })
         req.body.calendar_event_title,
         req.body.calendar_event_dates, 
         req.body.calendar_event_detail, 
-        req.body.calendar_event_address);
+        req.body.calendar_event_address,
+        req.body.address,
+        req.body.delivery_instructions
+        );
       // send response to user
       res.status(200).send("Looks good buddy");
 
