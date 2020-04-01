@@ -13,7 +13,7 @@ oauth2.accessToken = accessToken;
 // Set 'basePath' to switch between sandbox env and production env
 const SQUARE_ENDPOINT_SANDBOX = 'https://connect.squareupsandbox.com';
 const SQUARE_ENDPOINT_PRODUCTION = 'https://connect.squareup.com';
-defaultClient.basePath = SQUARE_ENDPOINT_SANDBOX;
+defaultClient.basePath = SQUARE_ENDPOINT_PRODUCTION;
 
 class SquareProvider {
 
