@@ -9,8 +9,8 @@ const ComposePaymentReceivedEmail = (response) => {
   const total_amount = "$" + response.result.payment.total_money.amount / 100;
   const receipt_url = response.result.payment.receipt_url;
   return `<p>Received payment of: <strong>${total_amount}</strong></p>
-  <p>Base Amount: <strong>${base_amount}</strong></p>
-  <p>Tip Amount: <strong>${tip_amount}</strong></p>
+  <p>Base Amount: <strong>${base_amount}</strong><br />
+  <p>Tip Amount: <strong>${tip_amount}</strong><br />
   <p>Confirm the above values in the <a href="${response.result.payment.receipt_url}">receipt</a></p>
   <p>Order ID: ${response.order_id}</p>`;
 }
@@ -24,7 +24,7 @@ module.exports = Router({ mergeParams: true })
         GoogleProvider.SendEmail(
           process.env.EMAIL_ADDRESS, // from
           process.env.EMAIL_ADDRESS, // to
-          decodeURIComponent(req.body.email_title), 
+          "PAID: " + decodeURIComponent(req.body.email_title), 
           process.env.EMAIL_ADDRESS, // replyto
           ComposePaymentReceivedEmail(response));
       }
