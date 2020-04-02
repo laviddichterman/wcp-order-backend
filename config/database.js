@@ -6,6 +6,7 @@ const BlockedOffSchema = require('../models/settings/blocked_off.model');
 const SettingsSchema = require('../models/settings/settings.model');
 const StringListSchema = require('../models/settings/string_list.model');
 const DeliveryAreaSchema = require('../models/settings/delivery_area.model');
+const KeyValueSchema = require('../models/settings/keyvalues.model');
 const DEFAULT_LEAD_TIMES = require("../data/leadtimeschemas.default.json");
 const DEFAULT_SETTINGS = require("../data/settingsschemas.default.json");
 const DEFAULT_SERVICES = require("../data/servicesschemas.default.json");
@@ -38,15 +39,39 @@ class DataProvider {
   #blocked_off;
   #leadtimes;
   #delivery_area;
+  #keyvalueconfig;
   constructor() {
     this.#services = null;
     this.#settings = null;
     this.#blocked_off = [];
     this.#leadtimes = [];
     this.#delivery_area = {};
+    this.#keyvalueconfig = {};
   }
-  BootstrapDatabase = () => {
+  BootstrapDatabase = (cb) => {
     logger.info("Loading from and bootstrapping to database.");
+
+    // look for key value config area:
+    KeyValueSchema.findOne((err, doc) => {
+      if (err || !doc) {
+        this.#keyvalueconfig = {};
+        let keyvalueconfig_document = new KeyValueSchema({ settings: [] });
+        keyvalueconfig_document.save()
+          .then(x => { logger.info("Added default (empty) key value config area") })
+          .catch(err => { logger.error("Error adding default key value config to database.", err); });
+      }
+      else {
+        logger.debug("Found KeyValueSchema in database: ", doc);
+        for (var i in doc.settings) {
+          if (this.#keyvalueconfig.hasOwnProperty(doc.settings[i].key)) {
+            logger.error(`Clobbering key: ${doc.settings[i].key} containing ${this.#keyvalueconfig[doc.settings[i].key]}`);
+          }
+          this.#keyvalueconfig[doc.settings[i].key] = doc.settings[i].value;
+        }
+        // call the callback since we've got all our config data now.
+        cb();
+      }
+    });
 
     // look for delivery area:
     DeliveryAreaSchema.findOne((err, doc) => {
@@ -173,6 +198,10 @@ class DataProvider {
   get DeliveryArea() {
     return this.#delivery_area;
   }
+  get KeyValueConfig() {
+    return this.#keyvalueconfig;
+  }
+
 
   set BlockedOff(da) {
     this.#blocked_off = da;
@@ -245,6 +274,20 @@ class DataProvider {
     });
   }
 
+  set KeyValueConfig(da) {
+    this.#keyvalueconfig = da;
+    KeyValueSchema.findOne(function (err, db_key_values) {
+      const settings_list = [];
+      for (var i in da) {
+        settings_list.push({key: i, value: da[i]});
+      }
+      db_key_values.settings = settings_list;
+      db_key_values.save()
+        .then(e => { logger.debug("Saved key/value config %o", db_key_values);       process.exit(0); })
+        .catch(err => { logger.error("Error saving key/value config %o", err) });
+    });
+  }
+
   CreateOrder(
     serialized_products, 
     customer_info, 
@@ -255,6 +298,5 @@ class DataProvider {
 }
 
 const DATAPROVIDER = new DataProvider();
-DATAPROVIDER.BootstrapDatabase();
 
 module.exports = DATAPROVIDER;

@@ -1,21 +1,27 @@
 const SquareConnect = require('square-connect');
 const crypto = require('crypto');
-
-const accessToken = process.env.SQUARE_TOKEN;
-
-// Set Square Connect credentials and environment
-const defaultClient = SquareConnect.ApiClient.instance;
-
-// Configure OAuth2 access token for authorization: oauth2
-const oauth2 = defaultClient.authentications['oauth2'];
-oauth2.accessToken = accessToken;
+const logger = require('../logging');
 
 // Set 'basePath' to switch between sandbox env and production env
-const SQUARE_ENDPOINT_SANDBOX = 'https://connect.squareupsandbox.com';
-const SQUARE_ENDPOINT_PRODUCTION = 'https://connect.squareup.com';
-defaultClient.basePath = SQUARE_ENDPOINT_PRODUCTION;
+// const SQUARE_ENDPOINT_SANDBOX = 'https://connect.squareupsandbox.com';
+// const SQUARE_ENDPOINT_PRODUCTION = 'https://connect.squareup.com';
 
 class SquareProvider {
+  #defaultClient;
+  constructor() {
+    this.#defaultClient = SquareConnect.ApiClient.instance;
+  }
+
+  BootstrapProvider = (db) => {
+    const cfg = db.KeyValueConfig;
+    if (cfg.SQUARE_ENDPOINT && cfg.SQUARE_TOKEN) {
+      this.#defaultClient.basePath = cfg.SQUARE_ENDPOINT;
+      this.#defaultClient.authentications['oauth2'].accessToken = cfg.SQUARE_TOKEN;
+    }
+    else {
+      logger.warn("Can't Bootstrap SQUARE Provider");
+    }
+  }
 
   ProcessPayment = async (request_params) => {      
     // length of idempotency_key should be less than 45

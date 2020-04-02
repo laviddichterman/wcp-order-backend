@@ -16,6 +16,14 @@ const { /*CheckJWT,*/ SocketIoJwtAuthenticateAndAuthorize } = require('./config/
 //const jwtAuthz = require('express-jwt-authz');
 
 const DataProvider = require("./config/database");
+const GoogleProvider = require("./config/google");
+const SquareProvider = require("./config/square");
+
+DataProvider.BootstrapDatabase(() => {
+  GoogleProvider.BootstrapProvider(DataProvider);
+  SquareProvider.BootstrapProvider(DataProvider);
+});
+
 
 app.use(cors());
 app.use(bodyParser.json());
@@ -39,6 +47,7 @@ const socket_ro = io.of("/nsRO");
 socket_auth.on('connect', SocketIoJwtAuthenticateAndAuthorize(['read:order_config', 'write:order_config']))
   .on('authenticated', (socket) => {
     logger.info("New client authenticated. %o", socket.decoded_token);
+    socket.emit('AUTH_KEYVALUES', DataProvider.KeyValueConfig);
     socket.on('AUTH_SERVICES', function (msg) {
       logger.error("SOMEHOW Got socket message on AUTH_SERVICES channel: %o", msg);
       //socket_ro.emit('WCP_SERVICES', DataProvider.Services);
@@ -62,6 +71,11 @@ socket_auth.on('connect', SocketIoJwtAuthenticateAndAuthorize(['read:order_confi
       logger.debug("Got socket message on AUTH_DELIVERY_AREA channel: %o", msg);
       DataProvider.DeliveryArea = msg;
       socket_ro.emit('WCP_DELIVERY_AREA', DataProvider.DeliveryArea);
+    });
+    socket.on('AUTH_KEYVALUES', function (msg) {
+      logger.debug("Got socket message on AUTH_KEYVALUES channel: %o", msg);
+      DataProvider.KeyValueConfig = msg;
+      socket.broadcast.emit('AUTH_KEYVALUES', DataProvider.KeyValueConfig);
     });
   });
 
