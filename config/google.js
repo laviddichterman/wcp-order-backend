@@ -98,7 +98,7 @@ class GoogleProvider {
       end: end
     };
     this.#calendarAPI.events.insert({
-      auth: oauth2Client,
+      auth: this.#oauth2Client,
       calendarId: 'primary',
       resource: eventjson
     }, (err, event) => {
