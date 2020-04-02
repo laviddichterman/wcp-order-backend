@@ -2,9 +2,7 @@
 const Router = require('express').Router
 const GoogleProvider = require("../../../../config/google");
 
-const STORE_NAME = process.env.EMAIL_ADDRESS === "eatpie@windycitypie.com" ? "Windy City Pie" : "Breezy Town Pizza"; 
-
-const GeneratePaymentSection = (payment_info) => {
+const GeneratePaymentSectionHTML = (payment_info) => {
   const base_amount = "$" + payment_info.result.payment.amount_money.amount / 100;
   const tip_amount = "$" + payment_info.result.payment.tip_money.amount / 100;
   const total_amount = "$" + payment_info.result.payment.total_money.amount / 100;
@@ -16,7 +14,20 @@ const GeneratePaymentSection = (payment_info) => {
   Order ID: ${payment_info.order_id}</p>`;
 }
 
+const GeneratePaymentSection = (payment_info) => {
+  const base_amount = "$" + payment_info.result.payment.amount_money.amount / 100;
+  const tip_amount = "$" + payment_info.result.payment.tip_money.amount / 100;
+  const total_amount = "$" + payment_info.result.payment.total_money.amount / 100;
+  const receipt_url = payment_info.result.payment.receipt_url;
+  return `Received payment of: ${total_amount}
+  Base Amount: ${base_amount}
+  Tip Amount: ${tip_amount}
+  Receipt: ${receipt_url}
+  Order ID: ${payment_info.order_id}`;
+}
+
 const CreateInternalEmail = (
+  EMAIL_ADDRESS,
   service_option, 
   customer_name, 
   service_date, 
@@ -37,7 +48,7 @@ const CreateInternalEmail = (
   useragent,
   ispaid,
   payment_info) => {
-    const payment_section = ispaid ? GeneratePaymentSection(payment_info) : "";
+    const payment_section = ispaid ? GeneratePaymentSectionHTML(payment_info) : "";
     const emailbody =  `<p>From: ${customer_name} ${user_email}</p>
 
 <p>Message Body:<br />
@@ -63,15 +74,17 @@ Submit: ${submittime}<br />
     GoogleProvider.SendEmail(
       {
         name: customer_name,
-        address: process.env.EMAIL_ADDRESS  
+        address: EMAIL_ADDRESS  
       },
-      process.env.EMAIL_ADDRESS,   
+      EMAIL_ADDRESS,   
       email_subject + (ispaid ? "* ORDER PAID *" : ""), 
       user_email,
       emailbody);
 }
 
 const CreateExternalEmailWCP = (
+  STORE_NAME,
+  EMAIL_ADDRESS,
   service_option, 
   customer_name, 
   service_date, 
@@ -101,15 +114,17 @@ We are located at (<a href="http://bit.ly/WindyCityPieMap">5918 Phinney Ave N, 9
     GoogleProvider.SendEmail(
       {
         name: STORE_NAME,
-        address: process.env.EMAIL_ADDRESS  
+        address: EMAIL_ADDRESS  
       },
       user_email,  
       email_subject, 
-      process.env.EMAIL_ADDRESS, 
+      EMAIL_ADDRESS, 
       emailbody);
 }
 
 const CreateExternalEmailBTP = (
+  STORE_NAME,
+  EMAIL_ADDRESS,
   service_option, 
   customer_name, 
   service_date, 
@@ -139,11 +154,11 @@ We are located inside Clock-Out Lounge (<a href="http://bit.ly/BreezyTownAtClock
     GoogleProvider.SendEmail(
       {
         name: STORE_NAME,
-        address: process.env.EMAIL_ADDRESS  
+        address: EMAIL_ADDRESS  
       },
       user_email,  
       email_subject, 
-      process.env.EMAIL_ADDRESS, 
+      EMAIL_ADDRESS, 
       emailbody);
 }
 
@@ -153,9 +168,11 @@ const CreateOrderEvent = (
   calendar_event_detail, 
   calendar_event_address,
   address,
-  delivery_instructions) => {
-
-  const calendar_details = `${calendar_event_detail}${address ? "<br />Address: " + address : ""}${delivery_instructions ? "<br />Delivery Instructions: " + delivery_instructions : ""}`;
+  delivery_instructions,
+  ispaid,
+  payment_info) => {
+  const payment_section = ispaid ? "\n" + GeneratePaymentSection(payment_info) : "";
+  const calendar_details = `${calendar_event_detail}${address ? "\nAddress: " + address : ""}${delivery_instructions ? "\nDelivery Instructions: " + delivery_instructions : ""}${payment_section}`;
   return GoogleProvider.CreateCalendarEvent(calendar_event_title,
     calendar_event_address ? calendar_event_address : "", 
     calendar_details, 
@@ -166,9 +183,14 @@ const CreateOrderEvent = (
 
 module.exports = Router({ mergeParams: true })
   .post('/v1/order/', async (req, res, next) => {
+    const EMAIL_ADDRESS = req.db.KeyValueConfig.EMAIL_ADDRESS;
+    const STORE_NAME = req.db.KeyValueConfig.STORE_NAME;
     try {
       // send email to customer
-      process.env.EMAIL_ADDRESS === "eatpie@windycitypie.com" ? CreateExternalEmailWCP(req.body.service_option, 
+      EMAIL_ADDRESS === "eatpie@windycitypie.com" ? CreateExternalEmailWCP(
+        STORE_NAME,
+        EMAIL_ADDRESS,
+        req.body.service_option, 
         req.body.customer_name, 
         req.body.service_date, 
         req.body.service_time,
@@ -177,7 +199,10 @@ module.exports = Router({ mergeParams: true })
         req.body.order_long,
         req.body.automated_instructions,
         req.body.special_instructions) : 
-        CreateExternalEmailBTP(req.body.service_option, 
+        CreateExternalEmailBTP(
+          STORE_NAME,
+          EMAIL_ADDRESS,
+          req.body.service_option, 
           req.body.customer_name, 
           req.body.service_date, 
           req.body.service_time,
@@ -188,6 +213,7 @@ module.exports = Router({ mergeParams: true })
           req.body.special_instructions);      
       // send email to eatpie
       CreateInternalEmail(
+        EMAIL_ADDRESS,
         req.body.service_option,
         req.body.customer_name,
         req.body.service_date,
@@ -210,20 +236,22 @@ module.exports = Router({ mergeParams: true })
         req.body.payment_info
       );
       CreateOrderEvent(
-        req.body.calendar_event_title + (req.body.ispaid ? "PAID" : "UNPAID"),
+        req.body.calendar_event_title + (req.body.ispaid ? " PAID" : " UNPAID"),
         req.body.calendar_event_dates, 
         req.body.calendar_event_detail, 
         req.body.calendar_event_address,
         req.body.address,
-        req.body.delivery_instructions
+        req.body.delivery_instructions,
+        req.body.ispaid,
+        req.body.payment_info
         );
       // send response to user
       res.status(200).send("Looks good buddy");
 
     } catch (error) {
       GoogleProvider.SendEmail(
-        process.env.EMAIL_ADDRESS,
-        [process.env.EMAIL_ADDRESS, "dave@windycitypie.com"],   
+        EMAIL_ADDRESS,
+        [EMAIL_ADDRESS, "dave@windycitypie.com"],   
         "ERROR IN ORDER PROCESSING. CONTACT DAVE IMMEDIATELY", 
         "dave@windycitypie.com",
         JSON.stringify(req.body) + JSON.stringify(error));
