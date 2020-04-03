@@ -93,7 +93,9 @@ const CreateExternalEmailWCP = (
   user_email, 
   order_long, 
   automated_instructions,
-  special_instructions 
+  special_instructions,
+  ispaid,
+  payment_info
 ) => {
     const emailbody =  `<p>Thanks so much for ordering Seattle's best Chicago-style pan deep-dish pizza!</p>
 <p>We take your health seriously; be assured your order has been prepared with the utmost care.</p>
@@ -134,7 +136,9 @@ const CreateExternalEmailBTP = (
   user_email, 
   order_long, 
   automated_instructions,
-  special_instructions 
+  special_instructions,
+  ispaid,
+  payment_info
 ) => {
     const emailbody =  `<p>Thanks so much for ordering Seattle's best Chicago-ish, Detroit-ish pan deep-dish pizza!</p>
 <p>We take your health seriously; be assured your order has been prepared with the utmost care.</p>
@@ -201,7 +205,9 @@ module.exports = Router({ mergeParams: true })
         req.body.user_email,
         req.body.order_long,
         req.body.automated_instructions,
-        req.body.special_instructions) : 
+        req.body.special_instructions,
+        ispaid,
+        payment_info) : 
         CreateExternalEmailBTP(
           STORE_NAME,
           EMAIL_ADDRESS,
@@ -213,7 +219,9 @@ module.exports = Router({ mergeParams: true })
           req.body.user_email,
           req.body.order_long,
           req.body.automated_instructions,
-          req.body.special_instructions);      
+          req.body.special_instructions,
+          ispaid,
+          payment_info);      
       // send email to eatpie
       CreateInternalEmail(
         EMAIL_ADDRESS,
