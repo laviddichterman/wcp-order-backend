@@ -8,22 +8,24 @@ const logger = require('../logging');
 
 class SquareProvider {
   #defaultClient;
+  #location_id;
   constructor() {
     this.#defaultClient = SquareConnect.ApiClient.instance;
   }
 
   BootstrapProvider = (db) => {
     const cfg = db.KeyValueConfig;
-    if (cfg.SQUARE_ENDPOINT && cfg.SQUARE_TOKEN) {
+    if (cfg.SQUARE_ENDPOINT && cfg.SQUARE_TOKEN && cfg.SQUARE_LOCATION) {
       this.#defaultClient.basePath = cfg.SQUARE_ENDPOINT;
       this.#defaultClient.authentications['oauth2'].accessToken = cfg.SQUARE_TOKEN;
+      this.#location_id = cfg.SQUARE_LOCATION;
     }
     else {
       logger.warn("Can't Bootstrap SQUARE Provider");
     }
   }
 
-  ProcessPayment = async (request_params) => {      
+  ProcessPayment = async (request_params, location_id) => {      
     // length of idempotency_key should be less than 45
     const idempotency_key = crypto.randomBytes(22).toString('hex');
     const orderID = Date.now().toString(36).toUpperCase();
@@ -39,6 +41,7 @@ class SquareProvider {
         currency: 'USD'
       },
       reference_id: orderID,
+      location_id: this.#location_id,
       autocomplete: true,
       statement_description: "WCP/BTP Online Order",
       //verification_token: request_params.verification_token, //TODO: VERIFICATION TOKEN FOR SCA
