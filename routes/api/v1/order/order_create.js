@@ -206,8 +206,8 @@ module.exports = Router({ mergeParams: true })
         req.body.order_long,
         req.body.automated_instructions,
         req.body.special_instructions,
-        ispaid,
-        payment_info) : 
+        req.body.ispaid,
+        req.body.payment_info) : 
         CreateExternalEmailBTP(
           STORE_NAME,
           EMAIL_ADDRESS,
@@ -220,8 +220,8 @@ module.exports = Router({ mergeParams: true })
           req.body.order_long,
           req.body.automated_instructions,
           req.body.special_instructions,
-          ispaid,
-          payment_info);      
+          req.body.ispaid,
+          req.body.payment_info);      
       // send email to eatpie
       CreateInternalEmail(
         EMAIL_ADDRESS,
