@@ -107,7 +107,8 @@ Phone: ${phonenum}<br />
 Order contents:<br />
 ${order_long.join("<br />")}<br />
 ${special_instructions}
-    
+
+${ispaid ? `<a href="${payment_info.result.payment.receipt_url}">Here's a link to your receipt!</a>` : ""}
 <p><b>Location Information:</b>
 We are located at (<a href="http://bit.ly/WindyCityPieMap">5918 Phinney Ave N, 98103</a>). We thank you for your take-out and delivery business at this time.</p>`;
     const email_subject = `${service_option} for ${customer_name} on ${service_date} - ${service_time}`;
@@ -147,6 +148,8 @@ Phone: ${phonenum}<br />
 Order contents:<br />
 ${order_long.join("<br />")}<br />
 ${special_instructions}
+
+${ispaid ? `<a href="${payment_info.result.payment.receipt_url}">Here's a link to your receipt!</a>` : ""}
     
 <p><b>Location Information:</b>
 We are located inside Clock-Out Lounge (<a href="http://bit.ly/BreezyTownAtClockOut">4864 Beacon Ave S, 98108</a>). We thank you for your take-out and delivery business at this time.</p>`;

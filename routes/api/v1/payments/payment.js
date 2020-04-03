@@ -18,13 +18,18 @@ const ComposePaymentReceivedEmail = (response) => {
 module.exports = Router({ mergeParams: true })
   .post('/v1/payments/payment', async (req, res, next) => {
     try {
+      const EMAIL_ADDRESS = req.db.KeyValueConfig.EMAIL_ADDRESS;
+      const STORE_NAME = req.db.KeyValueConfig.STORE_NAME;
       const [response, status] = await SquareProvider.ProcessPayment(req.body);
       if (status === 200) {
         GoogleProvider.SendEmail(
-          process.env.EMAIL_ADDRESS, // from
-          process.env.EMAIL_ADDRESS, // to
+          {
+            name: STORE_NAME,
+            address: EMAIL_ADDRESS  
+          },
+          EMAIL_ADDRESS,
           "PAID: " + req.body.email_title, 
-          process.env.EMAIL_ADDRESS, // replyto
+          EMAIL_ADDRESS,
           ComposePaymentReceivedEmail(response));
       }
       res.status(status).json(response);

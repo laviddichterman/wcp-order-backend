@@ -52,8 +52,7 @@ class SquareProvider {
         result: response
         }, 200];
     } catch(error) {
-      console.log(error);
-      logger.error(error);
+      logger.error(error.response.text);
       return [{
         'title': 'Payment Failure',
         order_id: orderID,
