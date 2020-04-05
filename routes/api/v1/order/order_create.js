@@ -3,8 +3,8 @@ const Router = require('express').Router
 const GoogleProvider = require("../../../../config/google");
 
 const GeneratePaymentSectionHTML = (totals, payment_info) => {
-  const base_amount = "$" + (totals.total-totals.tip_value).toFixed(2);
-  const tip_amount = "$" + totals.tip_value.toFixed(2);
+  const base_amount = "$" + Number.parseFloat(totals.total-totals.tip_value).toFixed(2);
+  const tip_amount = "$" + Number.parseFloat(totals.tip_value).toFixed(2);
   const total_amount = "$" + payment_info.result.payment.total_money.amount / 100;
   const receipt_url = payment_info.result.payment.receipt_url;
   return `<p>Received payment of: <strong>${total_amount}</strong></p>
@@ -14,8 +14,8 @@ const GeneratePaymentSectionHTML = (totals, payment_info) => {
 }
 
 const GeneratePaymentSection = (totals, payment_info) => {
-  const base_amount = "$" + (totals.total-totals.tip_value).toFixed(2);
-  const tip_amount = "$" + totals.tip_value.toFixed(2);
+  const base_amount = "$" + Number.parseFloat(totals.total-totals.tip_value).toFixed(2);
+  const tip_amount = "$" + Number.parseFloat(totals.tip_value).toFixed(2);
   const total_amount = "$" + payment_info.result.payment.total_money.amount / 100;
   const receipt_url = payment_info.result.payment.receipt_url;
   return `Received payment of: ${total_amount}
