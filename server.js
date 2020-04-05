@@ -6,6 +6,7 @@ const cors = require('cors');
 const logger = require("./logging");
 const app = express();
 const expressWinston = require('express-winston')
+const { ValidationError } = require('express-validation')
 const router = require('./routes/')()
 
 const server = http.createServer(app);
@@ -39,6 +40,14 @@ app.use((req, res, next) => {
   req.db = DataProvider;
   return next()
 });
+
+// add validation middleware
+app.use(function(err, req, res, next) {
+  if (err instanceof ValidationError) {
+    return res.status(err.statusCode).json(err)
+  }
+  return res.status(500).json(err)
+})
 app.use('/api', router);
 const socket_auth = io.of("/nsAuth");
 const socket_ro = io.of("/nsRO");
