@@ -14,7 +14,7 @@ module.exports = Router({ mergeParams: true })
   .post('/v1/payments/payment', validate(PaymentValidation, {}, {}), async (req, res, next) => {
     try {
       const reference_id = Date.now().toString(36).toUpperCase();
-      const amount_money = Math.round(req.body.amount_money * 100) + Math.round(req.body.tip_money * 100);
+      const amount_money = Math.round(req.body.amount_money * 100);
       const create_order_response = await SquareProvider.CreateOrderStoreCredit(reference_id, amount_money);
       if (create_order_response.success === true) {
         req.logger.debug(create_order_response);
