@@ -2,28 +2,26 @@
 const Router = require('express').Router
 const GoogleProvider = require("../../../../config/google");
 
-const GeneratePaymentSectionHTML = (payment_info) => {
-  const base_amount = "$" + payment_info.result.payment.amount_money.amount / 100;
-  const tip_amount = "$" + payment_info.result.payment.tip_money.amount / 100;
+const GeneratePaymentSectionHTML = (totals, payment_info) => {
+  const base_amount = "$" + (totals.total-totals.tip_value).toFixed(2);
+  const tip_amount = "$" + totals.tip_value.toFixed(2);
   const total_amount = "$" + payment_info.result.payment.total_money.amount / 100;
   const receipt_url = payment_info.result.payment.receipt_url;
   return `<p>Received payment of: <strong>${total_amount}</strong></p>
   <p>Base Amount: <strong>${base_amount}</strong><br />
   Tip Amount: <strong>${tip_amount}</strong><br />
-  Confirm the above values in the <a href="${receipt_url}">receipt</a><br />
-  Order ID: ${payment_info.order_id}</p>`;
+  Confirm the above values in the <a href="${receipt_url}">receipt</a></p>`;
 }
 
-const GeneratePaymentSection = (payment_info) => {
-  const base_amount = "$" + payment_info.result.payment.amount_money.amount / 100;
-  const tip_amount = "$" + payment_info.result.payment.tip_money.amount / 100;
+const GeneratePaymentSection = (totals, payment_info) => {
+  const base_amount = "$" + (totals.total-totals.tip_value).toFixed(2);
+  const tip_amount = "$" + totals.tip_value.toFixed(2);
   const total_amount = "$" + payment_info.result.payment.total_money.amount / 100;
   const receipt_url = payment_info.result.payment.receipt_url;
   return `Received payment of: ${total_amount}
   Base Amount: ${base_amount}
   Tip Amount: ${tip_amount}
-  Receipt: ${receipt_url}
-  Order ID: ${payment_info.order_id}`;
+  Receipt: ${receipt_url}`;
 }
 
 const CreateInternalEmail = (
@@ -47,8 +45,9 @@ const CreateInternalEmail = (
   submittime,
   useragent,
   ispaid,
-  payment_info) => {
-    const payment_section = ispaid ? GeneratePaymentSectionHTML(payment_info) : "";
+  payment_info,
+  totals) => {
+    const payment_section = ispaid ? GeneratePaymentSectionHTML(totals, payment_info) : "";
     const emailbody =  `<p>From: ${customer_name} ${user_email}</p>
 
 <p>Message Body:<br />
@@ -177,8 +176,9 @@ const CreateOrderEvent = (
   address,
   delivery_instructions,
   ispaid,
-  payment_info) => {
-  const payment_section = ispaid ? "\n" + GeneratePaymentSection(payment_info) : "";
+  payment_info,
+  totals) => {
+  const payment_section = ispaid ? "\n" + GeneratePaymentSection(totals, payment_info) : "";
   const calendar_details = `${calendar_event_detail}${address ? "\nAddress: " + address : ""}${delivery_instructions ? "\nDelivery Instructions: " + delivery_instructions : ""}${payment_section}`;
   return GoogleProvider.CreateCalendarEvent(calendar_event_title,
     calendar_event_address ? calendar_event_address : "", 
@@ -244,7 +244,8 @@ module.exports = Router({ mergeParams: true })
         req.body.submittime,
         req.body.useragent,
         req.body.ispaid,
-        req.body.payment_info
+        req.body.payment_info,
+        req.body.totals
       );
       CreateOrderEvent(
         req.body.calendar_event_title + (req.body.ispaid ? " PAID" : " UNPAID"),
@@ -254,7 +255,8 @@ module.exports = Router({ mergeParams: true })
         req.body.address,
         req.body.delivery_instructions,
         req.body.ispaid,
-        req.body.payment_info
+        req.body.payment_info,
+        req.body.totals
         );
       // send response to user
       res.status(200).send("Looks good buddy");
