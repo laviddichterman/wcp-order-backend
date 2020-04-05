@@ -29,7 +29,6 @@ module.exports = Router({ mergeParams: true })
         }
         else {
           req.logger.debug(payment_response);
-          const order_complete_response = await SquareProvider.OrderStateChange(square_order_id, create_order_response.response.order.version, "COMPLETED");
           req.logger.info(`For internal id ${reference_id} and Square Order ID: ${square_order_id} payment for ${amount_money} successful.`)
           res.status(200).json(payment_response);
         }
