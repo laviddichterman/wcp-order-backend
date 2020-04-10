@@ -133,7 +133,7 @@ const GenerateDisplayCartStringListFromProducts = (products) => {
   return products.pizza.map(x=> `${x[0]}x: ${x[1].name}`).concat(products.extras.map(x=> `${x[0]}x: ${x[1].name}`));
 }
 
-const GenerateShortCartStringListFromProducts = (products) => {
+const GenerateShortCartStringListFromProducts = (products, sliced) => {
   return products.pizza.map(x=> `${x[0]}x: ${x[1].shortname}${sliced ? " SLICED" : ""}`).concat(products.extras.map(x=> `${x[0]}x: ${x[1].name}`));
 }
 
