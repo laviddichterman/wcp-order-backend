@@ -134,7 +134,7 @@ const GenerateDisplayCartStringListFromProducts = (products) => {
 }
 
 const GenerateShortCartStringListFromProducts = (products) => {
-  return products.pizza.map(x=> `${x[0]}x: ${x[1].shortname}`).concat(products.extras.map(x=> `${x[0]}x: ${x[1].name}`));
+  return products.pizza.map(x=> `${x[0]}x: ${x[1].shortname}${sliced ? " SLICED" : ""}`).concat(products.extras.map(x=> `${x[0]}x: ${x[1].name}`));
 }
 
 const CreateInternalEmail = (
@@ -149,6 +149,7 @@ const CreateInternalEmail = (
   user_email,
   delivery_info,
   products,
+  sliced,
   referral,
   special_instructions,
   website_metrics,
@@ -157,7 +158,7 @@ const CreateInternalEmail = (
   const confirmation_subject_escaped = encodeURI(service_title);
   const payment_section = payment.ispaid ? GeneratePaymentSection(payment.totals, payment.payment_info, true) : "";
   const delivery_section = GenerateDeliverySection(delivery_info, true);
-  const shortcart = GenerateShortCartStringListFromProducts(products);
+  const shortcart = GenerateShortCartStringListFromProducts(products, sliced);
   const special_instructions_section = special_instructions && special_instructions.length > 0 ? "<br />Special Instructions: " + special_instructions : "";
   const emailbody = `<p>From: ${customer_name} ${user_email}</p>
 <p>Message Body:<br />
@@ -252,7 +253,7 @@ const CreateOrderEvent = (
   service_time_interval,
   delivery_info,
   payment) => {
-  const shortcart = GenerateShortCartStringListFromProducts(products);
+  const shortcart = GenerateShortCartStringListFromProducts(products, sliced);
   const calendar_event_title = EventTitleStringBuilder(service_option_enum, customer_name, products, special_instructions, sliced, payment.ispaid);
 
   const special_instructions_section = special_instructions && special_instructions.length > 0 ? "\nSpecial Instructions: " + special_instructions : "";
@@ -352,6 +353,7 @@ module.exports = Router({ mergeParams: true })
         customer_email,
         delivery_info,
         products,
+        sliced,
         referral,
         special_instructions,
         website_metrics,
