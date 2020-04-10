@@ -1,17 +1,17 @@
 // some thing relating to payments
 const Router = require('express').Router
-const { validate, Joi } = require('express-validation')
+//const { validate, Joi } = require('express-validation')
 const SquareProvider = require("../../../../config/square");
 
-const PaymentValidation = {
-  body: Joi.object({
-    amount_money: Joi.number().positive().required(),
-    nonce: Joi.string().required(),
-  }),
-}
+// const PaymentValidation = {
+//   body: Joi.object({
+//     amount_money: Joi.number().positive().required(),
+//     nonce: Joi.string().required(),
+//   }),
+// }
 
 module.exports = Router({ mergeParams: true })
-  .post('/v1/payments/payment', validate(PaymentValidation, {}, {}), async (req, res, next) => {
+  .post('/v1/payments/payment', async (req, res, next) => {
     try {
       const reference_id = Date.now().toString(36).toUpperCase();
       const amount_money = Math.round(req.body.amount_money * 100);
