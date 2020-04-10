@@ -118,9 +118,9 @@ const EventTitleStringBuilder = (service, customer, products, special_instructio
   }
 
   var pizzas_title = num_pizzas + "x" + pizza_shortcodes;
-  var extras_title = extras_shortcodes.length > 0 ? "Extras" + extras_shortcodes : "";
+  var extras_title = extras_shortcodes.length > 0 ? " Extras" + extras_shortcodes : "";
 
-  return `${service_string}${sliced ? " SLICED" : ""} ${customer} ${pizzas_title} ${extras_title}${has_special_instructions ? " *" : ""}${ispaid ? " PAID" : " UNPAID"}`;
+  return `${service_string}${sliced ? " SLICED" : ""} ${customer} ${pizzas_title}${extras_title}${has_special_instructions ? " *" : ""}${ispaid ? " PAID" : " UNPAID"}`;
 };
 
 
