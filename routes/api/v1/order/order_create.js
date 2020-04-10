@@ -8,7 +8,7 @@ const wcpshared = require("@wcp/wcpshared");
 const WCP = "Windy City Pie";
 const DELIVERY_INTERVAL_TIME = 30;
 
-const GOOGLE_EVENTS_DATETIME_FORMAT = "YYYY-MM-DDTHH:mm:ssZ";
+const GOOGLE_EVENTS_DATETIME_FORMAT = "YYYY-MM-DDTHH:mm:ss";
 const DISPLAY_TIME_FORMAT = "h:mmA";
 const DISPLAY_DATE_FORMAT = "dddd, MMMM DD, Y";
 
@@ -230,7 +230,7 @@ Order contents:<br />
 ${cartstring.join("<br />")}
 ${special_instructions_section}
 ${delivery_section}
-${payment.ispaid ? `<a href="${payment.payment_info.result.payment.receipt_url}">Here's a link to your receipt!</a>` : ""}
+${payment.ispaid ? `<br /><a href="${payment.payment_info.result.payment.receipt_url}">Here's a link to your receipt!</a>` : ""}
 ${location_section}We thank you for your take-out and delivery business at this time.`;
   GoogleProvider.SendEmail(
     {
@@ -267,8 +267,12 @@ const CreateOrderEvent = (
   return GoogleProvider.CreateCalendarEvent(calendar_event_title,
     delivery_info.validated_delivery_address ? delivery_info.validated_delivery_address : "",
     calendar_details,
-    { dateTime: service_time_interval[0].format(GOOGLE_EVENTS_DATETIME_FORMAT) },
-    { dateTime: service_time_interval[1].format(GOOGLE_EVENTS_DATETIME_FORMAT) });
+    { dateTime: service_time_interval[0].format(GOOGLE_EVENTS_DATETIME_FORMAT),
+      timeZone: "America/Los_Angeles"
+     },
+    { dateTime: service_time_interval[1].format(GOOGLE_EVENTS_DATETIME_FORMAT),
+      timeZone: "America/Los_Angeles"
+     });
 }
 
 // const OrderValidation = [
