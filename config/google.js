@@ -83,7 +83,7 @@ class GoogleProvider {
         logger.error(error);
       }
       else {
-        logger.info("Send mail: %o", response);
+        logger.info(`Sent mail with subject ${subject} to ${to}`);
       }
       this.#smtpTransport.close();
     });
