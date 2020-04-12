@@ -3,7 +3,7 @@ const Router = require('express').Router
 const GoogleProvider = require("../../../../config/google");
 const moment = require('moment');
 const wcpshared = require("@wcp/wcpshared");
-//const { check, validationResult } = require('express-validator');
+const { body, validationResult } = require('express-validator');
 
 const WCP = "Windy City Pie";
 const DELIVERY_INTERVAL_TIME = 30;
@@ -133,8 +133,9 @@ const GenerateDisplayCartStringListFromProducts = (products) => {
   return products.pizza.map(x=> `${x[0]}x: ${x[1].name}`).concat(products.extras.map(x=> `${x[0]}x: ${x[1].name}`));
 }
 
-const GenerateShortCartStringListFromProducts = (products, sliced) => {
-  return products.pizza.map(x=> `${x[0]}x: ${x[1].shortname}${sliced ? " SLICED" : ""}`).concat(products.extras.map(x=> `${x[0]}x: ${x[1].name}`));
+const GenerateShortCartFromProducts = (products, sliced) => {
+  const pizzas_section = [["Pizzas", products.pizza.map(x=> `${x[0]}x: ${x[1].shortname}${sliced ? " SLICED" : ""}`)]];
+  return products.extras.length > 0 ? pizzas_section.concat([["Extras", products.extras.map(x=> `${x[0]}x: ${x[1].name}`)]]) : pizzas_section;
 }
 
 const CreateInternalEmail = (
@@ -158,11 +159,10 @@ const CreateInternalEmail = (
   const confirmation_subject_escaped = encodeURI(service_title);
   const payment_section = payment.ispaid ? GeneratePaymentSection(payment.totals, payment.payment_info, true) : "";
   const delivery_section = GenerateDeliverySection(delivery_info, true);
-  const shortcart = GenerateShortCartStringListFromProducts(products, sliced);
+  const shortcart = GenerateShortCartFromProducts(products, sliced);
   const special_instructions_section = special_instructions && special_instructions.length > 0 ? "<br />Special Instructions: " + special_instructions : "";
   const emailbody = `<p>From: ${customer_name} ${user_email}</p>
-<p>Message Body:<br />
-${shortcart.join("<br />")}
+<p>${shortcart.map(x=> `<strong>${x[0]}:</strong><br />${x[1].join("<br />")}`).join("<br />")}
 ${special_instructions_section}<br />
 Phone: ${phonenum}</p>
 ${moment().isSame(service_date, "day") ? "" : '<strong style="color: red;">DOUBLE CHECK THIS IS FOR TODAY BEFORE SENDING THE TICKET</strong> <br />'}
@@ -253,7 +253,7 @@ const CreateOrderEvent = (
   service_time_interval,
   delivery_info,
   payment) => {
-  const shortcart = GenerateShortCartStringListFromProducts(products, sliced);
+  const shortcart = GenerateShortCartFromProducts(products, sliced);
   const calendar_event_title = EventTitleStringBuilder(service_option_enum, customer_name, products, special_instructions, sliced, payment.ispaid);
 
   const special_instructions_section = special_instructions && special_instructions.length > 0 ? "\nSpecial Instructions: " + special_instructions : "";
@@ -262,7 +262,7 @@ const CreateOrderEvent = (
 
   const delivery_section = GenerateDeliverySection(delivery_info, false);
 
-  const calendar_details = `${shortcart.join("\n")}\nph: ${phone_number}${special_instructions_section}${delivery_section}${payment_section}`;
+  const calendar_details = `${shortcart.map(x=> `${x[0]}:\n${x[1].join("\n")}`).join("\n")}\nph: ${phone_number}${special_instructions_section}${delivery_section}${payment_section}`;
 
   return GoogleProvider.CreateCalendarEvent(calendar_event_title,
     delivery_info.validated_delivery_address ? delivery_info.validated_delivery_address : "",
@@ -275,35 +275,40 @@ const CreateOrderEvent = (
      });
 }
 
-// const OrderValidation = [
-//   check('service_option').isInt({}).positive().required(),
-//   check('customer_name'): Joi.string().required().escape(),
-//   check('service_date'): Joi.string().required().escape(),
-//   check('service_time'): Joi.number().positive().required(),
-//   check('phonenum'): Joi.string().required().escape(),
-//   check('user_email'): Joi.isEmail().required(),
-//   check('referral'): Joi.string().escape()
-//   check('delivery_info'),
-//   check('load_time'),
-//   check('time_selection_time'),
-//   check('submittime'),
-//   check('useragent'),
-//   check('totals'),
-//   check('payment_info'),
-//   check('ispaid'),
-//   check('products'),
-//   check('sliced'),
-//   check('special_instructions'),
-//   ]
+const OrderValidation = [  body('service_option').isInt({min: 0, max:2}).exists(),
+body('customer_name').trim().escape().exists(),
+body('service_date').trim().escape().exists(),
+body('service_time').isInt({min: 0, max: 1440}).exists(),
+body('phonenum').trim().escape().exists(),
+body('user_email').isEmail().exists(),
+body('referral').escape().optional(),
+//body('delivery_info').deliveryInfoValidator(),
+body('load_time').escape().optional(),
+body('time_selection_time').escape(),
+body('submittime').escape(),
+body('useragent').escape(),
+//body('totals').totalsValidator(),
+//body('payment_info').paymentValidator(),
+body('ispaid').isBoolean().exists(),
+//body('products').productsValidator(),
+body('sliced').isBoolean(),
+body('special_instructions').trim().escape()];
 
 module.exports = Router({ mergeParams: true })
-  .post('/v1/order/', async (req, res, next) => {
-    // validation stuff
-    // if (!date || !date.isValid() || isNaN(time) || time < 0) { // needs to be changed to check the values in the interval for 
-    //   return "";
-    // }
+  .post('/v1/order/', OrderValidation, async (req, res, next) => {
     const EMAIL_ADDRESS = req.db.KeyValueConfig.EMAIL_ADDRESS;
     const STORE_NAME = req.db.KeyValueConfig.STORE_NAME;
+
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      GoogleProvider.SendEmail(
+        EMAIL_ADDRESS,
+        [EMAIL_ADDRESS, "dave@windycitypie.com"],
+        "ERROR IN ORDER PROCESSING. CONTACT DAVE IMMEDIATELY",
+        "dave@windycitypie.com",
+        `<p>Order request: ${JSON.stringify(req.body)}</p><p>Error info:${JSON.stringify(errors.array())}</p>`);
+      return res.status(422).json({ errors: errors.array() });
+    }
     const service_option_enum = req.body.service_option;
     const service_option_display_string = req.db.Services[service_option_enum];
     const customer_name = req.body.customer_name;
