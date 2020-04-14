@@ -54,7 +54,7 @@ const socket_ro = io.of("/nsRO");
 // handle authenticated socketIO
 socket_auth.on('connect', SocketIoJwtAuthenticateAndAuthorize(['read:order_config', 'write:order_config']))
   .on('authenticated', (socket) => {
-    logger.info("New client authenticated. %o", socket.decoded_token);
+    logger.debug(`New client authenticated with permissions: ${socket.decoded_token.permissions}`);
     socket.emit('AUTH_KEYVALUES', DataProvider.KeyValueConfig);
     socket.on('AUTH_SERVICES', function (msg) {
       logger.error("SOMEHOW Got socket message on AUTH_SERVICES channel: %o", msg);
@@ -87,14 +87,26 @@ socket_auth.on('connect', SocketIoJwtAuthenticateAndAuthorize(['read:order_confi
     });
   });
 
+  // var num_connected = 0;
+
 socket_ro.on('connect',(socket) => { 
-  logger.info("client info: %o ", socket.client.request.headers);
+  //++num_connected;
+//  logger.info("client info: %o ", socket.client.request.headers);
+  socket.client.request.headers["x-real-ip"] ? 
+    logger.info(`Client at IP: ${socket.client.request.headers["x-real-ip"]} connected, UA: ${socket.client.request.headers['user-agent']}`) : 
+    logger.info("client info: %o ", socket.client.request.headers);
+
   socket.emit('WCP_SERVICES', DataProvider.Services);
   socket.emit('WCP_LEAD_TIMES', DataProvider.LeadTimes);
   socket.emit('WCP_BLOCKED_OFF', DataProvider.BlockedOff);
   socket.emit('WCP_SETTINGS', DataProvider.Settings);
   socket.emit('WCP_DELIVERY_AREA', DataProvider.DeliveryArea);
 });
+
+// socket_ro.on('disconnect', (reason) => {
+//   --num_connected;
+//   logger.info(`Num connected: ${num_connected} after disconnect for ${reason}`);
+// });
 
 server.listen(PORT, function () {
   logger.info("Server is running on Port: " + PORT);
