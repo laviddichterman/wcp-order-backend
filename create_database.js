@@ -7,10 +7,6 @@ const DBUSER = process.env.DBUSER || null;
 const DBPASS = process.env.DBPASS || null;
 const DBENDPOINT = process.env.DBENDPOINT || 'mongodb://127.0.0.1:27017';
 
-const wrap = (name) => { 
-  console.log(`name of: ${name}`);
-  return name;
-}
 module.exports = ({ logger }) => {
   const url = `${DBENDPOINT}/${DBTABLE}`;
   mongoose.connect(url, 
@@ -24,7 +20,7 @@ module.exports = ({ logger }) => {
           .replace(path.extname(filename), ''),
       }
     })
-    .map(({ name, schema }) => mongoose.model(wrap(name), schema))
+    .map(({ name, schema }) => mongoose.model(name, schema))
     .reduce((db, model) => {
       return {
         ...db,

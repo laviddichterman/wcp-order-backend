@@ -16,10 +16,8 @@ const PORT = process.env.PORT || 4001;
 const { /*CheckJWT,*/ SocketIoJwtAuthenticateAndAuthorize } = require('./config/authorization');
 //const jwtAuthz = require('express-jwt-authz');
 
-const dbconn = require('./create_database')({ logger })
-
-console.log(dbconn);
-const DataProvider = require("./config/dataprovider")({ dbconn });
+const DatabaseConnection = require('./create_database')({ logger })
+const DataProvider = require("./config/dataprovider")({ dbconn: DatabaseConnection });
 const GoogleProvider = require("./config/google");
 const SquareProvider = require("./config/square");
 
