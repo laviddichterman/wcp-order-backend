@@ -7,4 +7,4 @@ var LeadTimeSchema = new Schema({
   lead: Number
 });
 
-module.exports = mongoose.model('LeadTimeSchema', LeadTimeSchema);
+module.exports = LeadTimeSchema;

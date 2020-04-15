@@ -1,46 +1,21 @@
-const mongoose = require('mongoose');
+const WDateUtils = require("@wcp/wcpshared");
 const logger = require('../logging');
 const process = require('process');
-const LeadTimeSchema = require('../models/settings/lead_time.model');
-const BlockedOffSchema = require('../models/settings/blocked_off.model');
-const SettingsSchema = require('../models/settings/settings.model');
-const StringListSchema = require('../models/settings/string_list.model');
-const DeliveryAreaSchema = require('../models/settings/delivery_area.model');
-const KeyValueSchema = require('../models/settings/keyvalues.model');
 const DEFAULT_LEAD_TIMES = require("../data/leadtimeschemas.default.json");
 const DEFAULT_SETTINGS = require("../data/settingsschemas.default.json");
 const DEFAULT_SERVICES = require("../data/servicesschemas.default.json");
 const DEFAULT_DELIVERY_AREA = require("../data/deliveryareaschemas.default.json");
-const WDateUtils = require("@wcp/wcpshared");
-
-const DBTABLE = process.env.DBTABLE || "wcp_05";
-const DBUSER = process.env.DBUSER || null;
-const DBPASS = process.env.DBPASS || null;
-const DBENDPOINT = process.env.DBENDPOINT || 'mongodb://127.0.0.1:27017';
-
-mongoose.Promise = global.Promise;
-
-mongoose.connect(`${DBENDPOINT}/${DBTABLE}`,
-  { useNewUrlParser: true, useUnifiedTopology: true, user: DBUSER, pass: DBPASS })
-  .then(
-    () => {
-      logger.info("MongoDB database connection established successfully");
-    },
-    err => {
-      logger.error("Failed to connect to MongoDB %o", err);
-      process.exit(1);
-    }
-  );
-const connection = mongoose.connection;
 
 class DataProvider {
+  #dbconn;
   #services;
   #settings;
   #blocked_off;
   #leadtimes;
   #delivery_area;
   #keyvalueconfig;
-  constructor() {
+  constructor(dbconn) {
+    this.#dbconn = dbconn;
     this.#services = null;
     this.#settings = null;
     this.#blocked_off = [];
@@ -52,10 +27,10 @@ class DataProvider {
     logger.info("Loading from and bootstrapping to database.");
 
     // look for key value config area:
-    KeyValueSchema.findOne((err, doc) => {
+    this.#dbconn.KeyValueSchema.findOne((err, doc) => {
       if (err || !doc) {
         this.#keyvalueconfig = {};
-        let keyvalueconfig_document = new KeyValueSchema({ settings: [] });
+        let keyvalueconfig_document = new this.#dbconn.KeyValueSchema({ settings: [] });
         keyvalueconfig_document.save()
           .then(x => { logger.info("Added default (empty) key value config area") })
           .catch(err => { logger.error("Error adding default key value config to database.", err); });
@@ -74,10 +49,10 @@ class DataProvider {
     });
 
     // look for delivery area:
-    DeliveryAreaSchema.findOne((err, doc) => {
+    this.#dbconn.DeliveryAreaSchema.findOne((err, doc) => {
       if (err || !doc) {
         this.#delivery_area = DEFAULT_DELIVERY_AREA;
-        let delivery_area_document = new DeliveryAreaSchema(DEFAULT_DELIVERY_AREA);
+        let delivery_area_document = new this.#dbconn.DeliveryAreaSchema(DEFAULT_DELIVERY_AREA);
         delivery_area_document.save()
           .then(x => { logger.info("Added default delivery area: %o", delivery_area_document) })
           .catch(err => { logger.error("Error adding default delivery area to database.", err); });
@@ -89,10 +64,10 @@ class DataProvider {
     });
 
     // look for services
-    StringListSchema.findOne((err, doc) => {
+    this.#dbconn.StringListSchema.findOne((err, doc) => {
       if (err || !doc || !doc.services.length) {
         this.#services = DEFAULT_SERVICES;
-        let services_document = new StringListSchema(DEFAULT_SERVICES);
+        let services_document = new this.#dbconn.StringListSchema(DEFAULT_SERVICES);
         services_document.save()
           .then(x => { logger.info("Added default services list: %o", services_document) })
           .catch(err => { logger.error("Error adding default services list to database.", err); });
@@ -104,12 +79,12 @@ class DataProvider {
 
       // check for and populate lead times
       this.#leadtimes = Array(this.#services.length).fill(null);
-      LeadTimeSchema.find((err, leadtimes) => {
+      this.#dbconn.LeadTimeSchema.find((err, leadtimes) => {
         if (err || !leadtimes || !leadtimes.length) {
           logger.info("Intializing LeadTimes with defaults.");
           for (var i in DEFAULT_LEAD_TIMES) {
             this.#leadtimes[DEFAULT_LEAD_TIMES[i].service] = DEFAULT_LEAD_TIMES[i].lead;
-            let lt = new LeadTimeSchema({ service: i, lead: DEFAULT_LEAD_TIMES[i].lead });
+            let lt = new this.#dbconn.LeadTimeSchema({ service: i, lead: DEFAULT_LEAD_TIMES[i].lead });
             lt.save()
               .then(x => { logger.debug("Saved lead time of %o", lt) })
               .catch(err => { logger.error("Error saving lead time %o", err); });
@@ -129,7 +104,7 @@ class DataProvider {
         for (var j in this.#leadtimes) {
           if (!this.#leadtimes[j]) {
             this.#leadtimes[j] = 35;
-            let lt = new LeadTimeSchema({ service: j, lead: 35 });
+            let lt = new this.#dbconn.LeadTimeSchema({ service: j, lead: 35 });
             logger.error("Missing leadtime value! %o", lt);
             lt.save()
               .then(x => { logger.debug("Saved leadtime: %o", lt) })
@@ -140,11 +115,11 @@ class DataProvider {
       }).then(x => { });
 
       // check for and populate settings, including operating hours
-      SettingsSchema.findOne((err, settings) => {
+      this.#dbconn.SettingsSchema.findOne((err, settings) => {
         if (err || !settings) {
           logger.info("No settings found, populating from defaults: %o", DEFAULT_SETTINGS);
           this.#settings = DEFAULT_SETTINGS;
-          let settings_document = new SettingsSchema(DEFAULT_SETTINGS);
+          let settings_document = new this.#dbconn.SettingsSchema(DEFAULT_SETTINGS);
           settings_document.save()
             .then(x => { logger.debug("Saved settings: %o", settings_document) })
             .catch(err => { logger.error("Error saving settings %o", err) });
@@ -157,10 +132,10 @@ class DataProvider {
 
       // populate blocked off array
       this.#blocked_off = Array(this.#services.length).fill([]);
-      BlockedOffSchema.findOne((err, blocked) => {
+      this.#dbconn.BlockedOffSchema.findOne((err, blocked) => {
         if (err || !blocked) {
           logger.debug("No blocked off entries found. Creating blocked off array of length %o", this.#services.length);
-          const blocked_off = new BlockedOffSchema({ blocked_off: [] });
+          const blocked_off = new this.#dbconn.BlockedOffSchema({ blocked_off: [] });
           blocked_off.save()
             .then(e => { logger.debug("Saved blocked off %o", blocked_off) })
             .catch(err => { logger.error("Error saving blocked off %o", err) });
@@ -216,7 +191,7 @@ class DataProvider {
       }
     }
     logger.debug("Generated blocked off array: %o", new_blocked_off);
-    BlockedOffSchema.findOne(function (err, db_blocked) {
+    this.#dbconn.BlockedOffSchema.findOne(function (err, db_blocked) {
       Object.assign(db_blocked, { blocked_off: new_blocked_off });
       db_blocked.save()
         .then(e => { logger.debug("Saved blocked off %o", db_blocked) })
@@ -225,7 +200,7 @@ class DataProvider {
   }
   set Settings(da) {
     this.#settings = da;
-    SettingsSchema.findOne(function (err, db_settings) {
+    this.#dbconn.SettingsSchema.findOne(function (err, db_settings) {
       delete da.__v;
       Object.assign(db_settings, da);
       db_settings.save()
@@ -236,7 +211,7 @@ class DataProvider {
 
   set LeadTimes(da) {
     this.#leadtimes = da;
-    LeadTimeSchema.find(function (err, leadtimes) {
+    this.#dbconn.LeadTimeSchema.find(function (err, leadtimes) {
       for (var i in leadtimes) {
         leadtimes[i].lead = da[leadtimes[i].service];
         leadtimes[i].save()
@@ -249,7 +224,7 @@ class DataProvider {
   
   set Services(da) {
     this.#services = da;
-    StringListSchema.findOne((err, doc) => {
+    this.#dbconn.StringListSchema.findOne((err, doc) => {
       if (err || !doc || !doc.services.length) {
         logger.error("Error finding a valid services list to update.");
       }
@@ -265,7 +240,7 @@ class DataProvider {
 
   set DeliveryArea(da) {
     this.#delivery_area = da;
-    DeliveryAreaSchema.findOne(function (err, db_delivery_area) {
+    this.#dbconn.DeliveryAreaSchema.findOne(function (err, db_delivery_area) {
       delete da.__v;
       Object.assign(db_delivery_area, da);
       db_delivery_area.save()
@@ -276,7 +251,7 @@ class DataProvider {
 
   set KeyValueConfig(da) {
     this.#keyvalueconfig = da;
-    KeyValueSchema.findOne(function (err, db_key_values) {
+    this.#dbconn.KeyValueSchema.findOne(function (err, db_key_values) {
       const settings_list = [];
       for (var i in da) {
         settings_list.push({key: i, value: da[i]});
@@ -297,6 +272,6 @@ class DataProvider {
   }
 }
 
-const DATAPROVIDER = new DataProvider();
-
-module.exports = DATAPROVIDER;
+module.exports = ({ dbconn }) => {
+  return new DataProvider(dbconn);
+}

@@ -10,4 +10,4 @@ var BlockedOffSchema = new Schema({
     }
   ]
 });
-module.exports = mongoose.model('BlockedOffSchema', BlockedOffSchema);
+module.exports = BlockedOffSchema;

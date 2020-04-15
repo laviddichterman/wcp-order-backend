@@ -16,4 +16,4 @@ var SettingsSchema = new Schema({
   },
   operating_hours: [[[[Number]]]]
 });
-module.exports = mongoose.model("SettingsSchema", SettingsSchema);
+module.exports = SettingsSchema;

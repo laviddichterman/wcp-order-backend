@@ -8,4 +8,4 @@ var KeyValueSchema = new Schema({
     value: String 
   }] });
 
-module.exports = mongoose.model("KeyValueSchema", KeyValueSchema);
+module.exports = KeyValueSchema;

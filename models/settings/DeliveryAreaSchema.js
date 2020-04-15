@@ -13,4 +13,4 @@ const DeliveryAreaSchema = new mongoose.Schema({
   }
 });
 
-module.exports = mongoose.model("DeliveryAreaSchema", DeliveryAreaSchema);
+module.exports = DeliveryAreaSchema;
