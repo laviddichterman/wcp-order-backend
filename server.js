@@ -2,6 +2,7 @@ const express = require('express');
 const http = require("http");
 const socketIo = require("socket.io");
 const bodyParser = require('body-parser');
+const moment = require('moment');
 const cors = require('cors');
 const logger = require("./logging");
 const app = express();
@@ -87,26 +88,29 @@ socket_auth.on('connect', SocketIoJwtAuthenticateAndAuthorize(['read:order_confi
     });
   });
 
-  // var num_connected = 0;
-
 socket_ro.on('connect',(socket) => { 
-  //++num_connected;
-//  logger.info("client info: %o ", socket.client.request.headers);
+  const connect_time = new moment();
   socket.client.request.headers["x-real-ip"] ? 
-    logger.info(`Client at IP: ${socket.client.request.headers["x-real-ip"]} connected, UA: ${socket.client.request.headers['user-agent']}`) : 
-    logger.info("client info: %o ", socket.client.request.headers);
+    logger.info(`CONNECTION: Client at IP: ${socket.client.request.headers["x-real-ip"]}, UA: ${socket.client.request.headers['user-agent']}.`) : 
+    logger.info(`CONNECTION: Client info: ${JSON.stringify(socket.client.request.headers)}.`);
+  logger.info(`Num Connected: ${io.engine.clientsCount}`);
 
   socket.emit('WCP_SERVICES', DataProvider.Services);
   socket.emit('WCP_LEAD_TIMES', DataProvider.LeadTimes);
   socket.emit('WCP_BLOCKED_OFF', DataProvider.BlockedOff);
   socket.emit('WCP_SETTINGS', DataProvider.Settings);
   socket.emit('WCP_DELIVERY_AREA', DataProvider.DeliveryArea);
+  socket.on('disconnect', (reason) => {
+    const disconnect_time = new moment();
+    const duration = moment.duration(disconnect_time.diff(connect_time));
+    socket.client.request.headers["x-real-ip"] ? 
+      logger.info(`DISCONNECT: ${reason} after ${Number(duration.as("minutes")).toFixed(2)} minutes. IP: ${socket.client.request.headers["x-real-ip"]}`) : 
+      logger.info(`DISCONNECT: ${reason} after ${Number(duration.as("minutes")).toFixed(2)} minutes.\nClient: ${JSON.stringify(socket.client.request.headers)}`);
+    logger.info(`Num Connected: ${io.engine.clientsCount}`);
+  });
 });
 
-// socket_ro.on('disconnect', (reason) => {
-//   --num_connected;
-//   logger.info(`Num connected: ${num_connected} after disconnect for ${reason}`);
-// });
+
 
 server.listen(PORT, function () {
   logger.info("Server is running on Port: " + PORT);
