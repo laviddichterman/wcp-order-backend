@@ -5,7 +5,7 @@ const wcpshared = require("@wcp/wcpshared");
 const GoogleProvider = require("../../../../config/google");
 //const { validate, Joi } = require('express-validation')
 
-const tipsregex = /Tip Amount: \$([0-9]+(?:\.[0-9]{1,2})?)$/;
+const tipsregex = /Tip Amount: \$([0-9]+(?:\.[0-9]{1,2})?)/;
 module.exports = Router({ mergeParams: true })
   .get('/v1/payments/tips', async (req, res, next) => {
     try {
