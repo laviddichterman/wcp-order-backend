@@ -126,7 +126,6 @@ class GoogleProvider {
       timeZone: tz,
       maxResults: 2500
     });
-    console.log(JSON.stringify(res));
     return(res.data.items);
   }
 

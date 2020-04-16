@@ -18,6 +18,7 @@ module.exports = Router({ mergeParams: true })
       events.map((event, i) => {
         const tips_match = event.description.match(tipsregex);
         if (tips_match) {
+          console.log(tips_match);
           tips_array.push(parseFloat(tips_match[1]))
         }
       })
