@@ -5,6 +5,10 @@ const logger = require('../logging');
 const OAuth2 = google.auth.OAuth2;
 
 class GoogleProvider {
+  static get GOOGLE_EVENTS_DATETIME_FORMAT() {
+    return "YYYY-MM-DDTHH:mm:ss";
+  }
+
   #accessToken;
   #smtpTransport;
   #calendarAPI;
@@ -112,6 +116,19 @@ class GoogleProvider {
       }
     });
   };
+
+  GetEventsForDate = async (min_date, max_date, tz) => {
+    const res = await this.#calendarAPI.events.list({
+      auth: this.#oauth2Client,
+      calendarId: 'primary',
+      timeMin: min_date,
+      timeMax: max_date,
+      timeZone: tz,
+      maxResults: 2500
+    });
+    console.log(JSON.stringify(res));
+    return(res.data.items);
+  }
 
 };
 
