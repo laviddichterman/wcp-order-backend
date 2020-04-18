@@ -10,7 +10,7 @@ var WProductSchema = new Schema({
   modifiers: [String], // list of option_type_ids
 
   // Corresponding to a WCategorySchema
-  category_id: String,
+  category_ids: [String],
 });
 
 

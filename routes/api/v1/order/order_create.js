@@ -275,7 +275,7 @@ const CreateOrderEvent = (
      });
 }
 
-const OrderValidation = [  body('service_option').isInt({min: 0, max:2}).exists(),
+const ValidationChain = [  body('service_option').isInt({min: 0, max:2}).exists(),
 body('customer_name').trim().escape().exists(),
 body('service_date').trim().escape().exists(),
 body('service_time').isInt({min: 0, max: 1440}).exists(),
@@ -295,7 +295,7 @@ body('sliced').isBoolean(),
 body('special_instructions').trim().escape()];
 
 module.exports = Router({ mergeParams: true })
-  .post('/v1/order/', OrderValidation, async (req, res, next) => {
+  .post('/v1/order/', ValidationChain, async (req, res, next) => {
     const EMAIL_ADDRESS = req.db.KeyValueConfig.EMAIL_ADDRESS;
     const STORE_NAME = req.db.KeyValueConfig.STORE_NAME;
 

@@ -4,20 +4,16 @@ const ExternalIDsSchema = require("./ExternalIDsSchema");
 
 // NOTE: this is a mix-in and probably won't be instantiated directly
 var WCatalogItemSchema = new Schema({
-  
-  // Nice, long description of the product
-  // eg: House-ground spicy pork sausage
-  description: {
-    type: String,
-    required: true 
-  },
-
   // Nice name of the product
   // eg: House Sausage
   display_name: {
     type: String,
     required: true 
   },
+
+  // Nice, long description of the product
+  // eg: House-ground spicy pork sausage
+  description: String,
 
   // abbreviation used in store
   shortcode: {

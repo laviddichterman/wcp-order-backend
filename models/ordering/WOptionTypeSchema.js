@@ -7,18 +7,19 @@ var WOptionTypeSchema = new Schema({
   _id: { type: String, required: true },
 
   // Human readable name
-  name: String,
+  name: { type: String, required: true },
 
   // external ids
   externalIDs: ExternalIDsSchema,
 
   // ordinal
-  ordinal: Number,
+  ordinal: { type: Number, required: true },
   
   // selection type
   selection_type: {
     type: String,
-    enum: ['SINGLE', 'MANY']
+    enum: ['SINGLE', 'MANY'],
+    required: true
   }
 });
 

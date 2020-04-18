@@ -8,10 +8,14 @@ var WOptionSchema = new Schema({
 
   // inheritance by composition
   // the base catalog item
-  catalog_item: WCatalogItemSchema,
+  catalog_item: { 
+    type: WCatalogItemSchema, 
+    required: true 
+  },
 
   // placement index
-  ordinal: { type: Number,
+  ordinal: {
+    type: Number,
     required: true
   },
 
@@ -27,10 +31,10 @@ var WOptionSchema = new Schema({
 
     // how much weight/moisture this contributes
     bake_factor: Number,
-  },
 
-  // boolean flag representing if the option can be split left/right
-  can_split: Boolean,
+    // boolean flag representing if the option can be split left/right
+    can_split: Boolean,
+  },
 
   // optional function name to call to enable this product, 
   // always enabled if not specified
