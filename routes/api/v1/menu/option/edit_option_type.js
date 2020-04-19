@@ -7,9 +7,9 @@ const { param, body, validationResult } = require('express-validator');
 
 const ValidationChain = [
   param('otid').trim().escape().exists(),
-  body('name').trim().escape().exists(),
-  body('ordinal').isInt({min: 0, max:64}).exists(),
-  body('selection_type').exists().isIn(['SINGLE', 'MANY']),
+  body('name').trim().escape(),
+  body('ordinal').isInt({min: 0, max:64}),
+  body('selection_type').isIn(['SINGLE', 'MANY']),
   body('revelID').trim().escape(),
   body('squareID').trim().escape(),
 ];

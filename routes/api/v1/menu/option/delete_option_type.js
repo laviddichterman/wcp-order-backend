@@ -19,7 +19,7 @@ module.exports = Router({ mergeParams: true })
         return res.status(422).json({ errors: errors.array() });
       }
 
-      req.db.WCategorySchema.findByIdAndDelete(req.params.otid, (err, data) => {
+      req.db.WOptionTypeSchema.findByIdAndDelete(req.params.otid, (err, data) => {
         if (err) { 
           req.logger.error(`Unable to delete option type: ${req.params.otid}`);
           res.status(500).send(`Unable to delete option type: ${req.params.otid}`);

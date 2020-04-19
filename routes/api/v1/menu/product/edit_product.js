@@ -1,12 +1,11 @@
-// edits an option in the catalog
-// TODO: double check that fields not passed aren't removed. make it so fields that aren't present in the 
+// edits a product in the catalog
+// TODO: double check that fields not passed aren't removed. 
+// make it so fields that aren't present in the body are handled properly
 const Router = require('express').Router
 const { body, param, validationResult } = require('express-validator');
 
 const ValidationChain = [  
-  // kinda wonky since you could potentially re-assign the option type here, but it's in the path
-  param('otid').trim().escape().exists(), 
-  param('oid').trim().escape().exists(),
+  param('pid').trim().escape().exists(), 
   body('display_name').trim().escape(),
   body('description').trim().escape(),
   body('shortcode').trim().escape(),
@@ -18,23 +17,19 @@ const ValidationChain = [
   body('permanent_disable').isBoolean(true),
   body('price.amount').isInt({min: 0, max:100000}),
   body('price.currency').isLength({min:3, max: 3}).isIn(['USD']),
-  body('ordinal').isInt({min: 0, max:64}),
-  body('enable_function_name').trim().escape().isAscii(),
-  body('flavor_factor').isFloat({ min: 0, max: 5 }),
-  body('bake_factor').isFloat({ min: 0, max: 5 }),
-  // don't sanitize this to boolean, but validate that it is a boolean
-  body('can_split').isBoolean(true), 
+  body('modifiers.*').trim().escape().exists(),
+  body('category_ids.*').trim().escape().exists()
 ];
 
 module.exports = Router({ mergeParams: true })
-  .post('/v1/menu/option/:otid/:oid', ValidationChain, async (req, res, next) => {
+  .post('/v1/menu/product/:pid', ValidationChain, async (req, res, next) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(422).json({ errors: errors.array() });
       }
-      req.db.WOptionSchema.findByIdAndUpdate(
-        req.params.oid,
+      req.db.WProductSchema.findByIdAndUpdate(
+        req.params.pid,
         {
           catalog_item: {
             price: {
@@ -51,20 +46,14 @@ module.exports = Router({ mergeParams: true })
               sqID: req.body.squareID
             }
           },
-          option_type_id: req.params.otid,
-          ordinal: req.body.ordinal,
-          metadata: {
-            flavor_factor: req.body.flavor_factor,
-            bake_factor: req.body.bake_factor,
-            can_split: req.body.can_split,
-          },
-          enable_function_name: req.body.enable_function_name,
+          modifiers: req.body.modifiers,
+          category_ids: req.body.category_ids,
         },
         { new: true },
         (err, doc) => {
           if (err) {
-            req.logger.info(`Unable to update option type: ${req.params.otid}`);
-            return res.status(404).send(`Unable to update option type: ${req.params.otid}`);;
+            req.logger.info(`Unable to update product: ${req.params.pid}`);
+            return res.status(404).send(`Unable to update product: ${req.params.pid}`);;
           }
           else {
             req.logger.info(`Successfully updated ${doc}`);
