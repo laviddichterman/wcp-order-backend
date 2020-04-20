@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
 const ExternalIDsSchema = require("./ExternalIDsSchema");
+const WMoney = require("./WMoney");
 
 // NOTE: this is a mix-in and probably won't be instantiated directly
 var WCatalogItemSchema = new Schema({
@@ -22,13 +23,7 @@ var WCatalogItemSchema = new Schema({
   },
 
   // Moneys in base currency unit (300 is $3)
-  price: { 
-    type: { 
-      amount: Number,
-      currency: String
-    },
-    required: true
-  },
+  price: WMoney,
 
   // external ids
   externalIDs: ExternalIDsSchema,

@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
-const WOptionInstanceSchema = require("./WOptionInstanceSchema");
-const WCatalogItemSchema = require("./WCatalogItemSchema");
+const WOptionInstanceSchema = require("../options/WOptionInstanceSchema");
+const WCatalogItemSchema = require("../WCatalogItemSchema");
 
 const WProductInstanceSchema = new Schema({
   // reference to the WProductSchema ID for this class of item

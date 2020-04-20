@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
-const WCatalogItemSchema = require("./WCatalogItemSchema");
+const WCatalogItemSchema = require("../WCatalogItemSchema");
 
 var WOptionSchema = new Schema({
   // id

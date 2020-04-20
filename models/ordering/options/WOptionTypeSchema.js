@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
-const ExternalIDsSchema = require("./ExternalIDsSchema");
+const ExternalIDsSchema = require("../ExternalIDsSchema");
 
 var WOptionTypeSchema = new Schema({
   // id
