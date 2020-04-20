@@ -6,7 +6,7 @@
       "display_name": "Red Sauce",
       "price": 0,
       "external_id": "",
-      "enable_function_name": ""
+      "enable_function_name": "disable_on_brussels_sprout"
     },
     "flavor_factor": 0,
     "bake_factor": 0,

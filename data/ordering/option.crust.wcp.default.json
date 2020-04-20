@@ -1,0 +1,30 @@
+[
+  {
+    "product": {
+      "shortcode": "wcp",
+      "description": "Windy City Pie's Crust",
+      "display_name": "Windy City Pie",
+      "price": 0,
+      "external_id": "",
+      "enable_function_name": "disable_on_vegan"
+    },
+    "flavor_factor": 0,
+    "bake_factor": 0,
+    "index": 0,
+    "option_type": "CRUST"
+  },
+  {
+    "product": {
+      "shortcode": "btp",
+      "description": "Breezy Town Pizza's Sourdough",
+      "display_name": "Breezy Town Pizza",
+      "price": 0,
+      "external_id": "",
+      "enable_function_name": ""
+    },
+    "flavor_factor": 0,
+    "bake_factor": 0,
+    "index": 0,
+    "option_type": "CRUST"
+  }
+]
