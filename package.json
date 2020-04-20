@@ -45,6 +45,7 @@
     "socket.io": "^2.3.0",
     "socketio-jwt": "^4.5.0",
     "square-connect": "^3.20200325.0",
+    "voucher-code-generator": "^1.1.1",
     "winston": "^3.2.1"
   },
   "devDependencies": {

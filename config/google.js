@@ -12,6 +12,7 @@ class GoogleProvider {
   #accessToken;
   #smtpTransport;
   #calendarAPI;
+  #sheetsAPI;
   #oauth2Client;
   constructor() {
     this.#oauth2Client = new OAuth2(
@@ -20,6 +21,7 @@ class GoogleProvider {
       "https://developers.google.com/oauthplayground"
     );
     this.#calendarAPI = google.calendar('v3');
+    this.#sheetsAPI = google.sheets('v4');
   }
 
   RefreshAccessToken = () => {
@@ -127,6 +129,22 @@ class GoogleProvider {
       maxResults: 2500
     });
     return(res.data.items);
+  }
+
+
+  AppendToSheet = async (sheetId, range, fields) => {
+    const res = await this.#sheetsAPI.spreadsheets.values.append({
+      auth: this.#oauth2Client,
+      spreadsheetId: sheetId,
+      range: range,
+      valueInputOption: "USER_ENTERED",
+      insertDataOption: "INSERT_ROWS",
+      resource: {
+        majorDimension: "ROWS",
+        values: [fields]
+      }
+    }).data;
+    return(res);
   }
 
 };
