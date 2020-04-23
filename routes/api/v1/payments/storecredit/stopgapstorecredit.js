@@ -27,7 +27,7 @@ const CreateExternalEmailSender = (EMAIL_ADDRESS, STORE_NAME, payment, sender_em
 
 const CreateExternalEmailRecipient = (EMAIL_ADDRESS, STORE_NAME, payment, sender, recipient_name_first, recipient_name_last, recipient_email, additional_message, credit_code) => {
   const amount = payment.result.payment.total_money.amount / 100;
-  const sender_message = additional_message && additional_message.length > 0 ? `<p><h3>Oh, we almost forgot! ${sender} wanted us to relay the following to you:</h3>${additional_message}</p>` : "";
+  const sender_message = additional_message && additional_message.length > 0 ? `<p><h3>${sender} wanted us to relay the following to you:</h3><em>${additional_message}</em></p>` : "";
   const emailbody = `<h2>Hey ${recipient_name_first}, ${sender} sent you some digital pizza!</h2>
   <p>This gift of store credit never expires and is valid at both Windy City Pie and Breezy Town Pizza locations. 
   Store credit can be used when paying online on our website using the code below or in person using your name and ID. We'll take care of the rest!</p>
@@ -43,10 +43,10 @@ const CreateExternalEmailRecipient = (EMAIL_ADDRESS, STORE_NAME, payment, sender
     emailbody);
 }
 const AppendToStoreCreditSheet = (STORE_CREDIT_SHEET, payment, recipient, reference_id, credit_code) => {
-  const range = "Current!A1:H1";
+  const range = "CurrentWARIO!A1:I1";
   const amount = payment.result.payment.total_money.amount / 100;
   const date_added = moment().format("MM/DD/YYYY");
-  const fields = [recipient, amount, amount, reference_id, date_added, "WARIO", date_added, credit_code];
+  const fields = [recipient, amount, amount, reference_id, date_added, "WARIO", date_added, credit_code, 0];
   GoogleProvider.AppendToSheet(STORE_CREDIT_SHEET, range, fields);
 }
 
