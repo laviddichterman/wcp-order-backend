@@ -147,6 +147,32 @@ class GoogleProvider {
     return(res);
   }
 
+  GetValuesFromSheet = async (sheetId, range) => {
+    const res = await this.#sheetsAPI.spreadsheets.values.get({
+      auth: this.#oauth2Client,
+      spreadsheetId: sheetId,
+      range: range,
+      valueRenderOption: "UNFORMATTED_VALUE",
+      dateTimeRenderOption: "FORMATTED_STRING",
+      majorDimension: "ROWS",
+    });
+    return(res.data);
+  };
+
+  UpdateValuesInSheet = async (sheetId, range, fields) => {
+    const res = await this.#sheetsAPI.spreadsheets.values.update({
+      auth: this.#oauth2Client,
+      spreadsheetId: sheetId,
+      range: range,
+      valueInputOption: "RAW",
+      resource: {
+        majorDimension: "ROWS",
+        values: [fields]
+      }
+    });
+    return(res.data);
+  }
+
 };
 
 const GOOGLE_PROVIDER = new GoogleProvider();

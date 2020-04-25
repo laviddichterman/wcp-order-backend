@@ -3,13 +3,6 @@ const Router = require('express').Router
 //const { validate, Joi } = require('express-validation')
 const SquareProvider = require("../../../../config/square");
 
-// const PaymentValidation = {
-//   body: Joi.object({
-//     amount_money: Joi.number().positive().required(),
-//     nonce: Joi.string().required(),
-//   }),
-// }
-
 module.exports = Router({ mergeParams: true })
   .post('/v1/payments/payment', async (req, res, next) => {
     try {

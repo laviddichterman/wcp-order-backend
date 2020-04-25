@@ -42,11 +42,11 @@ const CreateExternalEmailRecipient = (EMAIL_ADDRESS, STORE_NAME, payment, sender
     EMAIL_ADDRESS,
     emailbody);
 }
-const AppendToStoreCreditSheet = (STORE_CREDIT_SHEET, payment, recipient, reference_id, credit_code) => {
-  const range = "CurrentWARIO!A1:I1";
-  const amount = payment.result.payment.total_money.amount / 100;
+const AppendToStoreCreditSheet = (STORE_CREDIT_SHEET, payment, recipient, credit_code) => {
+  const range = "CurrentWARIO!A1:K1";
+  const amount = Number(payment.result.payment.total_money.amount / 100).toFixed(2);
   const date_added = moment().format("MM/DD/YYYY");
-  const fields = [recipient, amount, amount, reference_id, date_added, "WARIO", date_added, credit_code, 0];
+  const fields = [recipient, amount, "MONEY", amount, date_added, "WARIO", date_added, credit_code, "", "", ""];
   GoogleProvider.AppendToSheet(STORE_CREDIT_SHEET, range, fields);
 }
 
