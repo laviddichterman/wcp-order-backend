@@ -97,7 +97,7 @@ module.exports = Router({ mergeParams: true })
           if (req.body.send_email_to_recipient) {
             CreateExternalEmailRecipient(EMAIL_ADDRESS, STORE_NAME, payment_response, sender_name, recipient_name_first, recipient_name_last, recipient_email_address, recipient_message, joint_credit_code);
           }
-          AppendToStoreCreditSheet(STORE_CREDIT_SHEET, payment_response, `${recipient_name_first} ${recipient_name_last}`, reference_id, joint_credit_code);
+          AppendToStoreCreditSheet(STORE_CREDIT_SHEET, payment_response, `${recipient_name_first} ${recipient_name_last}`, joint_credit_code);
           req.logger.info(`Store credit code: ${joint_credit_code} and Square Order ID: ${square_order_id} payment for ${amount_money} successful, credit logged to spreadsheet.`)
           return res.status(200).json({reference_id, joint_credit_code, square_order_id, amount_money, payment_response});
         }

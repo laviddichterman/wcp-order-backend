@@ -74,7 +74,7 @@ const GenerateAutoResponseBodyEscaped = function(
 }
 
 const GeneratePaymentSection = (totals, payment_info, store_credit, ishtml) => {
-  const discount = store_credit && store_credit.type == "DISCOUNT" ? `\${Number(store_credit.amount_used).toFixed(2)}` : "";
+  const discount = store_credit && store_credit.type == "DISCOUNT" ? `\$${Number(store_credit.amount_used).toFixed(2)}` : "";
   const base_amount = "$" + Number(totals.total - totals.tip).toFixed(2);
   const tip_amount = "$" + Number(totals.tip).toFixed(2);
   const total_amount = "$" + Number(totals.total).toFixed(2);
