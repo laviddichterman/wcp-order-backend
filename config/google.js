@@ -25,7 +25,12 @@ class GoogleProvider {
   }
 
   RefreshAccessToken = () => {
-    this.#accessToken = this.#oauth2Client.getAccessToken();
+    try {
+      this.#accessToken = this.#oauth2Client.getAccessToken();
+    }
+    catch (error) {
+      logger.error(`Failed to refresh Google access token, got error ${JSON.stringify(error)}`);
+    }
   }
 
   BootstrapProvider = (db) => {

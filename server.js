@@ -42,13 +42,6 @@ app.use((req, res, next) => {
   return next()
 });
 
-// // add validation middleware
-// app.use(function(err, req, res, next) {
-//   if (err instanceof ValidationError) {
-//     return res.status(err.statusCode).json(err)
-//   }
-//   return res.status(500).json(err)
-// })
 app.use('/api', router);
 const socket_auth = io.of("/nsAuth");
 const socket_ro = io.of("/nsRO");
