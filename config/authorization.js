@@ -1,4 +1,4 @@
-//const jwt = require('express-jwt');
+const jwt = require('express-jwt');
 const jwks = require('jwks-rsa');
 const socketioJwt = require('../forked-socketiojwt');
 
@@ -38,12 +38,12 @@ const SocketIoJwtAuthenticateAndAuthorize = (permissions) => {
   }
 }
 
-// const CheckJWT = jwt({
-//   secret: JWTKeyStore,
-//   audience: authConfig.audience,
-//   issuer: `https://${authConfig.domain}/`,
-//   algorithms: ['RS256']
-// });
+const CheckJWT = jwt({
+  secret: JWTKeyStore,
+  audience: authConfig.audience,
+  issuer: `https://${authConfig.domain}/`,
+  algorithms: ['RS256']
+});
 
-//exports.CheckJWT = CheckJWT;
+exports.CheckJWT = CheckJWT;
 exports.SocketIoJwtAuthenticateAndAuthorize = SocketIoJwtAuthenticateAndAuthorize;

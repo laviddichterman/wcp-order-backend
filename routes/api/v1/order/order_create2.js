@@ -292,7 +292,7 @@ const CreateOrderEvent = (
 }
 
 const CheckAndSpendStoreCredit = async (logger, STORE_CREDIT_SHEET, store_credit) => {
-  const range = "CurrentWARIO!A2:K";
+  const range = "CurrentWARIO!A2:M";
   const values = await GoogleProvider.GetValuesFromSheet(STORE_CREDIT_SHEET, range);
   for (let i = 0; i < values.values.length; ++i) {
     const entry = values.values[i];
@@ -302,16 +302,20 @@ const CheckAndSpendStoreCredit = async (logger, STORE_CREDIT_SHEET, store_credit
         logger.error(`We have a cheater folks, store credit key ${entry[7]}, attempted to use ${store_credit.amount_used} but had balance ${credit_balance}`);
         return [false, [], 0];
       }
-      if (entry[8] != store_credit.encoded.enc ||
-        entry[9] != store_credit.encoded.iv || 
-        entry[10] != store_credit.encoded.auth) {
+      if (entry[10] != store_credit.encoded.enc ||
+        entry[11] != store_credit.encoded.iv || 
+        entry[12] != store_credit.encoded.auth) {
         logger.error(`WE HAVE A CHEATER FOLKS, store credit key ${entry[7]}, expecting encoded: ${JSON.stringify(store_credit.encoded)}.`);
         return [false, [], 0];
       }
+      if (entry[8] && moment(entry[8], wcpshared.DATE_STRING_INTERNAL_FORMAT).isAfter(moment(), "day")) {
+        logger.error(`We have a cheater folks, store credit key ${entry[7]}, attempted to use after expiration of ${entry[8]}.`);
+        return [false, [], 0];
+      }
       // no shenanagains confirmed
-      const date_modified = moment().format("MM/DD/YYYY");
+      const date_modified = moment().format(wcpshared.DATE_STRING_INTERNAL_FORMAT);
       const new_balance = credit_balance - store_credit.amount_used;
-      const new_entry = [entry[0], entry[1], entry[2], new_balance, entry[4], "WARIO", date_modified, entry[7], entry[8], entry[9], entry[10]];
+      const new_entry = [entry[0], entry[1], entry[2], new_balance, entry[4], entry[5], date_modified, entry[7], entry[8], entry[9], entry[10], entry[11], entry[12]];
       const new_range = `CurrentWARIO!${2 + i}:${2 + i}`;
       // TODO switch to volatile-esq update API call
       await GoogleProvider.UpdateValuesInSheet(STORE_CREDIT_SHEET, new_range, new_entry);

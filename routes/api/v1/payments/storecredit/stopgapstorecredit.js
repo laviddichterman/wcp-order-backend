@@ -2,6 +2,8 @@
 const Router = require('express').Router
 const moment = require('moment');
 const voucher_codes = require('voucher-code-generator');
+const wcpshared = require("@wcp/wcpshared");
+
 
 const { body, validationResult } = require('express-validator');
 const SquareProvider = require("../../../../../config/square");
@@ -43,10 +45,10 @@ const CreateExternalEmailRecipient = (EMAIL_ADDRESS, STORE_NAME, payment, sender
     emailbody);
 }
 const AppendToStoreCreditSheet = (STORE_CREDIT_SHEET, payment, recipient, credit_code) => {
-  const range = "CurrentWARIO!A1:K1";
+  const range = "CurrentWARIO!A1:M1";
   const amount = Number(payment.result.payment.total_money.amount / 100).toFixed(2);
-  const date_added = moment().format("MM/DD/YYYY");
-  const fields = [recipient, amount, "MONEY", amount, date_added, "WARIO", date_added, credit_code, "", "", ""];
+  const date_added = moment().format(wcpshared.DATE_STRING_INTERNAL_FORMAT);
+  const fields = [recipient, amount, "MONEY", amount, date_added, "WARIO", date_added, credit_code, "", "", "", "", ""];
   GoogleProvider.AppendToSheet(STORE_CREDIT_SHEET, range, fields);
 }
 

@@ -7,19 +7,20 @@ const GoogleProvider = require("../../../../../config/google");
 
 
 const ValidateAndLock = async (STORE_CREDIT_SHEET, credit_code, enc, iv, auth) => {
-  const range = "CurrentWARIO!A2:K";
+  const range = "CurrentWARIO!A2:M";
   const values = await GoogleProvider.GetValuesFromSheet(STORE_CREDIT_SHEET, range);
   for (let i = 0; i < values.values.length; ++i) {
     const entry = values.values[i];
     if (entry[7] == credit_code) {
-      const date_modified = moment().format("MM/DD/YYYY");
-      const new_entry = [entry[0], entry[1], entry[2], entry[3], entry[4], "WARIO", date_modified, entry[7], enc, iv.toString('hex'), auth.toString('hex')];
+      const date_modified = moment().format(wcpshared.DATE_STRING_INTERNAL_FORMAT);
+      const new_entry = [entry[0], entry[1], entry[2], entry[3], entry[4], entry[5], date_modified, entry[7], entry[8], entry[9], enc, iv.toString('hex'), auth.toString('hex')];
       const new_range = `CurrentWARIO!${2 + i}:${2 + i}`;
       GoogleProvider.UpdateValuesInSheet(STORE_CREDIT_SHEET, new_range, new_entry);
-      return [true, entry[2], parseFloat(Number(entry[3]).toFixed(2))];
+      const expiration = entry[8] ? moment(entry[8], wcpshared.DATE_STRING_INTERNAL_FORMAT) : null;
+      return [expiration === null || !expiration.isValid() || expiration.isSameOrBefore(moment(), "day"), entry[2], parseFloat(Number(entry[3]).toFixed(2))];
     }
   }
-  return [false, 0];
+  return [false, "MONEY", 0, ""];
 }
 
 const ValidationChain = [
