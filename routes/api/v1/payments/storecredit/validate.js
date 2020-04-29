@@ -17,7 +17,7 @@ const ValidateAndLock = async (STORE_CREDIT_SHEET, credit_code, enc, iv, auth) =
       const new_range = `CurrentWARIO!${2 + i}:${2 + i}`;
       GoogleProvider.UpdateValuesInSheet(STORE_CREDIT_SHEET, new_range, new_entry);
       const expiration = entry[8] ? moment(entry[8], wcpshared.DATE_STRING_INTERNAL_FORMAT) : null;
-      return [expiration === null || !expiration.isValid() || expiration.isSameOrBefore(moment(), "day"), entry[2], parseFloat(Number(entry[3]).toFixed(2))];
+      return [expiration === null || !expiration.isValid() || expiration.isSameOrAfter(moment(), "day"), entry[2], parseFloat(Number(entry[3]).toFixed(2))];
     }
   }
   return [false, "MONEY", 0, ""];

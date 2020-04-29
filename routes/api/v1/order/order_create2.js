@@ -308,7 +308,7 @@ const CheckAndSpendStoreCredit = async (logger, STORE_CREDIT_SHEET, store_credit
         logger.error(`WE HAVE A CHEATER FOLKS, store credit key ${entry[7]}, expecting encoded: ${JSON.stringify(store_credit.encoded)}.`);
         return [false, [], 0];
       }
-      if (entry[8] && moment(entry[8], wcpshared.DATE_STRING_INTERNAL_FORMAT).isAfter(moment(), "day")) {
+      if (entry[8] && moment(entry[8], wcpshared.DATE_STRING_INTERNAL_FORMAT).isBefore(moment(), "day")) {
         logger.error(`We have a cheater folks, store credit key ${entry[7]}, attempted to use after expiration of ${entry[8]}.`);
         return [false, [], 0];
       }
