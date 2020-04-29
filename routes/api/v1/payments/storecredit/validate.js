@@ -4,7 +4,7 @@ const moment = require('moment');
 const aes256gcm = require('../../../../../config/crypto-aes-256-gcm');
 const { query, validationResult } = require('express-validator');
 const GoogleProvider = require("../../../../../config/google");
-
+const wcpshared = require("@wcp/wcpshared");
 
 const ValidateAndLock = async (STORE_CREDIT_SHEET, credit_code, enc, iv, auth) => {
   const range = "CurrentWARIO!A2:M";
