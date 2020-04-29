@@ -11,9 +11,9 @@ const { CheckJWT } = require('../../../../../config/authorization');
 const DISPLAY_DATE_FORMAT = "dddd, MMMM DD, Y";
 
 const CreateExternalEmail = (EMAIL_ADDRESS, STORE_NAME, amount, recipient_name_first, recipient_name_last, recipient_email, credit_code, expiration) => {
-  const expiration_section = expiration ? ` Please note that this credit will expire at 11:59PM on ${expiration.format(DISPLAY_DATE_FORMAT)}.` : "";
+  const expiration_section = expiration ? `<br />Please note that this credit will expire at 11:59PM on ${expiration.format(DISPLAY_DATE_FORMAT)}.` : "";
   const emailbody = `<h2>You've been sent a discount code from ${STORE_NAME}!</h2>
-  <p>Use this discount code when ordering online or in person at either Windy City Pie or Breezy Town Pizza.${expiration_section}.<br />
+  <p>Use this discount code when ordering online or in person at either Windy City Pie or Breezy Town Pizza.${expiration_section}<br />
   Credit code: <strong>${credit_code}</strong> valuing <strong>\$${amount}</strong> for ${recipient_name_first} ${recipient_name_last}.<br />
   Keep this email in your records and let us know if you have any questions!</p>`;
   GoogleProvider.SendEmail(
@@ -27,12 +27,12 @@ const CreateExternalEmail = (EMAIL_ADDRESS, STORE_NAME, amount, recipient_name_f
     emailbody);
 };
 
-const AppendToStoreCreditSheet = (STORE_CREDIT_SHEET, amount, recipient, credit_code, added_by, expiration, reason) => {
+const AppendToStoreCreditSheet = async (STORE_CREDIT_SHEET, amount, recipient, credit_code, added_by, expiration, reason) => {
   const range = "CurrentWARIO!A1:M1";
   const date_added = moment().format(wcpshared.DATE_STRING_INTERNAL_FORMAT);
   const expiration_str = expiration ? expiration.format(wcpshared.DATE_STRING_INTERNAL_FORMAT) : "";
   const fields = [recipient, amount, "DISCOUNT", amount, date_added, added_by, date_added, credit_code, expiration_str, reason, "", "", ""];
-  GoogleProvider.AppendToSheet(STORE_CREDIT_SHEET, range, fields);
+  await GoogleProvider.AppendToSheet(STORE_CREDIT_SHEET, range, fields);
 }
 
 const ValidationChain = [
@@ -71,10 +71,10 @@ module.exports = Router({ mergeParams: true })
       const reason = req.body.reason;
       const credit_code = voucher_codes.generate({pattern: "###-##-###"})[0];
       const joint_credit_code = `${credit_code}-${reference_id}`;
-      AppendToStoreCreditSheet(STORE_CREDIT_SHEET, amount, `${recipient_name_first} ${recipient_name_last}`, joint_credit_code, added_by, expiration, reason);
+      await AppendToStoreCreditSheet(STORE_CREDIT_SHEET, amount, `${recipient_name_first} ${recipient_name_last}`, joint_credit_code, added_by, expiration, reason);
       CreateExternalEmail(EMAIL_ADDRESS, STORE_NAME, amount, recipient_name_first, recipient_name_last, recipient_email, joint_credit_code, expiration);
       req.logger.info(`Store credit code: ${joint_credit_code} of type DISCOUNT for ${amount} added by ${added_by} for reason: ${reason}.`)
-      return res.status(200).json([joint_credit_code]);
+      return res.status(200).json({ credit_code: joint_credit_code });
     } catch (error) {
       GoogleProvider.SendEmail(
         EMAIL_ADDRESS,
