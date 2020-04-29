@@ -44,12 +44,12 @@ const CreateExternalEmailRecipient = (EMAIL_ADDRESS, STORE_NAME, payment, sender
     EMAIL_ADDRESS,
     emailbody);
 }
-const AppendToStoreCreditSheet = (STORE_CREDIT_SHEET, payment, recipient, credit_code) => {
+const AppendToStoreCreditSheet = async (STORE_CREDIT_SHEET, payment, recipient, credit_code) => {
   const range = "CurrentWARIO!A1:M1";
   const amount = Number(payment.result.payment.total_money.amount / 100).toFixed(2);
   const date_added = moment().format(wcpshared.DATE_STRING_INTERNAL_FORMAT);
   const fields = [recipient, amount, "MONEY", amount, date_added, "WARIO", date_added, credit_code, "", "", "", "", ""];
-  GoogleProvider.AppendToSheet(STORE_CREDIT_SHEET, range, fields);
+  await GoogleProvider.AppendToSheet(STORE_CREDIT_SHEET, range, fields);
 }
 
 const ValidationChain = [
@@ -99,7 +99,7 @@ module.exports = Router({ mergeParams: true })
           if (req.body.send_email_to_recipient) {
             CreateExternalEmailRecipient(EMAIL_ADDRESS, STORE_NAME, payment_response, sender_name, recipient_name_first, recipient_name_last, recipient_email_address, recipient_message, joint_credit_code);
           }
-          AppendToStoreCreditSheet(STORE_CREDIT_SHEET, payment_response, `${recipient_name_first} ${recipient_name_last}`, joint_credit_code);
+          await AppendToStoreCreditSheet(STORE_CREDIT_SHEET, payment_response, `${recipient_name_first} ${recipient_name_last}`, joint_credit_code);
           req.logger.info(`Store credit code: ${joint_credit_code} and Square Order ID: ${square_order_id} payment for ${amount_money} successful, credit logged to spreadsheet.`)
           return res.status(200).json({reference_id, joint_credit_code, square_order_id, amount_money, payment_response});
         }

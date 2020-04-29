@@ -333,7 +333,7 @@ const CheckAndRefundStoreCredit = async (STORE_CREDIT_SHEET, old_entry, index) =
 
   const new_range = `CurrentWARIO!${2 + index}:${2 + index}`;
   // TODO switch to volatile-esq update API call
-  GoogleProvider.UpdateValuesInSheet(STORE_CREDIT_SHEET, new_range, old_entry);
+  await GoogleProvider.UpdateValuesInSheet(STORE_CREDIT_SHEET, new_range, old_entry);
   return true;
 }
 
@@ -463,7 +463,7 @@ module.exports = Router({ mergeParams: true })
         // if any part of step 2 fails, restore old store credit balance
         if (store_credit.amount_used > 0) {
           req.logger.info(`Refunding ${store_credit.code} after failed credit card payment.`);
-          CheckAndRefundStoreCredit(STORE_CREDIT_SHEET, store_credit_response[1], store_credit_response[2]);
+          await CheckAndRefundStoreCredit(STORE_CREDIT_SHEET, store_credit_response[1], store_credit_response[2]);
         }
         req.logger.error(`Nasty error in processing payment: ${JSON.stringify(error)}.`);
         return res.status(500).json({success:false, result: {errors: [error]}});
@@ -471,7 +471,7 @@ module.exports = Router({ mergeParams: true })
       if (!charging_response[0]) {
         if (store_credit.amount_used > 0) {
           req.logger.info(`Refunding ${store_credit.code} after failed credit card payment.`);
-          CheckAndRefundStoreCredit(STORE_CREDIT_SHEET, store_credit_response[1], store_credit_response[2]);
+          await CheckAndRefundStoreCredit(STORE_CREDIT_SHEET, store_credit_response[1], store_credit_response[2]);
         }
         return res.status(400).json(charging_response[1]);
       }
