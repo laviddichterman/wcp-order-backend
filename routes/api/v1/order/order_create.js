@@ -1,12 +1,10 @@
 // submit an order
 const Router = require('express').Router
+const moment = require('moment');
+const { body, validationResult } = require('express-validator');
 const GoogleProvider = require("../../../../config/google");
 const SquareProvider = require("../../../../config/square");
-const moment = require('moment');
 const wcpshared = require("@wcp/wcpshared");
-const { body, validationResult } = require('express-validator');
-const { logger } = require('express-winston');
-
 const WCP = "Windy City Pie";
 const DELIVERY_INTERVAL_TIME = 30;
 
@@ -446,7 +444,7 @@ module.exports = Router({ mergeParams: true })
       store_credit_response = await CheckAndSpendStoreCredit(req.logger, STORE_CREDIT_SHEET, store_credit);
       if (!store_credit_response[0]) {
         req.logger.error("Failed to process store credit step of ordering");
-        return res.status(404).json({success: false, result: {errors: [{detail: "Unable to debit store credit."}]}});
+        return res.status(404).json({success: false, result: JSON.stringify({errors: [{detail: "Unable to debit store credit."}]})});
       }
     }
 
@@ -466,7 +464,7 @@ module.exports = Router({ mergeParams: true })
           await CheckAndRefundStoreCredit(STORE_CREDIT_SHEET, store_credit_response[1], store_credit_response[2]);
         }
         req.logger.error(`Nasty error in processing payment: ${JSON.stringify(error)}.`);
-        return res.status(500).json({success:false, result: {errors: [error]}});
+        return res.status(500).json({success:false, result: JSON.stringify({errors: [error]})});
       }
       if (!charging_response[0]) {
         if (store_credit.amount_used > 0) {
