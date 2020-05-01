@@ -11,6 +11,8 @@ const router = require('./routes/')()
 
 const server = http.createServer(app);
 const io = socketIo(server);
+const socket_auth = io.of("/nsAuth");
+const socket_ro = io.of("/nsRO");
 
 const PORT = process.env.PORT || 4001;
 const { /*CheckJWT,*/ SocketIoJwtAuthenticateAndAuthorize } = require('./config/authorization');
@@ -18,6 +20,7 @@ const { /*CheckJWT,*/ SocketIoJwtAuthenticateAndAuthorize } = require('./config/
 
 const DatabaseConnection = require('./create_database')({ logger })
 const DataProvider = require("./config/dataprovider")({ dbconn: DatabaseConnection });
+const CatalogProvider = require("./config/catalog_provider")({socketRO: socket_ro, dbconn: DatabaseConnection});
 const GoogleProvider = require("./config/google");
 const SquareProvider = require("./config/square");
 
@@ -26,6 +29,7 @@ DataProvider.BootstrapDatabase(() => {
   SquareProvider.BootstrapProvider(DataProvider);
 });
 
+CatalogProvider.Bootstrap();
 
 app.use(cors());
 app.use(bodyParser.json());
@@ -39,12 +43,13 @@ app.use((req, res, next) => {
   req.base = `${req.protocol}://${req.get('host')}`
   req.logger = logger;
   req.db = DataProvider;
+  req.catalog = CatalogProvider;
   return next()
 });
 
 app.use('/api', router);
-const socket_auth = io.of("/nsAuth");
-const socket_ro = io.of("/nsRO");
+
+
 
 // handle authenticated socketIO
 socket_auth.on('connect', SocketIoJwtAuthenticateAndAuthorize(['read:order_config', 'write:order_config']))

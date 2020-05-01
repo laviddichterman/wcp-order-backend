@@ -4,13 +4,14 @@
 
 const Router = require('express').Router
 const { param, validationResult } = require('express-validator');
+const { CheckJWT } = require('../../../../../config/authorization');
 
 const ValidationChain = [  
   param('pid').trim().escape().exists()
 ];
 
 module.exports = Router({ mergeParams: true })
-  .delete('/v1/menu/product/:pid', ValidationChain, (req, res, next) => {
+  .delete('/v1/menu/product/:pid', ValidationChain, CheckJWT, (req, res, next) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {

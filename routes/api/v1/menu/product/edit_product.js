@@ -3,6 +3,7 @@
 // make it so fields that aren't present in the body are handled properly
 const Router = require('express').Router
 const { body, param, validationResult } = require('express-validator');
+const { CheckJWT } = require('../../../../../config/authorization');
 
 const ValidationChain = [  
   param('pid').trim().escape().exists(), 
@@ -22,7 +23,7 @@ const ValidationChain = [
 ];
 
 module.exports = Router({ mergeParams: true })
-  .post('/v1/menu/product/:pid', ValidationChain, async (req, res, next) => {
+  .post('/v1/menu/product/:pid', ValidationChain, CheckJWT, async (req, res, next) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {

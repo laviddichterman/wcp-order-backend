@@ -4,6 +4,7 @@
 
 const Router = require('express').Router
 const { param, validationResult } = require('express-validator');
+const { CheckJWT } = require('../../../../../config/authorization');
 
 const ValidationChain = [  
   param('catid').trim().escape().exists()
@@ -11,7 +12,7 @@ const ValidationChain = [
 
 
 module.exports = Router({ mergeParams: true })
-  .delete('/v1/menu/category/:catid', ValidationChain, (req, res, next) => {
+  .delete('/v1/menu/category/:catid', ValidationChain, CheckJWT, (req, res, next) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {

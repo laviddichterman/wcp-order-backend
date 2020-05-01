@@ -1,6 +1,7 @@
 // creates a new category in the catalog, parent id and description optional
 const Router = require('express').Router
 const { body, validationResult } = require('express-validator');
+const { CheckJWT } = require('../../../../../config/authorization');
 
 /*  // brief name of the category
   name: String,
@@ -20,19 +21,17 @@ const ValidationChain = [
 
 
 module.exports = Router({ mergeParams: true })
-  .post('/v1/menu/category', ValidationChain, async (req, res, next) => {
+  .post('/v1/menu/category', ValidationChain, CheckJWT, async (req, res, next) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(422).json({ errors: errors.array() });
       }
-
-      const newcategory = new req.db.WCategorySchema({
+      const newcategory = await req.catalog.CreateCategory({
         description: req.body.description,
         name: req.body.name,
         parent_id: req.body.parent_id
       });
-      await newcategory.save();
       const location = `${req.base}${req.originalUrl}/${newcategory.id}`;
       res.setHeader('Location', location);
       res.status(201).send(newcategory);

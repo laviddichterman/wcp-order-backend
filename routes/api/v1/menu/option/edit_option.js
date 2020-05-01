@@ -2,6 +2,7 @@
 // TODO: double check that fields not passed aren't removed. make it so fields that aren't present in the 
 const Router = require('express').Router
 const { body, param, validationResult } = require('express-validator');
+const { CheckJWT } = require('../../../../../config/authorization');
 
 const ValidationChain = [  
   // kinda wonky since you could potentially re-assign the option type here, but it's in the path
@@ -27,7 +28,7 @@ const ValidationChain = [
 ];
 
 module.exports = Router({ mergeParams: true })
-  .post('/v1/menu/option/:otid/:oid', ValidationChain, async (req, res, next) => {
+  .post('/v1/menu/option/:otid/:oid', ValidationChain, CheckJWT, async (req, res, next) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
