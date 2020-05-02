@@ -25,6 +25,10 @@ class CatalogProvider {
     return true;
   }
 
+  EmitCategories = () => {
+    this.#socketRO.emit('WCP_CATALOG_CATEGORIES', this.#categories);
+  }
+
   Bootstrap = async () => {
 
     // load catalog from DB, do not push to clients as that'll be handled when a new client connects

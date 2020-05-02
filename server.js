@@ -49,8 +49,6 @@ app.use((req, res, next) => {
 
 app.use('/api', router);
 
-
-
 // handle authenticated socketIO
 socket_auth.on('connect', SocketIoJwtAuthenticateAndAuthorize(['read:order_config', 'write:order_config']))
   .on('authenticated', (socket) => {
@@ -99,6 +97,7 @@ socket_ro.on('connect',(socket) => {
   socket.emit('WCP_BLOCKED_OFF', DataProvider.BlockedOff);
   socket.emit('WCP_SETTINGS', DataProvider.Settings);
   socket.emit('WCP_DELIVERY_AREA', DataProvider.DeliveryArea);
+  CatalogProvider.EmitCategories();
   socket.on('disconnect', (reason) => {
     const disconnect_time = new moment();
     const duration = moment.duration(disconnect_time.diff(connect_time));
