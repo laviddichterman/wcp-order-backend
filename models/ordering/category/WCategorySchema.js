@@ -2,9 +2,6 @@ const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
 
 var WCategorySchema = new Schema({
-  // id
-  _id: { type: String, required: true },
-
   // brief name of the category
   name: String,
 

@@ -75,6 +75,7 @@ class CatalogProvider {
     });
     await newcategory.save();
     await this.SyncCategories();
+    this.EmitCategories();
     return newcategory;
   };
 
@@ -88,6 +89,7 @@ class CatalogProvider {
       return false;
     }
     await this.SyncCategories();
+    this.EmitCategories();
     return true;
   };
 
