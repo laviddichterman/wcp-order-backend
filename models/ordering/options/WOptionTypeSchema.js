@@ -2,10 +2,7 @@ const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
 const ExternalIDsSchema = require("../ExternalIDsSchema");
 
-var WOptionTypeSchema = new Schema({
-  // id
-  _id: { type: String, required: true },
-
+const WOptionTypeSchema = new Schema({
   // Human readable name
   name: { type: String, required: true },
 

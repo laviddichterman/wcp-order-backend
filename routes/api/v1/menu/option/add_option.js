@@ -30,45 +30,30 @@ module.exports = Router({ mergeParams: true })
       }
       req.db.WOptionTypeSchema.findById(
         req.params.otid,
-        (err, doc) => {
+        async (err, doc) => {
           if (err) {
             req.logger.info(`Unable to find option type to add option to: ${req.params.otid}`);
             return res.status(404).send(`Unable to find option type to add option to: ${req.params.otid}`);;
           }
           else {
-            const newoption = new req.db.WOptionSchema({
-              catalog_item: {
-                price: {
-                  amount: req.body.price.amount,
-                  currency: req.body.price.currency,
-                },
-                description: req.body.description,
-                display_name: req.body.display_name,
-                shortcode: req.body.shortcode,
-                disabled: req.body.disabled,
-                permanent_disable: false,
-                externalIDs: {
-                  revelID: req.body.revelID,
-                  sqID: req.body.squareID
-                }
-              },
+            const newoption = await req.catalog.CreateOption({
+              price: req.body.price,
+              description: req.body.description,
+              display_name: req.body.display_name,
+              shortcode: req.body.shortcode,
+              disabled: req.body.disabled,
+              revelID: req.body.revelID,
+              squareID: req.body.squareID,
               option_type_id: req.params.otid,
               ordinal: req.body.ordinal,
-              metadata: {
-                flavor_factor: req.body.flavor_factor || 0,
-                bake_factor: req.body.bake_factor || 0,
-                can_split: req.body.can_split || false,
-              },
+              flavor_factor: req.body.flavor_factor || 0,
+              bake_factor: req.body.bake_factor || 0,
+              can_split: req.body.can_split || false,
               enable_function_name: req.body.enable_function_name || "",
             });
-            newoption.save((err, doc) => {
-              if (err) {
-                req.logger.error(`Unable to add option: ${JSON.stringify(req.body)}`);
-                return res.status(500).send(`Unable to add option: ${JSON.stringify(req.body)}`);
-              }
-              res.setHeader('Location', `${req.base}${req.originalUrl}/${doc.id}`);
-              return res.status(201).send(doc);
-            });         
+            const location = `${req.base}${req.originalUrl}/${newoption.id}`;
+            res.setHeader('Location', location);
+            res.status(201).send(newoption);
           }
         });
     } catch (error) {

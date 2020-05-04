@@ -38,17 +38,13 @@ module.exports = Router({ mergeParams: true })
       if (!errors.isEmpty()) {
         return res.status(422).json({ errors: errors.array() });
       }
-
-      const newoptiontype = new req.db.WOptionTypeSchema({
+      const newoptiontype = await req.catalog.CreateOptionType({
         name: req.body.name,
         ordinal: req.body.ordinal,
         selection_type: req.body.selection_type,
-        externalIDs: {
-          revelID: req.body.revelID,
-          sqID: req.body.squareID
-        }
+        revelID: req.body.revelID,
+        squareID: req.body.squareID
       });
-      await newoptiontype.save();
       const location = `${req.base}${req.originalUrl}/${newoptiontype.id}`;
       res.setHeader('Location', location);
       res.status(201).send(newoptiontype);

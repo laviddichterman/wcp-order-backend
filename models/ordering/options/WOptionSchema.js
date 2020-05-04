@@ -3,9 +3,6 @@ const Schema = mongoose.Schema;
 const WCatalogItemSchema = require("../WCatalogItemSchema");
 
 var WOptionSchema = new Schema({
-  // id
-  _id: { type: String, required: true },
-
   // inheritance by composition
   // the base catalog item
   catalog_item: { 
