@@ -90,7 +90,14 @@ class CatalogProvider {
     this.#socketRO.emit('WCP_CATALOG_PRODUCT_INSTANCES', this.#product_instances);
   }
 
-  
+  EmitAll = () => {
+    this.EmitCategories();
+    this.EmitOptionTypes();
+    this.EmitProducts();
+    this.EmitProductInstances();
+    this.EmitOptions();    
+  }
+
   Bootstrap = async () => {
 
     // load catalog from DB, do not push to clients as that'll be handled when a new client connects
