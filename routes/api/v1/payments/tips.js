@@ -16,10 +16,11 @@ module.exports = Router({ mergeParams: true })
       const events = await GoogleProvider.GetEventsForDate(min_date, max_date, "America/Los_Angeles");
       var tips_array = [];
       events.map((event, i) => {
-        const tips_match = event.description.match(tipsregex);
-        if (tips_match) {
-          console.log(tips_match);
-          tips_array.push(parseFloat(tips_match[1]))
+        if (event) {
+          const tips_match = event.description.match(tipsregex);
+          if (tips_match) {
+            tips_array.push(parseFloat(tips_match[1]))
+          }
         }
       })
       res.status(200).json(tips_array);
