@@ -37,7 +37,7 @@ module.exports = Router({ mergeParams: true })
           permanent_disable: false,
           externalIDs: {
             revelID: req.body.revelID,
-            sqID: req.body.squareID
+            squareID: req.body.squareID
           }
         },
         modifiers: req.body.modifiers,

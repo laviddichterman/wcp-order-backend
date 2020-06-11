@@ -2,6 +2,16 @@ const WDateUtils = require("@wcp/wcpshared");
 const logger = require('../logging');
 
 
+const ReduceArrayToMapByKey = function(xs, key) {
+  const iv = {};
+  return xs.reduce((obj, item) => {
+    return {
+      ...obj,
+      [item[key]]: item,
+    };
+  }, iv);
+};
+
 class CatalogProvider {
   #dbconn;
   #socketRO;
@@ -130,16 +140,43 @@ class CatalogProvider {
 
   UpdateCategory = async ( category_id, {description, name, parent_id}) => {
     try {
-      this.#dbconn.WCategorySchema.findByIdAndUpdate(
-      category_id,
-      { name, description, parent_id },
-      { new: true }).exec();
+      // make sure the categories are sync'd
+      await this.SyncCategories();
+      const category_id_map = ReduceArrayToMapByKey(this.#categories, "_id");
+      if (!category_id_map[category_id]) {
+        // not found
+        return null;
+      }
+      var cycle_update_promise = null;
+      if (category_id_map[category_id].parent_id !== parent_id && parent_id) {
+        // need to check for potential cycle
+        var cur = parent_id;
+        while (cur && category_id_map[cur].parent_id != category_id)
+        {
+          cur = category_id_map[cur].parent_id;
+        }
+        // if the cursor is not empty/null/blank then we stopped because we found the cycle
+        if (cur) {
+          logger.debug(`In changing ${category_id}'s parent_id to ${parent_id}, found cycle at ${cur}, blanking out ${cur}'s parent_id to prevent cycle.`);
+          category_id_map[cur].parent_id = null;
+          cycle_update_promise = category_id_map[cur].save();
+        }
+      }
+      category_id_map[category_id].name = name;
+      category_id_map[category_id].description = description;
+      category_id_map[category_id].parent_id = parent_id;
+      await category_id_map[category_id].save();
+      if (cycle_update_promise) {
+        await cycle_update_promise;
+      }
+      await this.SyncCategories();
+      this.EmitCategories();
+      // is this going to still be valid after the Sync above?
+      return category_id_map[category_id];
     } catch (err) {
-      return false;
+      throw err;
+      return null 
     }
-    await this.SyncCategories();
-    this.EmitCategories();
-    return true;
   };
 
   CreateOptionType = async ({name, ordinal, selection_type, revelID, squareID}) => {
@@ -149,13 +186,41 @@ class CatalogProvider {
       selection_type: selection_type,
       externalIDs: {
         revelID: revelID,
-        sqID: squareID
+        squareID: squareID
       }
     });
     await newoptiontype.save();
     await this.SyncOptionTypes();
     this.EmitOptionTypes();
     return newoptiontype;
+  };
+
+  UpdateModifierType = async ( mt_id, {name, ordinal, selection_type, revelID, squareID}) => {
+    try {
+      const updated = await this.#dbconn.WOptionTypeSchema.findByIdAndUpdate(
+        mt_id, 
+        {
+          name: name,
+          ordinal: ordinal,
+          selection_type: selection_type,
+          externalIDs: {
+            revelID: revelID,
+            squareID: squareID
+          }
+        },
+        { new: true }
+      ).exec();
+      console.log(JSON.stringify(updated));
+      if (!updated) {
+        return null;
+      }
+      await this.SyncOptionTypes();
+      this.EmitOptionTypes();
+      return updated;
+    } catch (err) {
+      throw err;
+      return null 
+    }
   };
 
   CreateOption = async ({
@@ -186,7 +251,7 @@ class CatalogProvider {
         permanent_disable: false,
         externalIDs: {
           revelID: revelID,
-          sqID: squareID
+          squareID: squareID
         }
       },
       option_type_id: option_type_id,
@@ -228,7 +293,7 @@ class CatalogProvider {
         permanent_disable: false,
         externalIDs: {
           revelID: revelID,
-          sqID: squareID
+          squareID: squareID
         }
       },
       modifiers: modifiers,
@@ -265,7 +330,7 @@ class CatalogProvider {
         permanent_disable: false,
         externalIDs: {
           revelID: revelID,
-          sqID: squareID
+          squareID: squareID
         }
       },
       modifiers: modifiers,

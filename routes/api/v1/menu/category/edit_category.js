@@ -12,30 +12,25 @@ const ValidationChain = [
 ];
 
 module.exports = Router({ mergeParams: true })
-  .patch('/v1/menu/category/:catid', ValidationChain, CheckJWT, (req, res, next) => {
+  .patch('/v1/menu/category/:catid', ValidationChain, CheckJWT, async (req, res, next) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(422).json({ errors: errors.array() });
       }
-      req.db.WCategorySchema.findByIdAndUpdate(
-        req.params.catid,
+      const doc = await req.catalog.UpdateCategory(
+        req.params.catid, 
         {
-          name: req.body.name,
-          description: req.body.description,
+          description: req.body.description, 
+          name: req.body.name, 
           parent_id: req.body.parent_id
-        },
-        { new: true },
-        (err, doc) => {
-          if (err) {
-            req.logger.info(`Unable to update category: ${req.params.catid}`);
-            return res.status(404).send(`Unable to update category: ${req.params.catid}`);;
-          }
-          else {
-            req.logger.info(`Successfully updated ${doc}`);
-            return res.status(200).send(doc);
-          }
         });
+      if (!doc) {
+        req.logger.info(`Unable to update category: ${req.params.catid}`);
+        return res.status(404).send(`Unable to update category: ${req.params.catid}`);
+      }
+      req.logger.info(`Successfully updated ${doc}`);
+      return res.status(200).send(doc);
     } catch (error) {
       next(error)
     }

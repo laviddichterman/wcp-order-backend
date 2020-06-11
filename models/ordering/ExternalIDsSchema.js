@@ -5,7 +5,7 @@ const Schema = mongoose.Schema;
 const ExternalIDsSchema = new Schema({
   // external ids
   revelID: String,
-  sqID: String
+  squareID: String
 });
 
 module.exports = ExternalIDsSchema;
