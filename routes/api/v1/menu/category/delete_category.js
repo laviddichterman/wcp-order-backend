@@ -28,11 +28,11 @@ module.exports = Router({ mergeParams: true })
         else {
           if (!data) {
             req.logger.info(`Unable to delete category: ${req.params.catid}`);
-            res.status(404).send(`Unable to delete category: ${req.params.catid}`);
+            return res.status(404).send(`Unable to delete category: ${req.params.catid}`);
           }
           else {
             req.logger.info(`Deleted ${data}`);
-            res.status(200).send(`Deleted ${data}`);  
+            return res.status(200).send(`Deleted ${data}`);  
           }
         }
       });

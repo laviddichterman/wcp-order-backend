@@ -47,7 +47,7 @@ module.exports = Router({ mergeParams: true })
       });
       const location = `${req.base}${req.originalUrl}/${newoptiontype.id}`;
       res.setHeader('Location', location);
-      res.status(201).send(newoptiontype);
+      return res.status(201).send(newoptiontype);
     } catch (error) {
       next(error)
     }

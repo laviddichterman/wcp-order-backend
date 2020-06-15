@@ -34,7 +34,7 @@ module.exports = Router({ mergeParams: true })
       });
       const location = `${req.base}${req.originalUrl}/${newcategory.id}`;
       res.setHeader('Location', location);
-      res.status(201).send(newcategory);
+      return res.status(201).send(newcategory);
     } catch (error) {
       next(error)
     }

@@ -29,6 +29,27 @@ class CatalogProvider {
     this.#products = [];
     this.#product_instances = [];
   }
+
+  get Categories() {
+    return this.#categories;
+  }
+
+  get ModifierTypes() {
+    return this.#option_types;
+  }
+
+  get ModifierOptions() {
+    return this.#options;
+  }
+
+  get Products() {
+    return this.#products;
+  }
+
+  get ProductInstances() {
+    return this.#product_instances;
+  }
+
   SyncCategories = async () => {
     // categories
     try {
@@ -238,7 +259,13 @@ class CatalogProvider {
     can_split, 
     enable_function_name
   }) => {
-    const newoption = new req.db.WOptionSchema({
+    // first find the Modifier Type ID in the catalog
+    var option_type = this.#option_types.find(x => x._id.toString() === option_type_id);
+    if (!option_type) {
+      return null;
+    }
+
+    const newoption = new this.#dbconn.WOptionSchema({
       catalog_item: {
         price: {
           amount: price.amount,

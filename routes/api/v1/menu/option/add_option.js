@@ -28,34 +28,28 @@ module.exports = Router({ mergeParams: true })
       if (!errors.isEmpty()) {
         return res.status(422).json({ errors: errors.array() });
       }
-      req.db.WOptionTypeSchema.findById(
-        req.params.mtid,
-        async (err, doc) => {
-          if (err) {
-            req.logger.info(`Unable to find option type to add option to: ${req.params.mtid}`);
-            return res.status(404).send(`Unable to find option type to add option to: ${req.params.mtid}`);;
-          }
-          else {
-            const newoption = await req.catalog.CreateOption({
-              price: req.body.price,
-              description: req.body.description,
-              display_name: req.body.display_name,
-              shortcode: req.body.shortcode,
-              disabled: req.body.disabled,
-              revelID: req.body.revelID,
-              squareID: req.body.squareID,
-              option_type_id: req.params.mtid,
-              ordinal: req.body.ordinal,
-              flavor_factor: req.body.flavor_factor || 0,
-              bake_factor: req.body.bake_factor || 0,
-              can_split: req.body.can_split || false,
-              enable_function_name: req.body.enable_function_name || "",
-            });
-            const location = `${req.base}${req.originalUrl}/${newoption.id}`;
-            res.setHeader('Location', location);
-            res.status(201).send(newoption);
-          }
-        });
+      const new_option = await req.catalog.CreateOption({
+        price: req.body.price,
+        description: req.body.description,
+        display_name: req.body.display_name,
+        shortcode: req.body.shortcode,
+        disabled: req.body.disabled,
+        revelID: req.body.revelID,
+        squareID: req.body.squareID,
+        option_type_id: req.params.mtid,
+        ordinal: req.body.ordinal,
+        flavor_factor: req.body.flavor_factor || 0,
+        bake_factor: req.body.bake_factor || 0,
+        can_split: req.body.can_split || false,
+        enable_function_name: req.body.enable_function_name || "",
+      });
+      if (!new_option) {
+        req.logger.info(`Unable to find ModifierType ${req.params.mtid} to create Modifier Option`);
+        return res.status(404).send(`Unable to find ModifierType ${req.params.mtid} to create Modifier Option`);
+      }
+      const location = `${req.base}${req.originalUrl}/${new_option._id}`;
+      res.setHeader('Location', location);
+      return res.status(201).send(new_option);
     } catch (error) {
       next(error)
     }
