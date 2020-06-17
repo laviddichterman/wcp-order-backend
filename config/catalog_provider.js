@@ -231,7 +231,6 @@ class CatalogProvider {
         },
         { new: true }
       ).exec();
-      console.log(JSON.stringify(updated));
       if (!updated) {
         return null;
       }
@@ -295,6 +294,63 @@ class CatalogProvider {
     this.EmitOptions();
     return newoption;
   };
+
+  UpdateModifierOption = async ( mo_id, {
+    //mt_id, 
+    display_name, 
+    description, 
+    price, 
+    shortcode, 
+    disabled, 
+    revelID, 
+    squareID, 
+    ordinal, 
+    flavor_factor, 
+    bake_factor, 
+    can_split, 
+    enable_function_name}) => {
+    try {
+      const updated = await this.#dbconn.WOptionSchema.findByIdAndUpdate(
+        mo_id, 
+        {
+          catalog_item: {
+            price: {
+              amount: price.amount,
+              currency: price.currency,
+            },
+            description: description,
+            display_name: display_name,
+            shortcode: shortcode,
+            disabled: disabled,
+            permanent_disable: false,
+            externalIDs: {
+              revelID: revelID,
+              squareID: squareID
+            }
+          },
+          //option_type_id: mt_id, // don't take this param, since we don't support changing parent at this time
+          ordinal: ordinal,
+          metadata: {
+            flavor_factor: flavor_factor,
+            bake_factor: bake_factor,
+            can_split: can_split,
+          },
+          enable_function_name: enable_function_name
+        },
+        { new: true }
+      ).exec();
+      if (!updated) {
+        return null;
+      }
+      await this.SyncOptions();
+      this.EmitOptions();
+      return updated;
+    } catch (err) {
+      throw err;
+      return null 
+    }
+  };
+
 
   CreateProduct = async ({
     display_name, 
