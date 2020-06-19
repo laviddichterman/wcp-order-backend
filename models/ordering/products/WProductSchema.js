@@ -5,7 +5,10 @@ const WCatalogItemSchema = require("../WCatalogItemSchema");
 // represents a class of products that can be made and inserted into the catalog
 var WProductSchema = new Schema({
 
-  item: WCatalogItemSchema,
+  item: { 
+    type: WCatalogItemSchema,
+    required: true 
+  },
 
   modifiers: [String], // list of option_type_ids
 

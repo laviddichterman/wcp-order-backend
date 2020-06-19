@@ -148,15 +148,15 @@ class CatalogProvider {
   };
 
   CreateCategory = async ({description, name, parent_id}) => {
-    const newcategory = new this.#dbconn.WCategorySchema({
+    const doc = new this.#dbconn.WCategorySchema({
       description: description,
       name: name,
       parent_id: parent_id
     });
-    await newcategory.save();
+    await doc.save();
     await this.SyncCategories();
     this.EmitCategories();
-    return newcategory;
+    return doc;
   };
 
   UpdateCategory = async ( category_id, {description, name, parent_id}) => {
@@ -264,7 +264,7 @@ class CatalogProvider {
       return null;
     }
 
-    const newoption = new this.#dbconn.WOptionSchema({
+    const doc = new this.#dbconn.WOptionSchema({
       catalog_item: {
         price: {
           amount: price.amount,
@@ -289,10 +289,10 @@ class CatalogProvider {
       },
       enable_function_name: enable_function_name
     });    
-    await newoption.save();
+    await doc.save();
     await this.SyncOptions();
     this.EmitOptions();
-    return newoption;
+    return doc;
   };
 
   UpdateModifierOption = async ( mo_id, {
@@ -351,7 +351,6 @@ class CatalogProvider {
     }
   };
 
-
   CreateProduct = async ({
     display_name, 
     description, 
@@ -363,8 +362,15 @@ class CatalogProvider {
     modifiers,
     category_ids
   }) => {
-    const newproduct = new req.db.WProductSchema({
-      catalog_item: {
+    // first find the Modifier Type IDs in the catalog
+    const found_all_modifiers = modifiers.map(mtid => this.#option_types.some(x => x._id.toString() === mtid)).every(x => x === true);
+    const found_all_categories = category_ids.map(cid => this.#categories.some(x => x._id.toString() === cid)).every(x => x === true);
+    if (!found_all_categories || !found_all_modifiers) {
+      return null;
+    }
+
+    const doc = new this.#dbconn.WProductSchema({
+      item: {
         price: {
           amount: price.amount,
           currency: price.currency,
@@ -382,13 +388,13 @@ class CatalogProvider {
       modifiers: modifiers,
       category_ids: category_ids
     });    
-    await newproduct.save();
+    await doc.save();
     await this.SyncProducts();
     this.EmitProducts();
-    return newproduct;
+    return doc;
   };
-  
-  CreateProductInstance = async ({
+
+  UpdateProduct = async ( pid, {
     display_name, 
     description, 
     price, 
@@ -397,15 +403,56 @@ class CatalogProvider {
     revelID, 
     squareID, 
     modifiers,
-    category_ids
+    category_ids}) => {
+    try {
+      // maybe we don't actually have to sync to the DB here, but if not, 
+      // then we need to remove the sync in the category update method
+      // await this.SyncOptionTypes();
+
+      const products_map = ReduceArrayToMapByKey(this.#products, "_id");
+      const product_to_update = products_map[pid];
+
+      if (!product_to_update) {
+        return null;
+      }
+
+      //TODO: check that modifiers haven't changed
+      //if (product_to_update.modifiers) ...
+      product_to_update.item = {};
+      product_to_update.item.display_name = display_name;
+      product_to_update.item.description = description;
+      product_to_update.item.shortcode = shortcode;
+      product_to_update.item.price = price;
+      product_to_update.item.externalIDs.squareID = squareID;
+      product_to_update.item.externalIDs.revelID = revelID;
+      product_to_update.item.disabled = disabled;
+      product_to_update.modifiers = modifiers;
+      product_to_update.category_ids = category_ids;
+      await product_to_update.save();
+
+      await this.SyncProducts();
+      this.EmitProducts();
+      return product_to_update;
+    } catch (err) {
+      throw err;
+      return null 
+    }
+  };
+  
+  CreateProductInstance = async ({
+    parent_product_id, 
+    description, 
+    price, 
+    shortcode, 
+    disabled, 
+    revelID, 
+    squareID, 
+    modifiers
   }) => {
-    console.error("THIS SHIT AINT READY");
-    const newproductinstance = new req.db.WProductInstanceSchema({
-      catalog_item: {
-        price: {
-          amount: price.amount,
-          currency: price.currency,
-        },
+    const doc = new this.#dbconn.WProductInstanceSchema({
+      product_id: parent_product_id,
+      item: {
+        price: price,
         description: description,
         display_name: display_name,
         shortcode: shortcode,
@@ -416,15 +463,13 @@ class CatalogProvider {
           squareID: squareID
         }
       },
-      modifiers: modifiers,
-      category_ids: category_ids
+      modifiers: modifiers
     });    
-    await newproductinstance.save();
+    await doc.save();
     await this.SyncProductInstances();
     this.EmitProductInstances();
-    return newproductinstance;
+    return doc;
   };
-  
 }
 
 module.exports = ({ dbconn, socketRO, socketAUTH }) => {

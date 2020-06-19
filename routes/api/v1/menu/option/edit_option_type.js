@@ -1,10 +1,6 @@
-// assigns listed sensors to a location
-// also can be used to update name or description
-
 const Router = require('express').Router
 const { param, body, validationResult } = require('express-validator');
 const { CheckJWT } = require('../../../../../config/authorization');
-
 
 const ValidationChain = [
   param('mtid').trim().escape().exists(),
