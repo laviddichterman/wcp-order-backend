@@ -1,6 +1,6 @@
 // creates a new option in the catalog
 const Router = require('express').Router
-const { body, validationResult } = require('express-validator');
+const { body, param, validationResult } = require('express-validator');
 const { CheckJWT } = require('../../../../../config/authorization');
 
 const ValidationChain = [
