@@ -52,7 +52,7 @@ const GenerateAutoResponseBodyEscaped = function(
   const WCP_PICKUP_INSTRUCTIONS = "Come to the door and we'll greet you. If there is a line, please form alongside the patio. Please maintain a 6 foot distance between yourself, our team, and other patrons at all times.";
   const BTP_PICKUP_INSTRUCTIONS = "We are currently offering curbside pick-up. We will have someone available to assist you at the front door when you arrive. Please maintain a 6 foot distance between yourself, our team, and other patrons at all times.";
 
-  const BTP_DINE_IN = "Please come to our counter and let us know the name under which your order was placed. Please arrive promptly so your pizza is as fresh as possible and you have time to get situated and get beverages.  We do not reserve seating. Please note that we are all ages until 8pm after which we are a 21 and up venue."
+  const BTP_DINE_IN = "Please arrive promptly with your entire party. Someone will be at the front door to greet you and check your party in. Beverages will be available through our friends at Clock-Out Lounge."
   const WCP_DINE_IN = "Dine-ins get you to the front of the table queue. We don't reserve seating. Please arrive slightly before your selected time so your pizza is as fresh as possible and you have time to get situated and get beverages!";
   const NOTE_DELIVERY_SERVICE = "We appreciate your patience as our in-house delivery service is currently in its infancy. Delivery times are estimated. We might be a little earlier, or a little later.";
 
