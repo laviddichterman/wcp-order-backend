@@ -23,7 +23,7 @@ const ValidationChain = [
 ];
 
 module.exports = Router({ mergeParams: true })
-  .post('/v1/menu/product/:pid', ValidationChain, CheckJWT, async (req, res, next) => {
+  .patch('/v1/menu/product/:pid', ValidationChain, CheckJWT, async (req, res, next) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {

@@ -371,10 +371,7 @@ class CatalogProvider {
 
     const doc = new this.#dbconn.WProductSchema({
       item: {
-        price: {
-          amount: price.amount,
-          currency: price.currency,
-        },
+        price: price,
         description: description,
         display_name: display_name,
         shortcode: shortcode,
@@ -409,40 +406,52 @@ class CatalogProvider {
       // then we need to remove the sync in the category update method
       // await this.SyncOptionTypes();
 
-      const products_map = ReduceArrayToMapByKey(this.#products, "_id");
-      const product_to_update = products_map[pid];
+      //const products_map = ReduceArrayToMapByKey(this.#products, "_id");
+      // const product_to_update = products_map[pid];
 
-      if (!product_to_update) {
-        return null;
-      }
+      // if (!product_to_update) {
+      //   return null;
+      // }
 
       //TODO: check that modifiers haven't changed
       //if (product_to_update.modifiers) ...
-      product_to_update.item = {};
-      product_to_update.item.display_name = display_name;
-      product_to_update.item.description = description;
-      product_to_update.item.shortcode = shortcode;
-      product_to_update.item.price = price;
-      product_to_update.item.externalIDs.squareID = squareID;
-      product_to_update.item.externalIDs.revelID = revelID;
-      product_to_update.item.disabled = disabled;
-      product_to_update.modifiers = modifiers;
-      product_to_update.category_ids = category_ids;
-      await product_to_update.save();
+      const updated = await this.#dbconn.WProductSchema.findByIdAndUpdate(
+        pid, 
+        {
+          item: {
+            price: price,
+            description: description,
+            display_name: display_name,
+            shortcode: shortcode,
+            disabled: disabled,
+            permanent_disable: false,
+            externalIDs: {
+              revelID: revelID,
+              squareID: squareID
+            }
+          },
+          modifiers: modifiers,
+          category_ids: category_ids
+        },
+        { new: true }
+      ).exec();
+      if (!updated) {
+        return null;
+      }
 
       await this.SyncProducts();
       this.EmitProducts();
-      return product_to_update;
+      return updated;
     } catch (err) {
       throw err;
       return null 
     }
   };
   
-  CreateProductInstance = async ({
-    parent_product_id, 
-    description, 
+  CreateProductInstance = async (parent_product_id, {
     price, 
+    description, 
+    display_name,
     shortcode, 
     disabled, 
     revelID, 
