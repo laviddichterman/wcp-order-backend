@@ -5,8 +5,8 @@ const { CheckJWT } = require('../../../../../config/authorization');
 
 const ValidationChain = [
   param('pid').trim().escape().exists(), 
-  body('display_name').trim().escape().exists(),
-  body('description').trim().escape(),
+  body('display_name').trim().exists(),
+  body('description').trim(),
   body('shortcode').trim().escape().exists(),
   body('revelID').trim().escape(),
   body('squareID').trim().escape(),

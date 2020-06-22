@@ -23,10 +23,16 @@ var WCatalogItemSchema = new Schema({
   },
 
   // Moneys in base currency unit (300 is $3)
-  price: WMoney,
+  price: { 
+    type: WMoney,
+    required: true
+  },
 
   // external ids
-  externalIDs: ExternalIDsSchema,
+  externalIDs: {
+    type: ExternalIDsSchema,
+    required: true
+  },
 
   // flag to temporarily turn off this product and any products that contain this
   disabled: Boolean,

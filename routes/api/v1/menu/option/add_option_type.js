@@ -3,28 +3,8 @@ const Router = require('express').Router
 const { body, validationResult } = require('express-validator');
 const { CheckJWT } = require('../../../../../config/authorization');
 
-/*   
-  _id: { type: String, required: true },
-
-  // Human readable name
-  name: { type: String, required: true },
-
-  // external ids
-  externalIDs: ExternalIDsSchema,
-
-  // ordinal
-  ordinal: { type: Number, required: true },
-  
-  // selection type
-  selection_type: {
-    type: String,
-    enum: ['SINGLE', 'MANY'],
-    required: true
-  }
-*/
-
 const ValidationChain = [  
-  body('name').trim().escape().exists(),
+  body('name').trim().exists(),
   body('ordinal').isInt({min: 0, max:63}).exists(),
   body('selection_type').exists().isIn(['SINGLE', 'MANY']),
   body('revelID').trim().escape(),

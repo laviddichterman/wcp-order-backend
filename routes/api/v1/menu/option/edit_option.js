@@ -9,8 +9,8 @@ const ValidationChain = [
   // but we're not allowing re-assigning of the modifier type, for now.
   param('mt_id').trim().escape().exists(), 
   param('mo_id').trim().escape().exists(),
-  body('display_name').trim().escape(),
-  body('description').trim().escape(),
+  body('display_name').trim(),
+  body('description').trim(),
   body('shortcode').trim().escape(),
   body('revelID').trim().escape(),
   body('squareID').trim().escape(),
