@@ -53,7 +53,7 @@ module.exports = Router({ mergeParams: true })
         req.logger.info(`Unable to update ModifierOption: ${req.params.mo_id}`);
         return res.status(404).send(`Unable to update ModifierOption: ${req.params.mo_id}`);;
       }
-      req.logger.info(`Successfully updated ${doc}`);
+      req.logger.info(`Successfully updated ${JSON.stringify(doc)}`);
       return res.status(200).send(doc);
     } catch (error) {
       next(error)

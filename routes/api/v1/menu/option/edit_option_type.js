@@ -32,7 +32,7 @@ module.exports = Router({ mergeParams: true })
         req.logger.info(`Unable to update ModifierType: ${req.params.mtid}`);
         return res.status(404).send(`Unable to update ModifierType: ${req.params.mtid}`);;
       }
-      req.logger.info(`Successfully updated ${doc}`);
+      req.logger.info(`Successfully updated ${JSON.stringify(doc)}`);
       return res.status(200).send(doc);
     } catch (error) {
       next(error)

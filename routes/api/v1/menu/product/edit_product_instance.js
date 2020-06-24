@@ -7,60 +7,46 @@ const { CheckJWT } = require('../../../../../config/authorization');
 
 const ValidationChain = [  
   param('pid').trim().escape().exists(), 
-  body('display_name').trim(),
+  param('piid').trim().escape().exists(), 
+  body('display_name').trim().exists(),
   body('description').trim(),
-  body('shortcode').trim().escape(),
+  body('shortcode').trim().escape().exists(),
   body('revelID').trim().escape(),
   body('squareID').trim().escape(),
-  // don't sanitize this to boolean, but validate that it is a boolean
-  body('disabled').isBoolean(true),
-  // don't sanitize this to boolean, but validate that it is a boolean
-  body('permanent_disable').isBoolean(true),
-  body('price.amount').isInt({min: 0, max:100000}),
-  body('price.currency').isLength({min:3, max: 3}).isIn(['USD']),
-  body('modifiers.*').trim().escape().exists(),
-  body('category_ids.*').trim().escape().exists()
+  body('disabled').toBoolean(true),
+  //body('permanent_disable').toBoolean(true),
+  body('price.amount').isInt({ min: 0, max: 100000 }).exists(),
+  body('price.currency').exists().isLength({ min: 3, max: 3 }).isIn(['USD']),
+  body('modifiers.*.modifier_type_id').trim().escape().exists(),
+  body('modifiers.*.options.*.option_id').trim().escape().exists(),
+  body('modifiers.*.options.*.placement').exists().isIn(['NONE', 'LEFT', 'RIGHT', 'WHOLE'])
 ];
 
 module.exports = Router({ mergeParams: true })
-  .patch('/v1/menu/product/:pid', ValidationChain, CheckJWT, async (req, res, next) => {
+  .patch('/v1/menu/product/:pid/:piid', ValidationChain, CheckJWT, async (req, res, next) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(422).json({ errors: errors.array() });
       }
-      req.db.WProductSchema.findByIdAndUpdate(
-        req.params.pid,
-        {
-          catalog_item: {
-            price: {
-              amount: req.body.price.amount,
-              currency: req.body.price.currency,
-            },
-            description: req.body.description,
-            display_name: req.body.display_name,
-            shortcode: req.body.shortcode,
-            disabled: req.body.disabled,
-            permanent_disable: req.body.permanent_disable,
-            externalIDs: {
-              revelID: req.body.revelID,
-              squareID: req.body.squareID
-            }
-          },
-          modifiers: req.body.modifiers,
-          category_ids: req.body.category_ids,
+      const doc = await req.catalog.UpdateProductInstance(req.params.pid, req.params.piid, {
+        price: req.body.price,
+        description: req.body.description,
+        display_name: req.body.display_name,
+        shortcode: req.body.shortcode,
+        disabled: req.body.disabled,
+        externalIDs: {
+          revelID: req.body.revelID,
+          squareID: req.body.squareID
         },
-        { new: true },
-        (err, doc) => {
-          if (err) {
-            req.logger.info(`Unable to update product: ${req.params.pid}`);
-            return res.status(404).send(`Unable to update product: ${req.params.pid}`);;
-          }
-          else {
-            req.logger.info(`Successfully updated ${doc}`);
-            return res.status(200).send(doc);
-          }
-        });
+        modifiers: req.body.modifiers,
+      });
+      if (!doc) {
+        req.logger.info(`Unable to update ProductInstance: ${req.params.piid}`);
+        return res.status(404).send(`Unable to update ProductInstance: ${req.params.piid}`);
+      }
+      req.logger.info(`Successfully updated ${JSON.stringify(doc)}`);
+      return res.status(200).send(doc);
     } catch (error) {
       next(error)
     }

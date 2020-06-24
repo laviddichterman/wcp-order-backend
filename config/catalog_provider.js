@@ -479,6 +479,50 @@ class CatalogProvider {
     this.EmitProductInstances();
     return doc;
   };
+
+  UpdateProductInstance = async ( pid, piid, {
+    display_name, 
+    description, 
+    price, 
+    shortcode, 
+    disabled, 
+    revelID, 
+    squareID, 
+    modifiers}) => {
+    try {
+      const updated = await this.#dbconn.WProductInstanceSchema.findByIdAndUpdate(
+        piid, 
+        {
+          product_id: pid,
+          item: {
+            price: price,
+            description: description,
+            display_name: display_name,
+            shortcode: shortcode,
+            disabled: disabled,
+            permanent_disable: false,
+            externalIDs: {
+              revelID: revelID,
+              squareID: squareID
+            }
+          },
+          modifiers: modifiers,
+        },
+        { new: true }
+      ).exec();
+      if (!updated) {
+        return null;
+      }
+  
+      await this.SyncProductInstances();
+      this.EmitProductInstances();
+      return updated;
+    } catch (err) {
+      throw err;
+      return null 
+    }
+  };
+  
 }
 
 module.exports = ({ dbconn, socketRO, socketAUTH }) => {
