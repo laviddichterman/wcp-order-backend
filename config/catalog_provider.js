@@ -161,8 +161,6 @@ class CatalogProvider {
 
   UpdateCategory = async ( category_id, {description, name, parent_id}) => {
     try {
-      // make sure the categories are sync'd
-      await this.SyncCategories();
       const category_id_map = ReduceArrayToMapByKey(this.#categories, "_id");
       if (!category_id_map[category_id]) {
         // not found
@@ -199,6 +197,46 @@ class CatalogProvider {
       return null 
     }
   };
+
+  DeleteCategory = async ( category_id ) => {
+    logger.debug(`Removing ${category_id}`);
+    try {
+      const doc = await this.#dbconn.WCategorySchema.findByIdAndDelete(category_id);
+      if (!doc) {
+        return null;
+      }
+      this.#categories.forEach(async (cat) => {
+        if (cat.parent_id && cat.parent_id === category_id) {
+          cat.parent_id = "";
+          await cat.save();
+        }
+      });
+      var must_sync_products = false;
+      this.#products.forEach(async (prod) => {
+        if (prod.category_ids) {
+          const old_length = prod.category_ids.length;
+          logger.debug(`previous list: ${prod.category_ids}, deleting ${category_id}`);
+          prod.category_ids = prod.category_ids.filter(x => x !== category_id);
+          console.log(`after list: ${prod.category_ids}`);
+          if (prod.category_ids.length < old_length) {
+            logger.debug(`updating product: ${prod}`);
+            must_sync_products = true;
+            await prod.save();
+          }
+        }
+      })
+      if (must_sync_products) {
+        await this.SyncProducts();
+        this.EmitProducts();
+      }
+      await this.SyncCategories();
+      this.EmitCategories();
+      return doc;
+    } catch (err) {
+      throw err;
+      return null 
+    }
+  }
 
   CreateOptionType = async ({name, ordinal, selection_type, revelID, squareID}) => {
     const newoptiontype = new this.#dbconn.WOptionTypeSchema({

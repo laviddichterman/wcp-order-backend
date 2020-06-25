@@ -12,30 +12,17 @@ const ValidationChain = [
 
 
 module.exports = Router({ mergeParams: true })
-  .delete('/v1/menu/category/:catid', ValidationChain, CheckJWT, (req, res, next) => {
+  .delete('/v1/menu/category/:catid', ValidationChain, CheckJWT, async (req, res, next) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(422).json({ errors: errors.array() });
       }
-
-      req.db.WCategorySchema.findByIdAndDelete(req.params.catid, (err, data) => {
-        if (err) { 
-          req.logger.error(`Unable to delete category: ${req.params.catid}`);
-          res.status(500).send(`Unable to delete category: ${req.params.catid}`);
-          throw err;
-        }
-        else {
-          if (!data) {
-            req.logger.info(`Unable to delete category: ${req.params.catid}`);
-            return res.status(404).send(`Unable to delete category: ${req.params.catid}`);
-          }
-          else {
-            req.logger.info(`Deleted ${data}`);
-            return res.status(200).send(`Deleted ${data}`);  
-          }
-        }
-      });
+      const doc = await req.catalog.DeleteCategory(req.params.catid);
+      if (!doc) {
+        req.logger.info(`Unable to delete category: ${req.params.catid}`);
+        return res.status(404).send(`Unable to delete category: ${req.params.catid}`);
+      }
     } catch (error) {
       next(error)
     }
