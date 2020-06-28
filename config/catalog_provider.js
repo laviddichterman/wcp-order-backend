@@ -12,6 +12,62 @@ const ReduceArrayToMapByKey = function(xs, key) {
   }, iv);
 };
 
+// Returns [ category_map, product_map, orphan_products ] list;
+// category_map entries are mapping of catagory_id to { category, children (id list), product (id list) }
+// product_map is mapping from product_id to { product, instances (list of instance objects)}
+// orphan_products is list of orphan product ids
+const CatalogMapGenerator = (categories, products, product_instances) => {
+  const category_map = {};
+  categories.forEach((curr) => {
+    category_map[curr._id] = { category: curr, children: [], products: [] };
+  });
+  for (var i = 0; i < categories.length; ++i) {
+    if (categories[i].parent_id.length > 0) {
+      category_map[categories[i].parent_id].children.push(categories[i]._id);
+    }
+  }
+  const product_map = {};
+  const orphan_products = [];
+  products.forEach((curr) => {
+    product_map[curr._id] = { product: curr, instances: [] };
+    if (curr.category_ids.length === 0) {
+      orphan_products.push(curr._id);
+    }
+    else {
+      curr.category_ids.forEach((cid) => {
+        category_map[cid] ? category_map[cid].products.push(curr._id) : console.error(`Missing category ID: ${cid} in product: ${JSON.stringify(curr)}`);
+      });
+    }
+  });
+  product_instances.forEach((curr) => {
+    product_map[curr.product_id].instances.push(curr);
+  })
+  return [category_map, product_map, orphan_products];
+};
+
+const ModifierTypeMapGenerator = (modifier_types, options) => {
+  var modifier_types_map = {};
+  modifier_types.forEach(mt => {
+    modifier_types_map[mt._id] = { options: [], modifier_type: mt } ;
+  });
+  options.forEach(o => {
+    modifier_types_map[o.option_type_id].options.push(o);
+  })
+  return modifier_types_map;
+};
+
+const CatalogGenerator = (categories, modifier_types, options, products, product_instances) => {
+  const modifier_types_map = ModifierTypeMapGenerator(modifier_types, options);
+  const [category_map, product_map, orphan_products] = CatalogMapGenerator(categories, products, product_instances);
+  return { 
+    modifiers: modifier_types_map,
+    categories: category_map,
+    products: product_map,
+    orphan_products: orphan_products
+  };
+}
+
+
 class CatalogProvider {
   #dbconn;
   #socketRO;
@@ -20,6 +76,7 @@ class CatalogProvider {
   #options;
   #products;
   #product_instances;
+  #catalog;
   constructor(dbconn, socketRO) {
     this.#dbconn = dbconn;
     this.#socketRO = socketRO;
@@ -28,6 +85,7 @@ class CatalogProvider {
     this.#options = [];
     this.#products = [];
     this.#product_instances = [];
+    this.#catalog = CatalogGenerator([], [], [], [], []);
   }
 
   get Categories() {
@@ -105,28 +163,12 @@ class CatalogProvider {
     return true;
   }
 
-  EmitCategories = () => {
-    this.#socketRO.emit('WCP_CATALOG_CATEGORIES', this.#categories);
-  }
-  EmitOptionTypes = () => {
-    this.#socketRO.emit('WCP_CATALOG_OPTION_TYPES', this.#option_types);
-  }
-  EmitOptions = () => {
-    this.#socketRO.emit('WCP_CATALOG_OPTIONS', this.#options);
-  }
-  EmitProducts = () => {
-    this.#socketRO.emit('WCP_CATALOG_PRODUCTS', this.#products);
-  }
-  EmitProductInstances = () => {
-    this.#socketRO.emit('WCP_CATALOG_PRODUCT_INSTANCES', this.#product_instances);
+  EmitCatalog = () => {
+    this.#socketRO.emit('WCP_CATALOG', this.#catalog);
   }
 
-  EmitAll = () => {
-    this.EmitCategories();
-    this.EmitOptionTypes();
-    this.EmitProducts();
-    this.EmitProductInstances();
-    this.EmitOptions();    
+  RecomputeCatalog = () => {
+    this.#catalog = CatalogGenerator(this.#categories, this.#option_types, this.#options, this.#products, this.#product_instances);
   }
 
   Bootstrap = async () => {
@@ -144,7 +186,7 @@ class CatalogProvider {
 
     await this.SyncProductInstances();
 
-    // some sort of put together version of the catalog?
+    this.RecomputeCatalog();
   };
 
   CreateCategory = async ({description, name, parent_id}) => {
@@ -155,7 +197,8 @@ class CatalogProvider {
     });
     await doc.save();
     await this.SyncCategories();
-    this.EmitCategories();
+    this.RecomputeCatalog();
+    this.EmitCatalog();
     return doc;
   };
 
@@ -230,7 +273,8 @@ class CatalogProvider {
         this.EmitProducts();
       }
       await this.SyncCategories();
-      this.EmitCategories();
+      this.RecomputeCatalog();
+      this.EmitCatalog();
       return doc;
     } catch (err) {
       throw err;
@@ -250,7 +294,8 @@ class CatalogProvider {
     });
     await newoptiontype.save();
     await this.SyncOptionTypes();
-    this.EmitOptionTypes();
+    this.RecomputeCatalog();
+    this.EmitCatalog();
     return newoptiontype;
   };
 
@@ -273,7 +318,8 @@ class CatalogProvider {
         return null;
       }
       await this.SyncOptionTypes();
-      this.EmitOptionTypes();
+      this.RecomputeCatalog();
+      this.EmitCatalog();
       return updated;
     } catch (err) {
       throw err;
@@ -329,7 +375,8 @@ class CatalogProvider {
     });    
     await doc.save();
     await this.SyncOptions();
-    this.EmitOptions();
+    this.RecomputeCatalog();
+    this.EmitCatalog();
     return doc;
   };
 
@@ -381,7 +428,8 @@ class CatalogProvider {
         return null;
       }
       await this.SyncOptions();
-      this.EmitOptions();
+      this.RecomputeCatalog();
+      this.EmitCatalog();
       return updated;
     } catch (err) {
       throw err;
@@ -425,7 +473,8 @@ class CatalogProvider {
     });    
     await doc.save();
     await this.SyncProducts();
-    this.EmitProducts();
+    this.RecomputeCatalog();
+    this.EmitCatalog();
     return doc;
   };
 
@@ -478,7 +527,8 @@ class CatalogProvider {
       }
 
       await this.SyncProducts();
-      this.EmitProducts();
+      this.RecomputeCatalog();
+      this.EmitCatalog();
       return updated;
     } catch (err) {
       throw err;
@@ -514,7 +564,8 @@ class CatalogProvider {
     });    
     await doc.save();
     await this.SyncProductInstances();
-    this.EmitProductInstances();
+    this.RecomputeCatalog();
+    this.EmitCatalog();
     return doc;
   };
 
@@ -553,7 +604,8 @@ class CatalogProvider {
       }
   
       await this.SyncProductInstances();
-      this.EmitProductInstances();
+      this.RecomputeCatalog();
+      this.EmitCatalog();
       return updated;
     } catch (err) {
       throw err;
