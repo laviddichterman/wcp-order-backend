@@ -1,6 +1,6 @@
 const jwt = require('express-jwt');
 const jwks = require('jwks-rsa');
-const socketioJwt = require('../forked-socketiojwt');
+const socketioJwt = require('socketio-jwt');
 
 const authConfig = {
   domain: "lavid.auth0.com",
