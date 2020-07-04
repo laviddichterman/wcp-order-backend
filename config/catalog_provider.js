@@ -12,7 +12,7 @@ const ReduceArrayToMapByKey = function(xs, key) {
   }, iv);
 };
 
-// Returns [ category_map, product_map, orphan_products ] list;
+// Returns [ category_map, product_map ] list;
 // category_map entries are mapping of catagory_id to { category, children (id list), product (id list) }
 // product_map is mapping from product_id to { product, instances (list of instance objects)}
 // orphan_products is list of orphan product ids
@@ -27,13 +27,9 @@ const CatalogMapGenerator = (categories, products, product_instances) => {
     }
   }
   const product_map = {};
-  const orphan_products = [];
   products.forEach((curr) => {
     product_map[curr._id] = { product: curr, instances: [] };
-    if (curr.category_ids.length === 0) {
-      orphan_products.push(curr._id);
-    }
-    else {
+    if (curr.category_ids.length !== 0) {
       curr.category_ids.forEach((cid) => {
         category_map[cid] ? category_map[cid].products.push(curr._id) : console.error(`Missing category ID: ${cid} in product: ${JSON.stringify(curr)}`);
       });
@@ -42,7 +38,7 @@ const CatalogMapGenerator = (categories, products, product_instances) => {
   product_instances.forEach((curr) => {
     product_map[curr.product_id].instances.push(curr);
   })
-  return [category_map, product_map, orphan_products];
+  return [category_map, product_map];
 };
 
 const ModifierTypeMapGenerator = (modifier_types, options) => {
@@ -58,12 +54,11 @@ const ModifierTypeMapGenerator = (modifier_types, options) => {
 
 const CatalogGenerator = (categories, modifier_types, options, products, product_instances) => {
   const modifier_types_map = ModifierTypeMapGenerator(modifier_types, options);
-  const [category_map, product_map, orphan_products] = CatalogMapGenerator(categories, products, product_instances);
+  const [category_map, product_map] = CatalogMapGenerator(categories, products, product_instances);
   return { 
     modifiers: modifier_types_map,
     categories: category_map,
-    products: product_map,
-    orphan_products: orphan_products
+    products: product_map
   };
 }
 
@@ -232,7 +227,8 @@ class CatalogProvider {
         await cycle_update_promise;
       }
       await this.SyncCategories();
-      this.EmitCategories();
+      this.RecomputeCatalog();
+      this.EmitCatalog();
       // is this going to still be valid after the Sync above?
       return category_id_map[category_id];
     } catch (err) {
@@ -270,7 +266,6 @@ class CatalogProvider {
       })
       if (must_sync_products) {
         await this.SyncProducts();
-        this.EmitProducts();
       }
       await this.SyncCategories();
       this.RecomputeCatalog();
