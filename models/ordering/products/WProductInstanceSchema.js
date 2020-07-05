@@ -7,6 +7,9 @@ const WProductInstanceSchema = new Schema({
   // reference to the WProductSchema ID for this class of item
   product_id: String,
 
+  // ordinal
+  ordinal: { type: Number, required: true },
+
   // applied modifiers for this instance of the product
   modifiers: [{ 
     modifier_type_id: String,

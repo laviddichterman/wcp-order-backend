@@ -11,13 +11,10 @@ const WOptionTypeSchema = new Schema({
 
   // ordinal
   ordinal: { type: Number, required: true },
-  
-  // selection type
-  selection_type: {
-    type: String,
-    enum: ['SINGLE', 'MANY'],
-    required: true
-  }
+
+  min_selected: { type: Number, required: true },
+
+  max_selected: { type: Number, required: false },
 });
 
 module.exports = WOptionTypeSchema;
