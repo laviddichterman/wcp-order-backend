@@ -184,11 +184,12 @@ class CatalogProvider {
     this.RecomputeCatalog();
   };
 
-  CreateCategory = async ({description, name, parent_id}) => {
+  CreateCategory = async ({description, name, parent_id, subheading}) => {
     const doc = new this.#dbconn.WCategorySchema({
       description: description,
       name: name,
-      parent_id: parent_id
+      parent_id: parent_id,
+      subheading: subheading
     });
     await doc.save();
     await this.SyncCategories();
@@ -197,7 +198,7 @@ class CatalogProvider {
     return doc;
   };
 
-  UpdateCategory = async ( category_id, {description, name, parent_id}) => {
+  UpdateCategory = async ( category_id, {name, description, subheading, parent_id}) => {
     try {
       const category_id_map = ReduceArrayToMapByKey(this.#categories, "_id");
       if (!category_id_map[category_id]) {
@@ -222,6 +223,7 @@ class CatalogProvider {
       category_id_map[category_id].name = name;
       category_id_map[category_id].description = description;
       category_id_map[category_id].parent_id = parent_id;
+      category_id_map[category_id].subheading = subheading;
       await category_id_map[category_id].save();
       if (cycle_update_promise) {
         await cycle_update_promise;
@@ -256,7 +258,7 @@ class CatalogProvider {
           const old_length = prod.category_ids.length;
           logger.debug(`previous list: ${prod.category_ids}, deleting ${category_id}`);
           prod.category_ids = prod.category_ids.filter(x => x !== category_id);
-          console.log(`after list: ${prod.category_ids}`);
+          logger.debug(`after list: ${prod.category_ids}`);
           if (prod.category_ids.length < old_length) {
             logger.debug(`updating product: ${prod}`);
             must_sync_products = true;
@@ -438,6 +440,7 @@ class CatalogProvider {
     price, 
     shortcode, 
     disabled, 
+    ordinal, 
     revelID, 
     squareID, 
     modifiers,
@@ -458,6 +461,7 @@ class CatalogProvider {
         shortcode: shortcode,
         disabled: disabled,
         permanent_disable: false,
+        ordinal: ordinal,
         externalIDs: {
           revelID: revelID,
           squareID: squareID
@@ -479,6 +483,7 @@ class CatalogProvider {
     price, 
     shortcode, 
     disabled, 
+    ordinal, 
     revelID, 
     squareID, 
     modifiers,
@@ -507,6 +512,7 @@ class CatalogProvider {
             shortcode: shortcode,
             disabled: disabled,
             permanent_disable: false,
+            ordinal: ordinal,
             externalIDs: {
               revelID: revelID,
               squareID: squareID
@@ -537,6 +543,7 @@ class CatalogProvider {
     display_name,
     shortcode, 
     disabled, 
+    ordinal, 
     revelID, 
     squareID, 
     modifiers
@@ -550,6 +557,7 @@ class CatalogProvider {
         shortcode: shortcode,
         disabled: disabled,
         permanent_disable: false,
+        ordinal: ordinal,
         externalIDs: {
           revelID: revelID,
           squareID: squareID
@@ -570,6 +578,7 @@ class CatalogProvider {
     price, 
     shortcode, 
     disabled, 
+    ordinal, 
     revelID, 
     squareID, 
     modifiers}) => {
@@ -584,6 +593,7 @@ class CatalogProvider {
             display_name: display_name,
             shortcode: shortcode,
             disabled: disabled,
+            ordinal: ordinal,
             permanent_disable: false,
             externalIDs: {
               revelID: revelID,

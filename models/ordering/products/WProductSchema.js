@@ -10,6 +10,9 @@ var WProductSchema = new Schema({
     required: true 
   },
 
+  // ordinal
+  ordinal: { type: Number, required: true }, 
+
   modifiers: [String], // list of option_type_ids
 
   // Corresponding to a WCategorySchema

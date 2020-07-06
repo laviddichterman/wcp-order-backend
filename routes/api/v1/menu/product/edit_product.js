@@ -16,6 +16,7 @@ const ValidationChain = [
   body('disabled').isBoolean(true),
   // don't sanitize this to boolean, but validate that it is a boolean
   //body('permanent_disable').isBoolean(true),
+  body('ordinal').exists().isInt({min: 0, max:64}),
   body('price.amount').isInt({min: 0, max:100000}),
   body('price.currency').isLength({min:3, max: 3}).isIn(['USD']),
   body('modifiers.*').trim().escape().exists(),
@@ -36,6 +37,7 @@ module.exports = Router({ mergeParams: true })
         shortcode: req.body.shortcode,
         disabled: req.body.disabled,
         permanent_disable: false,
+        ordinal: req.body.ordinal,
         externalIDs: {
           revelID: req.body.revelID,
           squareID: req.body.squareID

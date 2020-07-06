@@ -8,6 +8,7 @@ const ValidationChain = [
   param('catid').trim().escape().exists(),
   body('name').trim().exists(),
   body('description').trim(),
+  body('subheading').trim(),
   body('parent_id').trim().escape()
 ];
 
@@ -21,8 +22,9 @@ module.exports = Router({ mergeParams: true })
       const doc = await req.catalog.UpdateCategory(
         req.params.catid, 
         {
-          description: req.body.description, 
-          name: req.body.name, 
+          name: req.body.name,
+          description: req.body.description,
+          subheading: req.body.subheading,
           parent_id: req.body.parent_id
         });
       if (!doc) {

@@ -12,6 +12,7 @@ const ValidationChain = [
   body('squareID').trim().escape(),
   body('disabled').toBoolean(true),
   //body('permanent_disable').toBoolean(true),
+  body('ordinal').exists().isInt({min: 0, max:64}),
   body('price.amount').isInt({ min: 0, max: 100000 }).exists(),
   body('price.currency').exists().isLength({ min: 3, max: 3 }).isIn(['USD']),
   body('modifiers.*.modifier_type_id').trim().escape().exists(),
@@ -32,6 +33,7 @@ module.exports = Router({ mergeParams: true })
         display_name: req.body.display_name,
         shortcode: req.body.shortcode,
         disabled: req.body.disabled,
+        ordinal: req.body.ordinal,
         externalIDs: {
           revelID: req.body.revelID,
           squareID: req.body.squareID
