@@ -6,6 +6,6 @@ const ExternalIDsSchema = new Schema({
   // external ids
   revelID: String,
   squareID: String
-});
+}, { _id: false});
 
 module.exports = ExternalIDsSchema;

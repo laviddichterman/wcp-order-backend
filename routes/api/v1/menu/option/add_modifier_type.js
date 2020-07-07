@@ -6,7 +6,8 @@ const { CheckJWT } = require('../../../../../config/authorization');
 const ValidationChain = [  
   body('name').trim().exists(),
   body('ordinal').isInt({min: 0, max:63}).exists(),
-  body('selection_type').exists().isIn(['SINGLE', 'MANY']),
+  body('min_selected').isInt({min: 0}).exists(),
+  body('max_selected').optional({nullable: true}).isInt({min: 0}),
   body('revelID').trim().escape(),
   body('squareID').trim().escape(),
 ];
@@ -18,16 +19,17 @@ module.exports = Router({ mergeParams: true })
       if (!errors.isEmpty()) {
         return res.status(422).json({ errors: errors.array() });
       }
-      const newoptiontype = await req.catalog.CreateOptionType({
+      const doc = await req.catalog.CreateModifierType({
         name: req.body.name,
         ordinal: req.body.ordinal,
-        selection_type: req.body.selection_type,
+        min_selected: req.body.min_selected,
+        max_selected: req.body.max_selected,
         revelID: req.body.revelID,
         squareID: req.body.squareID
       });
-      const location = `${req.base}${req.originalUrl}/${newoptiontype.id}`;
+      const location = `${req.base}${req.originalUrl}/${doc.id}`;
       res.setHeader('Location', location);
-      return res.status(201).send(newoptiontype);
+      return res.status(201).send(doc);
     } catch (error) {
       next(error)
     }

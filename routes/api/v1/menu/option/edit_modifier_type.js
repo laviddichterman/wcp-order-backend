@@ -6,7 +6,8 @@ const ValidationChain = [
   param('mtid').trim().escape().exists(),
   body('name').trim(),
   body('ordinal').isInt({min: 0, max:64}),
-  body('selection_type').isIn(['SINGLE', 'MANY']),
+  body('min_selected').isInt({min: 0}).exists(),
+  body('max_selected').optional({nullable: true}).isInt({min: 0}),
   body('revelID').trim().escape(),
   body('squareID').trim().escape(),
 ];
@@ -23,7 +24,8 @@ module.exports = Router({ mergeParams: true })
         {
           name: req.body.name,
           ordinal: req.body.ordinal,
-          selection_type: req.body.selection_type,
+          min_selected: req.body.min_selected,
+          max_selected: req.body.max_selected,
           revelID: req.body.revelID,
           squareID: req.body.squareID
         }

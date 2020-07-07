@@ -23,6 +23,8 @@ module.exports = Router({ mergeParams: true })
         req.logger.info(`Unable to delete category: ${req.params.catid}`);
         return res.status(404).send(`Unable to delete category: ${req.params.catid}`);
       }
+      req.logger.info(`Successfully deleted ${doc}`);
+      return res.status(200).send(doc);
     } catch (error) {
       next(error)
     }

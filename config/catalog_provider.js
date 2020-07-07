@@ -67,7 +67,7 @@ class CatalogProvider {
   #dbconn;
   #socketRO;
   #categories;
-  #option_types;
+  #modifier_types;
   #options;
   #products;
   #product_instances;
@@ -76,7 +76,7 @@ class CatalogProvider {
     this.#dbconn = dbconn;
     this.#socketRO = socketRO;
     this.#categories = [];
-    this.#option_types = [];
+    this.#modifier_types = [];
     this.#options = [];
     this.#products = [];
     this.#product_instances = [];
@@ -88,7 +88,7 @@ class CatalogProvider {
   }
 
   get ModifierTypes() {
-    return this.#option_types;
+    return this.#modifier_types;
   }
 
   get ModifierOptions() {
@@ -114,10 +114,10 @@ class CatalogProvider {
     return true;
   }
 
-  SyncOptionTypes = async () => {
+  SyncModifierTypes = async () => {
     // option types
     try {
-      this.#option_types = await this.#dbconn.WOptionTypeSchema.find().exec();
+      this.#modifier_types = await this.#dbconn.WOptionTypeSchema.find().exec();
     } catch (err) {
       logger.error(`Failed fetching option types with error: ${JSON.stringify(err)}`);
       return false;
@@ -163,7 +163,7 @@ class CatalogProvider {
   }
 
   RecomputeCatalog = () => {
-    this.#catalog = CatalogGenerator(this.#categories, this.#option_types, this.#options, this.#products, this.#product_instances);
+    this.#catalog = CatalogGenerator(this.#categories, this.#modifier_types, this.#options, this.#products, this.#product_instances);
   }
 
   Bootstrap = async () => {
@@ -173,7 +173,7 @@ class CatalogProvider {
 
     await this.SyncCategories();
 
-    await this.SyncOptionTypes();
+    await this.SyncModifierTypes();
     
     await this.SyncOptions();
     
@@ -275,35 +275,37 @@ class CatalogProvider {
       return doc;
     } catch (err) {
       throw err;
-      return null 
+      return null;
     }
   }
 
-  CreateOptionType = async ({name, ordinal, selection_type, revelID, squareID}) => {
-    const newoptiontype = new this.#dbconn.WOptionTypeSchema({
+  CreateModifierType = async ({name, ordinal, min_selected, max_selected, revelID, squareID}) => {
+    const doc = new this.#dbconn.WOptionTypeSchema({
       name: name,
       ordinal: ordinal,
-      selection_type: selection_type,
+      min_selected: min_selected, 
+      max_selected: max_selected, 
       externalIDs: {
         revelID: revelID,
         squareID: squareID
       }
     });
-    await newoptiontype.save();
-    await this.SyncOptionTypes();
+    await doc.save();
+    await this.SyncModifierTypes();
     this.RecomputeCatalog();
     this.EmitCatalog();
-    return newoptiontype;
+    return doc;
   };
 
-  UpdateModifierType = async ( mt_id, {name, ordinal, selection_type, revelID, squareID}) => {
+  UpdateModifierType = async ( mt_id, {name, ordinal, min_selected, max_selected, revelID, squareID}) => {
     try {
       const updated = await this.#dbconn.WOptionTypeSchema.findByIdAndUpdate(
         mt_id, 
         {
           name: name,
           ordinal: ordinal,
-          selection_type: selection_type,
+          min_selected: min_selected, 
+          max_selected: max_selected, 
           externalIDs: {
             revelID: revelID,
             squareID: squareID
@@ -314,7 +316,7 @@ class CatalogProvider {
       if (!updated) {
         return null;
       }
-      await this.SyncOptionTypes();
+      await this.SyncModifierTypes();
       this.RecomputeCatalog();
       this.EmitCatalog();
       return updated;
@@ -323,6 +325,36 @@ class CatalogProvider {
       return null 
     }
   };
+
+  DeleteModifierType = async ( mt_id ) => {
+    logger.debug(`Removing ${mt_id}`);
+    try {
+      const doc = await this.#dbconn.WOptionTypeSchema.findByIdAndDelete(mt_id);
+      if (!doc) {
+        return null;
+      }
+      const options_delete = await this.#dbconn.WOptionSchema.deleteMany({ option_type_id: mt_id});
+      console.log(JSON.stringify(options_delete));
+      if (options_delete.nModified > 0) {
+        logger.debug(`Removed ${options_delete.nModified} Options from the catalog.`);
+      }
+      const products_update = await this.#dbconn.WProductSchema.updateMany({}, { $pull: {modifiers: mt_id }} );
+      if (products_update.nModified > 0) {
+        const product_instance_update = await this.#dbconn.WProductInstanceSchema.updateMany({}, {$pull: {modifiers: {modifier_type_id: mt_id}}});
+        logger.debug(`Removed ModifierType ID from ${products_update.nModified} products, ${product_instance_update.nModified} product instances.`);
+        await this.SyncProducts();
+        await this.SyncProductInstances();
+      }
+      await this.SyncOptions();
+      await this.SyncModifierTypes();
+      this.RecomputeCatalog();
+      this.EmitCatalog();
+      return doc;
+    } catch (err) {
+      throw err;
+      return null;
+    }
+  }
 
   CreateOption = async ({
     option_type_id, 
@@ -340,7 +372,7 @@ class CatalogProvider {
     enable_function_name
   }) => {
     // first find the Modifier Type ID in the catalog
-    var option_type = this.#option_types.find(x => x._id.toString() === option_type_id);
+    var option_type = this.#modifier_types.find(x => x._id.toString() === option_type_id);
     if (!option_type) {
       return null;
     }
@@ -434,6 +466,30 @@ class CatalogProvider {
     }
   };
 
+  DeleteModifierOption = async ( mo_id ) => {
+    logger.debug(`Removing ${mo_id}`);
+    try {
+      const doc = await this.#dbconn.WOptionSchema.findByIdAndDelete(mo_id);
+      if (!doc) {
+        return null;
+      }
+      const product_instance_options_delete = await this.#dbconn.WOptionSchema.updateMany({},
+        { $pull: { modifiers: { option_id: mo_id } } } );
+      if (product_instance_options_delete.nModified > 0) {
+        console.log(JSON.stringify(product_instance_options_delete));
+        logger.debug(`Removed ${product_instance_options_delete.nModified} Options from Product Instances.`);
+        await this.SyncProductInstances();
+      }
+      await this.SyncOptions();
+      this.RecomputeCatalog();
+      this.EmitCatalog();
+      return doc;
+    } catch (err) {
+      throw err;
+      return null;
+    }
+  }
+
   CreateProduct = async ({
     display_name, 
     description, 
@@ -447,7 +503,7 @@ class CatalogProvider {
     category_ids
   }) => {
     // first find the Modifier Type IDs in the catalog
-    const found_all_modifiers = modifiers.map(mtid => this.#option_types.some(x => x._id.toString() === mtid)).every(x => x === true);
+    const found_all_modifiers = modifiers.map(mtid => this.#modifier_types.some(x => x._id.toString() === mtid)).every(x => x === true);
     const found_all_categories = category_ids.map(cid => this.#categories.some(x => x._id.toString() === cid)).every(x => x === true);
     if (!found_all_categories || !found_all_modifiers) {
       return null;
@@ -489,19 +545,6 @@ class CatalogProvider {
     modifiers,
     category_ids}) => {
     try {
-      // maybe we don't actually have to sync to the DB here, but if not, 
-      // then we need to remove the sync in the category update method
-      // await this.SyncOptionTypes();
-
-      //const products_map = ReduceArrayToMapByKey(this.#products, "_id");
-      // const product_to_update = products_map[pid];
-
-      // if (!product_to_update) {
-      //   return null;
-      // }
-
-      //TODO: check that modifiers haven't changed
-      //if (product_to_update.modifiers) ...
       const updated = await this.#dbconn.WProductSchema.findByIdAndUpdate(
         pid, 
         {

@@ -12,6 +12,6 @@ const WOptionInstanceSchema = new Schema({
     enum: ['NONE', 'LEFT', 'RIGHT', 'WHOLE'],
     required: true
   }
-});
+}, { _id: false});
 
 module.exports = WOptionInstanceSchema;

@@ -11,7 +11,7 @@ var WProductSchema = new Schema({
   },
 
   // ordinal
-  ordinal: { type: Number, required: true }, 
+  ordinal: Number, 
 
   modifiers: [String], // list of option_type_ids
 

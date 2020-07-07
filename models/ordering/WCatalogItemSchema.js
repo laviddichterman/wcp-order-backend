@@ -39,6 +39,6 @@ var WCatalogItemSchema = new Schema({
 
   // flag to PERMANENTLY turn off this product
   permanent_disable: Boolean
-});
+}, { _id: false});
 
 module.exports = WCatalogItemSchema;
