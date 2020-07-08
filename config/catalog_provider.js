@@ -322,9 +322,8 @@ class CatalogProvider {
         return null;
       }
       const options_delete = await this.#dbconn.WOptionSchema.deleteMany({ option_type_id: mt_id});
-      console.log(JSON.stringify(options_delete));
       if (options_delete.deletedCount > 0) {
-        logger.debug(`Removed ${options_delete.nModified} Options from the catalog.`);
+        logger.debug(`Removed ${options_delete.deletedCount} Options from the catalog.`);
       }
       const products_update = await this.#dbconn.WProductSchema.updateMany({}, { $pull: {modifiers: mt_id }} );
       if (products_update.nModified > 0) {
@@ -463,7 +462,6 @@ class CatalogProvider {
       const product_instance_options_delete = await this.#dbconn.WOptionSchema.updateMany({},
         { $pull: { modifiers: { option_id: mo_id } } } );
       if (product_instance_options_delete.nModified > 0) {
-        console.log(JSON.stringify(product_instance_options_delete));
         logger.debug(`Removed ${product_instance_options_delete.nModified} Options from Product Instances.`);
         await this.SyncProductInstances();
       }
@@ -576,8 +574,7 @@ class CatalogProvider {
       }
       const product_instance_delete = await this.#dbconn.WProductInstanceSchema.deleteMany({ product_id: p_id});
       if (product_instance_delete.deletedCount > 0) {
-        console.log(JSON.stringify(product_instance_delete));
-        logger.debug(`Removed ${product_instance_delete.nModified} Product Instances.`);
+        logger.debug(`Removed ${product_instance_delete.deletedCount} Product Instances.`);
         await this.SyncProductInstances();
       }
       await this.SyncProducts();
