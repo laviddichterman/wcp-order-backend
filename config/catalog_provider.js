@@ -252,21 +252,9 @@ class CatalogProvider {
           await cat.save();
         }
       });
-      var must_sync_products = false;
-      this.#products.forEach(async (prod) => {
-        if (prod.category_ids) {
-          const old_length = prod.category_ids.length;
-          logger.debug(`previous list: ${prod.category_ids}, deleting ${category_id}`);
-          prod.category_ids = prod.category_ids.filter(x => x !== category_id);
-          logger.debug(`after list: ${prod.category_ids}`);
-          if (prod.category_ids.length < old_length) {
-            logger.debug(`updating product: ${prod}`);
-            must_sync_products = true;
-            await prod.save();
-          }
-        }
-      })
-      if (must_sync_products) {
+      const products_update = await this.#dbconn.WProductSchema.updateMany({}, { $pull: {category_ids: category_id }} );
+      if (products_update.nModified > 0) {
+        logger.debug(`Removed Category ID from ${products_update.nModified} products.`);
         await this.SyncProducts();
       }
       await this.SyncCategories();
@@ -442,7 +430,6 @@ class CatalogProvider {
               squareID: squareID
             }
           },
-          //option_type_id: mt_id, // don't take this param, since we don't support changing parent at this time
           ordinal: ordinal,
           metadata: {
             flavor_factor: flavor_factor,
