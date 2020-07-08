@@ -15,7 +15,8 @@ const ValidationChain = [
   body('price.amount').isInt({ min: 0, max: 100000 }).exists(),
   body('price.currency').exists().isLength({ min: 3, max: 3 }).isIn(['USD']),
   body('modifiers.*').trim().escape().exists(),
-  body('category_ids.*').trim().escape().exists()
+  body('category_ids.*').trim().escape().exists(),
+  body('create_product_instance').toBoolean(true)
 ];
 
 module.exports = Router({ mergeParams: true })
@@ -43,6 +44,27 @@ module.exports = Router({ mergeParams: true })
       if (!newproduct) {
         req.logger.info(`Unable to find Modifiers or Categories to create Product`);
         return res.status(404).send("Unable to find Modifiers or Categories to create Product");
+      }
+      if (req.body.create_product_instance) {
+        const pi = await req.catalog.CreateProductInstance(newproduct._id, {
+          price: req.body.price,
+          description: req.body.description,
+          display_name: req.body.display_name,
+          shortcode: req.body.shortcode,
+          disabled: req.body.disabled,
+          ordinal: req.body.ordinal,
+          externalIDs: {
+            revelID: req.body.revelID,
+            squareID: req.body.squareID
+          },
+        });
+        if (!pi) {
+          req.logger.info(`Error while creating product instance for  ${newproduct._id}.`);
+          return res.status(500).send(`Error while creating product instance for  ${newproduct._id}.`);
+        }
+        const location = `${req.base}${req.originalUrl}/${newproduct._id}/${pi._id}`;
+        res.setHeader('Location', location);
+        return res.status(201).send({ product_instance: pi, product: newproduct });
       }
       const location = `${req.base}${req.originalUrl}/${newproduct._id}`;
       res.setHeader('Location', location);
