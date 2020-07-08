@@ -335,7 +335,7 @@ class CatalogProvider {
       }
       const options_delete = await this.#dbconn.WOptionSchema.deleteMany({ option_type_id: mt_id});
       console.log(JSON.stringify(options_delete));
-      if (options_delete.nModified > 0) {
+      if (options_delete.deletedCount > 0) {
         logger.debug(`Removed ${options_delete.nModified} Options from the catalog.`);
       }
       const products_update = await this.#dbconn.WProductSchema.updateMany({}, { $pull: {modifiers: mt_id }} );
@@ -579,6 +579,29 @@ class CatalogProvider {
       return null 
     }
   };
+
+  DeleteProduct = async ( p_id ) => {
+    logger.debug(`Removing Product ${p_id}`);
+    try {
+      const doc = await this.#dbconn.WProductSchema.findByIdAndDelete(p_id);
+      if (!doc) {
+        return null;
+      }
+      const product_instance_delete = await this.#dbconn.WProductInstanceSchema.deleteMany({ product_id: p_id});
+      if (product_instance_delete.deletedCount > 0) {
+        console.log(JSON.stringify(product_instance_delete));
+        logger.debug(`Removed ${product_instance_delete.nModified} Product Instances.`);
+        await this.SyncProductInstances();
+      }
+      await this.SyncProducts();
+      this.RecomputeCatalog();
+      this.EmitCatalog();
+      return doc;
+    } catch (err) {
+      throw err;
+      return null;
+    }
+  }
   
   CreateProductInstance = async (parent_product_id, {
     price, 
@@ -660,6 +683,24 @@ class CatalogProvider {
       return null 
     }
   };
+
+  DeleteProductInstance = async ( pi_id ) => {
+    logger.debug(`Removing ${pi_id}`);
+    try {
+      const doc = await this.#dbconn.WProductInstanceSchema.findByIdAndDelete(pi_id);
+      if (!doc) {
+        return null;
+      }
+      await this.SyncProductInstances();
+      this.RecomputeCatalog();
+      this.EmitCatalog();
+      return doc;
+    } catch (err) {
+      throw err;
+      return null;
+    }
+  }
+  
   
 }
 
