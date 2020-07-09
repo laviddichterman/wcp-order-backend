@@ -453,14 +453,15 @@ class CatalogProvider {
   };
 
   DeleteModifierOption = async ( mo_id ) => {
-    logger.debug(`Removing ${mo_id}`);
+    logger.debug(`Removing Modifier Option ${mo_id}`);
     try {
       const doc = await this.#dbconn.WOptionSchema.findByIdAndDelete(mo_id);
       if (!doc) {
         return null;
       }
       const product_instance_options_delete = await this.#dbconn.WOptionSchema.updateMany({},
-        { $pull: { modifiers: { option_id: mo_id } } } );
+        { modifiers: {$pull: {  option_id: mo_id } } } );
+      console.log(product_instance_options_delete);
       if (product_instance_options_delete.nModified > 0) {
         logger.debug(`Removed ${product_instance_options_delete.nModified} Options from Product Instances.`);
         await this.SyncProductInstances();

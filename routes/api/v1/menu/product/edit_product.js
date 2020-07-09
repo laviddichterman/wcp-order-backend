@@ -17,7 +17,7 @@ const ValidationChain = [
   // don't sanitize this to boolean, but validate that it is a boolean
   //body('permanent_disable').isBoolean(true),
   body('ordinal').exists().isInt({min: 0, max:64}),
-  body('price.amount').isInt({min: 0, max:100000}),
+  body('price.amount').isInt({min: 0}),
   body('price.currency').isLength({min:3, max: 3}).isIn(['USD']),
   body('modifiers.*').trim().escape().exists(),
   body('category_ids.*').trim().escape().exists()

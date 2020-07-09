@@ -12,7 +12,7 @@ const ValidationChain = [
   body('disabled').toBoolean(true),
   //body('permanent_disable').toBoolean(true),
   body('ordinal').exists().isInt({min: 0, max:64}),
-  body('price.amount').isInt({ min: 0, max: 100000 }).exists(),
+  body('price.amount').isInt({ min: 0 }).exists(),
   body('price.currency').exists().isLength({ min: 3, max: 3 }).isIn(['USD']),
   body('modifiers.*').trim().escape().exists(),
   body('category_ids.*').trim().escape().exists(),
