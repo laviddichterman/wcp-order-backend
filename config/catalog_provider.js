@@ -503,12 +503,12 @@ class CatalogProvider {
         shortcode: shortcode,
         disabled: disabled,
         permanent_disable: false,
-        ordinal: ordinal,
         externalIDs: {
           revelID: revelID,
           squareID: squareID
         }
       },
+      ordinal: ordinal,
       modifiers: modifiers,
       category_ids: category_ids
     });    
@@ -541,12 +541,12 @@ class CatalogProvider {
             shortcode: shortcode,
             disabled: disabled,
             permanent_disable: false,
-            ordinal: ordinal,
             externalIDs: {
               revelID: revelID,
               squareID: squareID
             }
           },
+          ordinal: ordinal,
           modifiers: modifiers,
           category_ids: category_ids
         },
@@ -608,12 +608,12 @@ class CatalogProvider {
         shortcode: shortcode,
         disabled: disabled,
         permanent_disable: false,
-        ordinal: ordinal,
         externalIDs: {
           revelID: revelID,
           squareID: squareID
         }
       },
+      ordinal: ordinal,
       modifiers: modifiers
     });    
     await doc.save();
@@ -644,13 +644,13 @@ class CatalogProvider {
             display_name: display_name,
             shortcode: shortcode,
             disabled: disabled,
-            ordinal: ordinal,
             permanent_disable: false,
             externalIDs: {
               revelID: revelID,
               squareID: squareID
             }
           },
+          ordinal: ordinal,
           modifiers: modifiers,
         },
         { new: true }
