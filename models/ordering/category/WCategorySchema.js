@@ -9,6 +9,12 @@ var WCategorySchema = new Schema({
   // used instead of the name if present. HTML allowed.
   description: String,
 
+  // placement index
+  ordinal: {
+    type: Number,
+    required: true
+  },
+    
   // parent category ID if any
   parent_id: String,  
 

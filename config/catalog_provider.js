@@ -184,10 +184,11 @@ class CatalogProvider {
     this.RecomputeCatalog();
   };
 
-  CreateCategory = async ({description, name, parent_id, subheading}) => {
+  CreateCategory = async ({description, name, ordinal, parent_id, subheading}) => {
     const doc = new this.#dbconn.WCategorySchema({
       description: description,
       name: name,
+      ordinal: ordinal,
       parent_id: parent_id,
       subheading: subheading
     });
@@ -198,7 +199,7 @@ class CatalogProvider {
     return doc;
   };
 
-  UpdateCategory = async ( category_id, {name, description, subheading, parent_id}) => {
+  UpdateCategory = async ( category_id, {name, description, ordinal, subheading, parent_id}) => {
     try {
       const category_id_map = ReduceArrayToMapByKey(this.#categories, "_id");
       if (!category_id_map[category_id]) {
@@ -223,6 +224,7 @@ class CatalogProvider {
       category_id_map[category_id].name = name;
       category_id_map[category_id].description = description;
       category_id_map[category_id].parent_id = parent_id;
+      category_id_map[category_id].ordinal = ordinal;
       category_id_map[category_id].subheading = subheading;
       await category_id_map[category_id].save();
       if (cycle_update_promise) {

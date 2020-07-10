@@ -15,7 +15,7 @@ const ValidationChain = [
   body('squareID').trim().escape(),
   body('disabled').toBoolean(true),
   //body('permanent_disable').toBoolean(true),
-  body('ordinal').exists().isInt({min: 0, max:64}),
+  body('ordinal').exists().isInt({min: 0}),
   body('price.amount').exists().isInt({ min: 0 }),
   body('price.currency').exists().isLength({ min: 3, max: 3 }).isIn(['USD']),
   body('modifiers.*.modifier_type_id').trim().escape().exists(),

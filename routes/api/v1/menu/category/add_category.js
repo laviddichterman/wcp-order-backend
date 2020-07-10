@@ -7,6 +7,7 @@ const ValidationChain = [
   body('name').trim().exists(),
   body('description').trim(),
   body('subheading').trim(),
+  body('ordinal').exists().isInt({min: 0}),
   body('parent_id').trim().escape()
 ];
 
@@ -19,6 +20,7 @@ module.exports = Router({ mergeParams: true })
       }
       const newcategory = await req.catalog.CreateCategory({
         name: req.body.name,
+        ordinal: req.body.ordinal,
         description: req.body.description,
         subheading: req.body.subheading,
         parent_id: req.body.parent_id
