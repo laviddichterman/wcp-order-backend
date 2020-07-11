@@ -48,7 +48,7 @@ const ModifierTypeMapGenerator = (modifier_types, options) => {
   });
   options.forEach(o => {
     modifier_types_map[o.option_type_id].options.push(o);
-  })
+  });
   return modifier_types_map;
 };
 
