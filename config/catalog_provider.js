@@ -58,7 +58,8 @@ const CatalogGenerator = (categories, modifier_types, options, products, product
   return { 
     modifiers: modifier_types_map,
     categories: category_map,
-    products: product_map
+    products: product_map,
+    version: Date.now().toString(36).toUpperCase()
   };
 }
 
