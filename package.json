@@ -19,7 +19,7 @@
   },
   "homepage": "https://github.com/laviddichterman/wcp-order-backend#readme",
   "dependencies": {
-    "@googlemaps/google-maps-services-js": "^3.1.2",
+    "@googlemaps/google-maps-services-js": "^3.1.4",
     "@turf/turf": "^5.1.6",
     "@wcp/wcpshared": "^1.1.0",
     "body-parser": "^1.19.0",
@@ -33,7 +33,7 @@
     "googleapis": "^52.1.0",
     "jsonwebtoken": "^8.5.1",
     "jwks-rsa": "^1.8.1",
-    "mongoose": "^5.9.22",
+    "mongoose": "^5.9.23",
     "nodemailer": "^6.4.10",
     "socket.io": "^2.3.0",
     "socketio-jwt": "^4.6.2",
