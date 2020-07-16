@@ -159,8 +159,8 @@ class CatalogProvider {
     return true;
   }
 
-  EmitCatalog = () => {
-    this.#socketRO.emit('WCP_CATALOG', this.#catalog);
+  EmitCatalog = (dest) => {
+    dest.emit('WCP_CATALOG', this.#catalog);
   }
 
   RecomputeCatalog = () => {
@@ -196,7 +196,7 @@ class CatalogProvider {
     await doc.save();
     await this.SyncCategories();
     this.RecomputeCatalog();
-    this.EmitCatalog();
+    this.EmitCatalog(this.#socketRO);
     return doc;
   };
 
@@ -233,7 +233,7 @@ class CatalogProvider {
       }
       await this.SyncCategories();
       this.RecomputeCatalog();
-      this.EmitCatalog();
+      this.EmitCatalog(this.#socketRO);
       // is this going to still be valid after the Sync above?
       return category_id_map[category_id];
     } catch (err) {
@@ -262,7 +262,7 @@ class CatalogProvider {
       }
       await this.SyncCategories();
       this.RecomputeCatalog();
-      this.EmitCatalog();
+      this.EmitCatalog(this.#socketRO);
       return doc;
     } catch (err) {
       throw err;
@@ -309,7 +309,7 @@ class CatalogProvider {
       }
       await this.SyncModifierTypes();
       this.RecomputeCatalog();
-      this.EmitCatalog();
+      this.EmitCatalog(this.#socketRO);
       return updated;
     } catch (err) {
       throw err;
@@ -338,7 +338,7 @@ class CatalogProvider {
       await this.SyncOptions();
       await this.SyncModifierTypes();
       this.RecomputeCatalog();
-      this.EmitCatalog();
+      this.EmitCatalog(this.#socketRO);
       return doc;
     } catch (err) {
       throw err;
@@ -395,7 +395,7 @@ class CatalogProvider {
     await doc.save();
     await this.SyncOptions();
     this.RecomputeCatalog();
-    this.EmitCatalog();
+    this.EmitCatalog(this.#socketRO);
     return doc;
   };
 
@@ -447,7 +447,7 @@ class CatalogProvider {
       }
       await this.SyncOptions();
       this.RecomputeCatalog();
-      this.EmitCatalog();
+      this.EmitCatalog(this.#socketRO);
       return updated;
     } catch (err) {
       throw err;
@@ -471,7 +471,7 @@ class CatalogProvider {
       }
       await this.SyncOptions();
       this.RecomputeCatalog();
-      this.EmitCatalog();
+      this.EmitCatalog(this.#socketRO);
       return doc;
     } catch (err) {
       throw err;
@@ -518,7 +518,7 @@ class CatalogProvider {
     await doc.save();
     await this.SyncProducts();
     this.RecomputeCatalog();
-    this.EmitCatalog();
+    this.EmitCatalog(this.#socketRO);
     return doc;
   };
 
@@ -561,7 +561,7 @@ class CatalogProvider {
 
       await this.SyncProducts();
       this.RecomputeCatalog();
-      this.EmitCatalog();
+      this.EmitCatalog(this.#socketRO);
       return updated;
     } catch (err) {
       throw err;
@@ -583,7 +583,7 @@ class CatalogProvider {
       }
       await this.SyncProducts();
       this.RecomputeCatalog();
-      this.EmitCatalog();
+      this.EmitCatalog(this.#socketRO);
       return doc;
     } catch (err) {
       throw err;
@@ -622,7 +622,7 @@ class CatalogProvider {
     await doc.save();
     await this.SyncProductInstances();
     this.RecomputeCatalog();
-    this.EmitCatalog();
+    this.EmitCatalog(this.#socketRO);
     return doc;
   };
 
@@ -664,7 +664,7 @@ class CatalogProvider {
   
       await this.SyncProductInstances();
       this.RecomputeCatalog();
-      this.EmitCatalog();
+      this.EmitCatalog(this.#socketRO);
       return updated;
     } catch (err) {
       throw err;
@@ -681,7 +681,7 @@ class CatalogProvider {
       }
       await this.SyncProductInstances();
       this.RecomputeCatalog();
-      this.EmitCatalog();
+      this.EmitCatalog(this.#socketRO);
       return doc;
     } catch (err) {
       throw err;

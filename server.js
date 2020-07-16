@@ -97,7 +97,7 @@ socket_ro.on('connect',(socket) => {
   socket.emit('WCP_BLOCKED_OFF', DataProvider.BlockedOff);
   socket.emit('WCP_SETTINGS', DataProvider.Settings);
   socket.emit('WCP_DELIVERY_AREA', DataProvider.DeliveryArea);
-  CatalogProvider.EmitCatalog();
+  CatalogProvider.EmitCatalog(socket);
   socket.on('disconnect', (reason) => {
     const disconnect_time = new moment();
     const duration = moment.duration(disconnect_time.diff(connect_time));
