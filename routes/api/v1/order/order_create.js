@@ -79,18 +79,20 @@ const GeneratePaymentSection = (totals, payment_info, store_credit, ishtml) => {
   const store_credit_money_amount = store_credit && store_credit.type == "MONEY" && store_credit.amount_used ? "$" + Number(store_credit.amount_used).toFixed(2) : "";
   const paid_by_credit_card = payment_info && payment_info.result.payment.total_money.amount ? "$" + payment_info.result.payment.total_money.amount/100 : ""
   const receipt_url = payment_info ? payment_info.result.payment.receipt_url : "";
-  const discount_section = discount ? `Applied discount of ${discount}, pre-tax, using ${store_credit.code}.${ishtml ? "<br />" : "\n"}` : "";
+  const discount_section = discount ? `NOTE BEFORE CLOSING OUT: Apply discount of ${discount}, pre-tax. Credit code used: ${store_credit.code}.${ishtml ? "<br />" : "\n"}` : "";
   const store_credit_money_section = store_credit_money_amount ? `Applied store credit value ${store_credit_money_amount} using code ${store_credit.code}.${ishtml ? "<br />" : "\n"}` : "";
   const card_payment_section = paid_by_credit_card ? `Paid ${paid_by_credit_card} by card ending in ${payment_info.result.payment.card_details.card.last_4}.${ishtml ? "<br />" : "\n"}` : "";
-  return ishtml ? `<p>Received payment of: <strong>${total_amount}</strong></p>
+  return ishtml ? `${discount_section}
+  <p>Received payment of: <strong>${total_amount}</strong></p>
   <p>Base Amount: <strong>${base_amount}</strong><br />
   Tip Amount: <strong>${tip_amount}</strong><br />
-  Confirm the above values in the <a href="${receipt_url}">receipt</a></p>${discount_section}${store_credit_money_section}${card_payment_section}` :
-    `Received payment of: ${total_amount}
+  Confirm the above values in the <a href="${receipt_url}">receipt</a></p>${store_credit_money_section}${card_payment_section}` :
+    `${discount_section}
+  Received payment of: ${total_amount}
   Base Amount: ${base_amount}
   Tip Amount: ${tip_amount}
   Receipt: ${receipt_url}
-  ${discount_section}${store_credit_money_section}${card_payment_section}`;
+  ${store_credit_money_section}${card_payment_section}`;
 }
 
 const GenerateDeliverySection = (delivery_info, ishtml) => {
