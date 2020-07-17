@@ -347,11 +347,10 @@ const CreateSquareOrderAndCharge = async (logger, reference_id, balance, nonce) 
     if (!payment_response.success) {
       logger.error("Failed to process payment: %o", payment_response);
       const order_cancel_response = await SquareProvider.OrderStateChange(square_order_id, create_order_response.response.order.version, "CANCELED");
-      logger.debug(order_cancel_response);
+      logger.debug(JSON.stringify(order_cancel_response));
       return [false, payment_response];
     }
     else {
-      logger.debug(payment_response);
       logger.info(`For internal id ${reference_id} and Square Order ID: ${square_order_id} payment for ${amount_to_charge} successful.`)
       return [true, payment_response];
     }
@@ -400,6 +399,8 @@ module.exports = Router({ mergeParams: true })
     const STORE_NAME = req.db.KeyValueConfig.STORE_NAME;
     const STORE_CREDIT_SHEET = req.db.KeyValueConfig.STORE_CREDIT_SHEET;
 
+    req.logger.info(`Received order request: ${req.body}`);
+
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       GoogleProvider.SendEmail(
@@ -436,7 +437,6 @@ module.exports = Router({ mergeParams: true })
     const sliced = req.body.sliced || false;
     const special_instructions = req.body.special_instructions;
     let isPaid = false;
-    
 
     // TODO: wrap all function calls in a try/catch block, or triple check that an exception would be handled in the provider class
     
