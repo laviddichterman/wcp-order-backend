@@ -94,7 +94,7 @@ class GoogleProvider {
         logger.error(error);
       }
       else {
-        logger.info(`Sent mail with subject ${subject} to ${to}`);
+        logger.debug(`Sent mail with subject ${subject} to ${to}`);
       }
       this.#smtpTransport.close();
     });
@@ -119,7 +119,7 @@ class GoogleProvider {
         throw (err);
       }
       else {
-        logger.info("Created event: %o", event);
+        logger.debug("Created event: %o", event);
       }
     });
   };
