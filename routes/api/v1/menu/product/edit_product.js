@@ -7,18 +7,8 @@ const { CheckJWT } = require('../../../../../config/authorization');
 
 const ValidationChain = [  
   param('pid').trim().escape().exists(), 
-  body('display_name').trim(),
-  body('description').trim(),
-  body('shortcode').trim().escape(),
-  body('revelID').trim().escape(),
-  body('squareID').trim().escape(),
-  // don't sanitize this to boolean, but validate that it is a boolean
-  body('disabled').isBoolean(true),
-  // don't sanitize this to boolean, but validate that it is a boolean
-  //body('permanent_disable').isBoolean(true),
+  body('name').trim(),
   body('ordinal').exists().isInt({min: 0}),
-  body('price.amount').isInt({min: 0}),
-  body('price.currency').isLength({min:3, max: 3}).isIn(['USD']),
   body('modifiers.*').trim().escape().exists(),
   body('category_ids.*').trim().escape().exists()
 ];
@@ -31,17 +21,8 @@ module.exports = Router({ mergeParams: true })
         return res.status(422).json({ errors: errors.array() });
       }
       const doc = await req.catalog.UpdateProduct(req.params.pid, {
-        price: req.body.price,
-        description: req.body.description,
-        display_name: req.body.display_name,
-        shortcode: req.body.shortcode,
-        disabled: req.body.disabled,
-        permanent_disable: false,
+        name: req.body.name,
         ordinal: req.body.ordinal,
-        externalIDs: {
-          revelID: req.body.revelID,
-          squareID: req.body.squareID
-        },
         modifiers: req.body.modifiers,
         category_ids: req.body.category_ids,
       });

@@ -5,10 +5,13 @@ const WCatalogItemSchema = require("../WCatalogItemSchema");
 var WOptionSchema = new Schema({
   // inheritance by composition
   // the base catalog item
-  catalog_item: { 
+  item: { 
     type: WCatalogItemSchema, 
     required: true 
   },
+
+  //TODO: remove in future version
+  catalog_item: WCatalogItemSchema,
 
   // placement index
   ordinal: {

@@ -1,13 +1,11 @@
 const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
-const WCatalogItemSchema = require("../WCatalogItemSchema");
 
 // represents a class of products that can be made and inserted into the catalog
 var WProductSchema = new Schema({
 
-  item: { 
-    type: WCatalogItemSchema,
-    required: true 
+  name: { type: String,
+    required: true
   },
 
   // ordinal

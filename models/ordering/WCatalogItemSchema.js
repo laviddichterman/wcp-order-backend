@@ -35,7 +35,14 @@ var WCatalogItemSchema = new Schema({
   },
 
   // flag to temporarily turn off this product and any products that contain this
-  disabled: Boolean,
+  // start and end are epoch times in the local timezone
+  // special values: 
+  //   start > end means generally disabled
+  //   disabled not defined: means enabled
+  disabled: {
+    start: Number,
+    end: Number
+  },
 
   // flag to PERMANENTLY turn off this product
   permanent_disable: Boolean

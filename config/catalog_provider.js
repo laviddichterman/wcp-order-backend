@@ -1,7 +1,6 @@
 const WDateUtils = require("@wcp/wcpshared");
 const logger = require('../logging');
 
-
 const ReduceArrayToMapByKey = function(xs, key) {
   const iv = {};
   return xs.reduce((obj, item) => {
@@ -82,6 +81,31 @@ class CatalogProvider {
     this.#products = [];
     this.#product_instances = [];
     this.#catalog = CatalogGenerator([], [], [], [], []);
+  }
+
+  // for any products with an item, move the name 
+  CatalogMigrate = async () => { 
+    const products_update = await this.#dbconn.WProductSchema.updateMany(
+      { "item.display_name": { $exists: true }}, 
+      { $rename: { "item.display_name": "name"} });
+    if (products_update.nModified > 0) {
+      logger.debug(`Updated ${products_update.nModified} products to new catalog.`);
+      await this.SyncProducts();
+    }
+    else {
+      logger.info("Product DB already migrated");
+    }
+    const options_update = await this.#dbconn.WOptionSchema.updateMany(
+      { catalog_item: { $exists: true }}, 
+      { $rename: { "catalog_item": "item"} });
+    if (options_update.nModified > 0) {
+      logger.debug(`Updated ${options_update.nModified} Options to new catalog.`);
+      await this.SyncOptions();
+    }
+    else {
+      logger.info("Option DB already migrated");
+    }
+
   }
 
   get Categories() {
@@ -181,6 +205,8 @@ class CatalogProvider {
     await this.SyncProducts();
 
     await this.SyncProductInstances();
+
+    await this.CatalogMigrate();
 
     this.RecomputeCatalog();
   };
@@ -480,14 +506,8 @@ class CatalogProvider {
   }
 
   CreateProduct = async ({
-    display_name, 
-    description, 
-    price, 
-    shortcode, 
-    disabled, 
+    name, 
     ordinal, 
-    revelID, 
-    squareID, 
     modifiers,
     category_ids
   }) => {
@@ -499,18 +519,7 @@ class CatalogProvider {
     }
 
     const doc = new this.#dbconn.WProductSchema({
-      item: {
-        price: price,
-        description: description,
-        display_name: display_name,
-        shortcode: shortcode,
-        disabled: disabled,
-        permanent_disable: false,
-        externalIDs: {
-          revelID: revelID,
-          squareID: squareID
-        }
-      },
+      name: name,
       ordinal: ordinal,
       modifiers: modifiers,
       category_ids: category_ids
@@ -523,32 +532,15 @@ class CatalogProvider {
   };
 
   UpdateProduct = async ( pid, {
-    display_name, 
-    description, 
-    price, 
-    shortcode, 
-    disabled, 
+    name, 
     ordinal, 
-    revelID, 
-    squareID, 
     modifiers,
     category_ids}) => {
     try {
       const updated = await this.#dbconn.WProductSchema.findByIdAndUpdate(
         pid, 
         {
-          item: {
-            price: price,
-            description: description,
-            display_name: display_name,
-            shortcode: shortcode,
-            disabled: disabled,
-            permanent_disable: false,
-            externalIDs: {
-              revelID: revelID,
-              squareID: squareID
-            }
-          },
+          name: name,
           ordinal: ordinal,
           modifiers: modifiers,
           category_ids: category_ids
@@ -565,7 +557,6 @@ class CatalogProvider {
       return updated;
     } catch (err) {
       throw err;
-      return null 
     }
   };
 
@@ -587,7 +578,6 @@ class CatalogProvider {
       return doc;
     } catch (err) {
       throw err;
-      return null;
     }
   }
   
@@ -668,7 +658,6 @@ class CatalogProvider {
       return updated;
     } catch (err) {
       throw err;
-      return null 
     }
   };
 
@@ -685,11 +674,8 @@ class CatalogProvider {
       return doc;
     } catch (err) {
       throw err;
-      return null;
     }
   }
-  
-  
 }
 
 module.exports = ({ dbconn, socketRO, socketAUTH }) => {

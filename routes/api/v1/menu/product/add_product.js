@@ -27,17 +27,8 @@ module.exports = Router({ mergeParams: true })
         return res.status(422).json({ errors: errors.array() });
       }
       const newproduct = await req.catalog.CreateProduct({
-        price: req.body.price,
-        description: req.body.description,
-        display_name: req.body.display_name,
-        shortcode: req.body.shortcode,
-        disabled: req.body.disabled,
-        permanent_disable: false,
+        name: req.body.display_name,
         ordinal: req.body.ordinal,
-        externalIDs: {
-          revelID: req.body.revelID,
-          squareID: req.body.squareID
-        },
         modifiers: req.body.modifiers,
         category_ids: req.body.category_ids,
       });
