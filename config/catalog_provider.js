@@ -83,31 +83,6 @@ class CatalogProvider {
     this.#catalog = CatalogGenerator([], [], [], [], []);
   }
 
-  // for any products with an item, move the name 
-  CatalogMigrate = async () => { 
-    const products_update = await this.#dbconn.WProductSchema.updateMany(
-      { "item.display_name": { $exists: true }}, 
-      { $rename: { "item.display_name": "name"} });
-    if (products_update.nModified > 0) {
-      logger.debug(`Updated ${products_update.nModified} products to new catalog.`);
-      await this.SyncProducts();
-    }
-    else {
-      logger.info("Product DB already migrated");
-    }
-    const options_update = await this.#dbconn.WOptionSchema.updateMany(
-      { catalog_item: { $exists: true }}, 
-      { $rename: { "catalog_item": "item"} });
-    if (options_update.nModified > 0) {
-      logger.debug(`Updated ${options_update.nModified} Options to new catalog.`);
-      await this.SyncOptions();
-    }
-    else {
-      logger.info("Option DB already migrated");
-    }
-
-  }
-
   get Categories() {
     return this.#categories;
   }
@@ -191,8 +166,7 @@ class CatalogProvider {
     this.#catalog = CatalogGenerator(this.#categories, this.#modifier_types, this.#options, this.#products, this.#product_instances);
   }
 
-  Bootstrap = async () => {
-
+  Bootstrap = async (cb) => {
     // load catalog from DB, do not push to clients as that'll be handled when a new client connects
     logger.info("Loading catalog from database...");
 
@@ -206,9 +180,11 @@ class CatalogProvider {
 
     await this.SyncProductInstances();
 
-    await this.CatalogMigrate();
-
     this.RecomputeCatalog();
+
+    if (cb) {
+      return await cb();
+    }
   };
 
   CreateCategory = async ({description, name, ordinal, parent_id, subheading}) => {

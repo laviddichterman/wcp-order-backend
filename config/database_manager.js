@@ -2,7 +2,7 @@ const logger = require('../logging');
 const PACKAGE_JSON = require('../package.json');
 
 const SetVersion = async (dbconn, new_version) => { 
-  return await dbconn.DBVersionSchema.findOneAndUpdate({}, new_version);
+  return await dbconn.DBVersionSchema.findOneAndUpdate({}, new_version, {useFindAndModify: false, new: true, upsert: true});
 }
 
 MIGRATION_FUNCTIONS = {
@@ -11,7 +11,7 @@ MIGRATION_FUNCTIONS = {
     const products_update = await dbconn.WProductSchema.updateMany(
       { "item.display_name": { $exists: true }}, 
       { $rename: { "item.display_name": "name"},
-        $unset: {}
+        $unset: { item: "" }
      });
     if (products_update.nModified > 0) {
       logger.debug(`Updated ${products_update.nModified} products to new catalog.`);
@@ -20,7 +20,7 @@ MIGRATION_FUNCTIONS = {
       logger.info("Product DB already migrated");
     }
     // move catalog_item to item in WOptionSchema
-    const options_update = await this.#dbconn.WOptionSchema.updateMany(
+    const options_update = await dbconn.WOptionSchema.updateMany(
       { catalog_item: { $exists: true }}, 
       { $rename: { "catalog_item": "item"} });
     if (options_update.nModified > 0) {
@@ -30,24 +30,24 @@ MIGRATION_FUNCTIONS = {
       logger.info("Option DB already migrated");
     }
 
-    //TODO: change disabled flag from bool to numbers
-    const products_update = await dbconn.WProductSchema.updateMany(
-      { "item.display_name": { $exists: true }}, 
-      { $rename: { "item.display_name": "name"} });
-    if (products_update.nModified > 0) {
-      logger.debug(`Updated ${products_update.nModified} products to new catalog.`);
-      await this.SyncProducts();
-    }
+    // //TODO: change disabled flag from bool to numbers
+    // const products_update = await dbconn.WProductSchema.updateMany(
+    //   { "item.display_name": { $exists: true }}, 
+    //   { $rename: { "item.display_name": "name"} });
+    // if (products_update.nModified > 0) {
+    //   logger.debug(`Updated ${products_update.nModified} products to new catalog.`);
+    //   await this.SyncProducts();
+    // }
   }]
 }
 
-class DatabaseVersionManager {
+class DatabaseManager {
   #dbconn;
   constructor(dbconn) {
     this.#dbconn = dbconn;
   }
 
-  Bootstrap = async () => {
+  Bootstrap = async (cb) => {
     const [VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH] = PACKAGE_JSON.version.split(".", 3).map(x => parseInt(x));
     const VERSION_PACKAGE = { major: VERSION_MAJOR, minor: VERSION_MINOR, patch: VERSION_PATCH };
 
@@ -57,11 +57,11 @@ class DatabaseVersionManager {
     var current_db_version = "0.0.0";
 
     const db_version = await this.#dbconn.DBVersionSchema.find({});
-    if (db_version.length >= 1) {
+    if (db_version.length > 1) {
       logger.error(`Found more than one DB version entry: ${JSON.stringify(db_version)}, deleting all.`);
       await this.#dbconn.DBVersionSchema.deleteMany({});
     }
-    else {
+    else if (db_version.length === 1) {
       current_db_version = `${db_version[0].major}.${db_version[0].minor}.${db_version[0].patch}`;
     }
 
@@ -82,6 +82,10 @@ class DatabaseVersionManager {
       }
     }
 
+    logger.info("Database upgrade checks completed.");
+    if (cb) {
+      return await cb();
+    }
   };
 
 
