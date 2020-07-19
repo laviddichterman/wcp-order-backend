@@ -19,10 +19,14 @@ const { /*CheckJWT,*/ SocketIoJwtAuthenticateAndAuthorize } = require('./config/
 //const jwtAuthz = require('express-jwt-authz');
 
 const DatabaseConnection = require('./create_database')({ logger })
+const DatabaseVersionManager = require("./config/database_version_manager")({ dbconn: DatabaseConnection });
 const DataProvider = require("./config/dataprovider")({ dbconn: DatabaseConnection });
 const CatalogProvider = require("./config/catalog_provider")({socketRO: socket_ro, dbconn: DatabaseConnection});
 const GoogleProvider = require("./config/google");
 const SquareProvider = require("./config/square");
+
+// needs to run first
+DatabaseVersionManager.Bootstrap();
 
 DataProvider.BootstrapDatabase(() => {
   GoogleProvider.BootstrapProvider(DataProvider);
