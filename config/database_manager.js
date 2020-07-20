@@ -6,7 +6,7 @@ const SetVersion = async (dbconn, new_version) => {
 }
 
 MIGRATION_FUNCTIONS = {
-  "0.0.0": [{ major: 0, minor: 2, patch: 0 }, async (dbconn) => { 
+  "0.0.0": [{ major: 0, minor: 2, patch: 1 }, async (dbconn) => { 
     // for any products with an item, move the name 
     const products_update = await dbconn.WProductSchema.updateMany(
       { "item.display_name": { $exists: true }}, 
@@ -30,14 +30,13 @@ MIGRATION_FUNCTIONS = {
       logger.info("Option DB already migrated");
     }
 
-    // //TODO: change disabled flag from bool to numbers
-    // const products_update = await dbconn.WProductSchema.updateMany(
-    //   { "item.display_name": { $exists: true }}, 
-    //   { $rename: { "item.display_name": "name"} });
-    // if (products_update.nModified > 0) {
-    //   logger.debug(`Updated ${products_update.nModified} products to new catalog.`);
-    //   await this.SyncProducts();
-    // }
+    // change disabled flag from bool to numbers
+    const product_instance_disable_update = await dbconn.WProductInstanceSchema.updateMany(
+      { "item.disabled": true }, 
+      { "item.disabled": { start: 1, end: 0 } });
+    if (product_instance_disable_update.nModified > 0) {
+      logger.debug(`Updated ${product_instance_disable_update.nModified} products to new catalog.`);
+    }
   }]
 }
 

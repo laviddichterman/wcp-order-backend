@@ -15,25 +15,24 @@ const socket_auth = io.of("/nsAuth");
 const socket_ro = io.of("/nsRO");
 
 const PORT = process.env.PORT || 4001;
-const { /*CheckJWT,*/ SocketIoJwtAuthenticateAndAuthorize } = require('./config/authorization');
+const { SocketIoJwtAuthenticateAndAuthorize } = require('./config/authorization');
 //const jwtAuthz = require('express-jwt-authz');
 
 const DatabaseConnection = require('./create_database')({ logger })
-const DatabaseVersionManager = require("./config/database_version_manager")({ dbconn: DatabaseConnection });
+const DatabaseManager = require("./config/database_manager")({ dbconn: DatabaseConnection });
 const DataProvider = require("./config/dataprovider")({ dbconn: DatabaseConnection });
 const CatalogProvider = require("./config/catalog_provider")({socketRO: socket_ro, dbconn: DatabaseConnection});
 const GoogleProvider = require("./config/google");
 const SquareProvider = require("./config/square");
 
 // needs to run first
-DatabaseVersionManager.Bootstrap();
-
-DataProvider.BootstrapDatabase(() => {
-  GoogleProvider.BootstrapProvider(DataProvider);
-  SquareProvider.BootstrapProvider(DataProvider);
+DatabaseManager.Bootstrap(async () => {
+  DataProvider.Bootstrap(async () => {
+    GoogleProvider.BootstrapProvider(DataProvider);
+    SquareProvider.BootstrapProvider(DataProvider);
+  });
+  CatalogProvider.Bootstrap();  
 });
-
-CatalogProvider.Bootstrap();
 
 app.use(cors());
 app.use(bodyParser.json());
