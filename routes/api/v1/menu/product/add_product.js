@@ -9,7 +9,12 @@ const ValidationChain = [
   body('shortcode').trim().escape().exists(),
   body('revelID').trim().escape(),
   body('squareID').trim().escape(),
-  body('disabled').toBoolean(true),
+  body('disabled').custom((value) => {
+    if (value === null || ("start" in value && "end" in value && Number.isInteger(value.start) && Number.isInteger(value.end))) {
+      return true;
+    }
+    throw new Error("Disabled value misformed");
+  }), 
   //body('permanent_disable').toBoolean(true),
   body('ordinal').exists().isInt({min: 0, max:64}),
   body('price.amount').isInt({ min: 0 }).exists(),
@@ -27,8 +32,17 @@ module.exports = Router({ mergeParams: true })
         return res.status(422).json({ errors: errors.array() });
       }
       const newproduct = await req.catalog.CreateProduct({
-        name: req.body.display_name,
+        price: req.body.price,
+        description: req.body.description,
+        display_name: req.body.display_name,
+        shortcode: req.body.shortcode,
+        disabled: req.body.disabled,
+        permanent_disable: false,
         ordinal: req.body.ordinal,
+        externalIDs: {
+          revelID: req.body.revelID,
+          squareID: req.body.squareID
+        },
         modifiers: req.body.modifiers,
         category_ids: req.body.category_ids,
       });

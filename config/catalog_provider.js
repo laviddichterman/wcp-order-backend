@@ -51,14 +51,15 @@ const ModifierTypeMapGenerator = (modifier_types, options) => {
   return modifier_types_map;
 };
 
-const CatalogGenerator = (categories, modifier_types, options, products, product_instances) => {
+const CatalogGenerator = (categories, modifier_types, options, products, product_instances, apiver) => {
   const modifier_types_map = ModifierTypeMapGenerator(modifier_types, options);
   const [category_map, product_map] = CatalogMapGenerator(categories, products, product_instances);
   return { 
     modifiers: modifier_types_map,
     categories: category_map,
     products: product_map,
-    version: Date.now().toString(36).toUpperCase()
+    version: Date.now().toString(36).toUpperCase(),
+    api: apiver,
   };
 }
 
@@ -72,6 +73,7 @@ class CatalogProvider {
   #products;
   #product_instances;
   #catalog;
+  #apiver;
   constructor(dbconn, socketRO) {
     this.#dbconn = dbconn;
     this.#socketRO = socketRO;
@@ -80,7 +82,9 @@ class CatalogProvider {
     this.#options = [];
     this.#products = [];
     this.#product_instances = [];
+    this.#apiver = { major: 0, minor: 0, patch: 0};
     this.#catalog = CatalogGenerator([], [], [], [], []);
+    
   }
 
   get Categories() {
@@ -163,12 +167,14 @@ class CatalogProvider {
   }
 
   RecomputeCatalog = () => {
-    this.#catalog = CatalogGenerator(this.#categories, this.#modifier_types, this.#options, this.#products, this.#product_instances);
+    this.#catalog = CatalogGenerator(this.#categories, this.#modifier_types, this.#options, this.#products, this.#product_instances, this.#apiver);
   }
 
   Bootstrap = async (cb) => {
     // load catalog from DB, do not push to clients as that'll be handled when a new client connects
     logger.info("Loading catalog from database...");
+
+    this.#apiver = await this.#dbconn.DBVersionSchema.findOne().exec()
 
     await this.SyncCategories();
 
@@ -370,7 +376,7 @@ class CatalogProvider {
     }
 
     const doc = new this.#dbconn.WOptionSchema({
-      catalog_item: {
+      item: {
         price: {
           amount: price.amount,
           currency: price.currency,
@@ -419,7 +425,7 @@ class CatalogProvider {
       const updated = await this.#dbconn.WOptionSchema.findByIdAndUpdate(
         mo_id, 
         {
-          catalog_item: {
+          item: {
             price: {
               amount: price.amount,
               currency: price.currency,
@@ -482,8 +488,14 @@ class CatalogProvider {
   }
 
   CreateProduct = async ({
-    name, 
+    display_name, 
+    description, 
+    price, 
+    shortcode, 
+    disabled, 
     ordinal, 
+    revelID, 
+    squareID, 
     modifiers,
     category_ids
   }) => {
@@ -495,8 +507,19 @@ class CatalogProvider {
     }
 
     const doc = new this.#dbconn.WProductSchema({
-      name: name,
-      ordinal: ordinal,
+      item: {
+        price: price,
+        description: description,
+        display_name: display_name,
+        shortcode: shortcode,
+        disabled: disabled,
+        permanent_disable: false,
+        ordinal: ordinal,
+        externalIDs: {
+          revelID: revelID,
+          squareID: squareID
+        }
+      },
       modifiers: modifiers,
       category_ids: category_ids
     });    
@@ -508,16 +531,33 @@ class CatalogProvider {
   };
 
   UpdateProduct = async ( pid, {
-    name, 
+    display_name, 
+    description, 
+    price, 
+    shortcode, 
+    disabled, 
     ordinal, 
+    revelID, 
+    squareID, 
     modifiers,
     category_ids}) => {
     try {
       const updated = await this.#dbconn.WProductSchema.findByIdAndUpdate(
         pid, 
         {
-          name: name,
-          ordinal: ordinal,
+          item: {
+            price: price,
+            description: description,
+            display_name: display_name,
+            shortcode: shortcode,
+            disabled: disabled,
+            permanent_disable: false,
+            ordinal: ordinal,
+            externalIDs: {
+              revelID: revelID,
+              squareID: squareID
+            }
+          },
           modifiers: modifiers,
           category_ids: category_ids
         },

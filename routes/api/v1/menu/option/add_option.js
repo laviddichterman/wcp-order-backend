@@ -10,7 +10,12 @@ const ValidationChain = [
   body('shortcode').trim().escape().exists(),
   body('revelID').trim().escape(),
   body('squareID').trim().escape(),
-  body('disabled').toBoolean(true),
+  body('disabled').custom((value) => {
+    if (value === null || ("start" in value && "end" in value && Number.isInteger(value.start) && Number.isInteger(value.end))) {
+      return true;
+    }
+    throw new Error("Disabled value misformed");
+  }),
   //body('permanent_disable').toBoolean(true),
   body('price.amount').isInt({min: 0, max:100000}).exists(),
   body('price.currency').exists().isLength({min:3, max: 3}).isIn(['USD']),

@@ -6,19 +6,7 @@ const SetVersion = async (dbconn, new_version) => {
 }
 
 MIGRATION_FUNCTIONS = {
-  "0.0.0": [{ major: 0, minor: 2, patch: 1 }, async (dbconn) => { 
-    // for any products with an item, move the name 
-    const products_update = await dbconn.WProductSchema.updateMany(
-      { "item.display_name": { $exists: true }}, 
-      { $rename: { "item.display_name": "name"},
-        $unset: { item: "" }
-     });
-    if (products_update.nModified > 0) {
-      logger.debug(`Updated ${products_update.nModified} products to new catalog.`);
-    }
-    else {
-      logger.info("Product DB already migrated");
-    }
+  "0.0.0": [{ major: 0, minor: 2, patch: 2 }, async (dbconn) => { 
     // move catalog_item to item in WOptionSchema
     const options_update = await dbconn.WOptionSchema.updateMany(
       { catalog_item: { $exists: true }}, 
@@ -31,13 +19,66 @@ MIGRATION_FUNCTIONS = {
     }
 
     // change disabled flag from bool to numbers
+    // TODO BEFORE DEPLOYING, THIS NEEDS TO ITERATE OVER ALL DISABLED PRODUCT CLASSES AND 
+    const products_update = await dbconn.WProductSchema.updateMany(
+      { "item.disabled": true }, 
+      { "item.disabled": { start: 1, end: 0 } });
+    if (products_update.nModified > 0) {
+      logger.debug(`Updated ${products_update.nModified} products to new disabled flag.`);
+    }
+    else {
+      logger.info("Product DB already migrated");
+    }
     const product_instance_disable_update = await dbconn.WProductInstanceSchema.updateMany(
       { "item.disabled": true }, 
       { "item.disabled": { start: 1, end: 0 } });
     if (product_instance_disable_update.nModified > 0) {
-      logger.debug(`Updated ${product_instance_disable_update.nModified} products to new catalog.`);
+      logger.debug(`Updated ${product_instance_disable_update.nModified} product instances to new disable flag.`);
     }
-  }]
+    const option_disable_update = await dbconn.WOptionSchema.updateMany(
+      { "item.disabled": true }, 
+      { "item.disabled": { start: 1, end: 0 } });
+    if (option_disable_update.nModified > 0) {
+      logger.debug(`Updated ${option_disable_update.nModified} Options to new disable flag.`);
+    }
+  }],
+  "0.2.1": [{ major: 0, minor: 2, patch: 2 }, async (dbconn) => { 
+    // for any products with an item, move the name
+    const products_update = await dbconn.WProductSchema.updateMany(
+      { "name": { $exists: true }}, 
+      { $rename: { "name": "item.display_name"},
+     });
+    if (products_update.nModified > 0) {
+      logger.debug(`Updated ${products_update.nModified} products to new catalog.`);
+    }
+    else {
+      logger.info("Product DB already migrated");
+    }
+
+    // change disabled flag from bool to numbers
+    const products_disable_update = await dbconn.WProductSchema.updateMany(
+      { "item.disabled": true }, 
+      { "item.disabled": { start: 1, end: 0 } });
+    if (products_disable_update.nModified > 0) {
+      logger.debug(`Updated ${products_disable_update.nModified} products to new disabled flag.`);
+    }
+    else {
+      logger.info("Product DB already migrated");
+    }
+    const product_instance_disable_update = await dbconn.WProductInstanceSchema.updateMany(
+      { "item.disabled": true }, 
+      { "item.disabled": { start: 1, end: 0 } });
+    if (product_instance_disable_update.nModified > 0) {
+      logger.debug(`Updated ${product_instance_disable_update.nModified} product instances to new disable flag.`);
+    }
+    const option_disable_update = await dbconn.WOptionSchema.updateMany(
+      { "item.disabled": true }, 
+      { "item.disabled": { start: 1, end: 0 } });
+    if (option_disable_update.nModified > 0) {
+      logger.debug(`Updated ${option_disable_update.nModified} Options to new disable flag.`);
+    }
+  }],
+
 }
 
 class DatabaseManager {

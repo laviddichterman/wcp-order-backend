@@ -14,11 +14,14 @@ const ValidationChain = [
   body('shortcode').trim().escape(),
   body('revelID').trim().escape(),
   body('squareID').trim().escape(),
-  // don't sanitize this to boolean, but validate that it is a boolean
-  body('disabled').isBoolean(true),
-  // don't sanitize this to boolean, but validate that it is a boolean
+  body('disabled').custom((value) => {
+    if (value === null || ("start" in value && "end" in value && Number.isInteger(value.start) && Number.isInteger(value.end))) {
+      return true;
+    }
+    throw new Error("Disabled value misformed");
+  }),
   // TODO: what doin with this? body('permanent_disable').isBoolean(true),
-  body('price.amount').isInt({min: 0, max:100000}),
+  body('price.amount').isInt({min: 0}),
   body('price.currency').isLength({min:3, max: 3}).isIn(['USD']),
   body('ordinal').isInt({min: 0, max:64}),
   body('enable_function_name').trim().escape().isAscii(),
