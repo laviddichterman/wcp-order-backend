@@ -10,9 +10,6 @@ var WOptionSchema = new Schema({
     required: true 
   },
 
-  //TODO: remove in future version
-  catalog_item: WCatalogItemSchema,
-
   // placement index
   ordinal: {
     type: Number,
