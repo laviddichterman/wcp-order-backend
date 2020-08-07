@@ -10,6 +10,9 @@ const ValidationChain = [
   body('max_selected').optional({nullable: true}).isInt({min: 0}),
   body('revelID').trim().escape(),
   body('squareID').trim().escape(),
+  body('display_flags.omit_section_if_no_available_options').toBoolean(true),
+  body('display_flags.omit_options_if_not_available').toBoolean(true),
+  body('display_flags.use_toggle_if_only_two_options').toBoolean(true),
 ];
 
 module.exports = Router({ mergeParams: true })
@@ -27,7 +30,8 @@ module.exports = Router({ mergeParams: true })
           min_selected: req.body.min_selected,
           max_selected: req.body.max_selected,
           revelID: req.body.revelID,
-          squareID: req.body.squareID
+          squareID: req.body.squareID,
+          display_flags: req.body.display_flags
         }
       );
       if (!doc) {

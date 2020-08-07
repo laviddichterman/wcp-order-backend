@@ -20,6 +20,8 @@ const ValidationChain = [
     throw new Error("Disabled value misformed");
   }),
   //body('permanent_disable').toBoolean(true),
+  body('is_base').toBoolean(true),
+  body('display_flags.skip_customization').toBoolean(true),
   body('ordinal').exists().isInt({min: 0}),
   body('price.amount').exists().isInt({ min: 0 }),
   body('price.currency').exists().isLength({ min: 3, max: 3 }).isIn(['USD']),
@@ -47,6 +49,8 @@ module.exports = Router({ mergeParams: true })
           squareID: req.body.squareID
         },
         modifiers: req.body.modifiers,
+        is_base: req.body.is_base,
+        display_flags: req.body.display_flags
       });
       if (!doc) {
         req.logger.info(`Unable to update ProductInstance: ${req.params.piid}`);

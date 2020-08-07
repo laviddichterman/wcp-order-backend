@@ -62,6 +62,8 @@ module.exports = Router({ mergeParams: true })
             revelID: req.body.revelID,
             squareID: req.body.squareID
           },
+          display_flags: {},
+          is_base: true
         });
         if (!pi) {
           req.logger.info(`Error while creating product instance for  ${newproduct._id}.`);

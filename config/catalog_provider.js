@@ -278,7 +278,7 @@ class CatalogProvider {
     }
   }
 
-  CreateModifierType = async ({name, ordinal, min_selected, max_selected, revelID, squareID}) => {
+  CreateModifierType = async ({name, ordinal, min_selected, max_selected, revelID, squareID, display_flags}) => {
     const doc = new this.#dbconn.WOptionTypeSchema({
       name: name,
       ordinal: ordinal,
@@ -287,7 +287,8 @@ class CatalogProvider {
       externalIDs: {
         revelID: revelID,
         squareID: squareID
-      }
+      },
+      display_flags
     });
     await doc.save();
     await this.SyncModifierTypes();
@@ -296,7 +297,7 @@ class CatalogProvider {
     return doc;
   };
 
-  UpdateModifierType = async ( mt_id, {name, ordinal, min_selected, max_selected, revelID, squareID}) => {
+  UpdateModifierType = async ( mt_id, {name, ordinal, min_selected, max_selected, revelID, squareID, display_flags}) => {
     try {
       const updated = await this.#dbconn.WOptionTypeSchema.findByIdAndUpdate(
         mt_id, 
@@ -308,7 +309,8 @@ class CatalogProvider {
           externalIDs: {
             revelID: revelID,
             squareID: squareID
-          }
+          },
+          display_flags
         },
         { new: true }
       ).exec();
@@ -367,7 +369,7 @@ class CatalogProvider {
     flavor_factor, 
     bake_factor, 
     can_split, 
-    enable_function_name
+    enable_function_name,
   }) => {
     // first find the Modifier Type ID in the catalog
     var option_type = this.#modifier_types.find(x => x._id.toString() === option_type_id);
@@ -606,7 +608,9 @@ class CatalogProvider {
     ordinal, 
     revelID, 
     squareID, 
-    modifiers
+    modifiers,
+    is_base,
+    display_flags
   }) => {
     const doc = new this.#dbconn.WProductInstanceSchema({
       product_id: parent_product_id,
@@ -623,7 +627,9 @@ class CatalogProvider {
         }
       },
       ordinal: ordinal,
-      modifiers: modifiers
+      modifiers: modifiers,
+      is_base,
+      display_flags
     });    
     await doc.save();
     await this.SyncProductInstances();
@@ -641,7 +647,10 @@ class CatalogProvider {
     ordinal, 
     revelID, 
     squareID, 
-    modifiers}) => {
+    modifiers,
+    is_base,
+    display_flags
+  }) => {
     try {
       const updated = await this.#dbconn.WProductInstanceSchema.findByIdAndUpdate(
         piid, 
@@ -661,6 +670,8 @@ class CatalogProvider {
           },
           ordinal: ordinal,
           modifiers: modifiers,
+          is_base,
+          display_flags
         },
         { new: true }
       ).exec();
