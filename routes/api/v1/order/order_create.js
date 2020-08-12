@@ -381,6 +381,7 @@ const ValidationChain = [
   body('totals.total').exists().isFloat({min: 0}),
   body('totals.balance').exists().isFloat({min: 0}),
   body('store_credit.amount_used').exists().isFloat({min: 0}),
+  // { CID : [<quantity, {pid, modifiers: {MID: [<placement, OID>]}}]}
   //body('products').productsValidator(),
   body('sliced').isBoolean(),
   body('special_instructions').trim().escape()

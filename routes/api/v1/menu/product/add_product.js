@@ -45,6 +45,7 @@ module.exports = Router({ mergeParams: true })
         },
         modifiers: req.body.modifiers,
         category_ids: req.body.category_ids,
+        display_flags: { flavor_max: 100, bake_max: 100, show_name_of_base_product: true }
       });
       if (!newproduct) {
         req.logger.info(`Unable to find Modifiers or Categories to create Product`);

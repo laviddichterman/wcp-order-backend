@@ -107,6 +107,10 @@ class CatalogProvider {
     return this.#product_instances;
   }
 
+  get Catalog() {
+    return this.#catalog;
+  }
+
   SyncCategories = async () => {
     // categories
     try {
@@ -495,6 +499,7 @@ class CatalogProvider {
     price, 
     shortcode, 
     disabled, 
+    display_flags,
     ordinal, 
     revelID, 
     squareID, 
@@ -516,6 +521,7 @@ class CatalogProvider {
         shortcode: shortcode,
         disabled: disabled,
         permanent_disable: false,
+        display_flags,
         ordinal: ordinal,
         externalIDs: {
           revelID: revelID,
@@ -538,6 +544,7 @@ class CatalogProvider {
     price, 
     shortcode, 
     disabled, 
+    display_flags,
     ordinal, 
     revelID, 
     squareID, 
@@ -554,6 +561,7 @@ class CatalogProvider {
             shortcode: shortcode,
             disabled: disabled,
             permanent_disable: false,
+            display_flags,
             ordinal: ordinal,
             externalIDs: {
               revelID: revelID,

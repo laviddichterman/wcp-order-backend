@@ -12,6 +12,12 @@ var WProductSchema = new Schema({
 
   // ordinal
   ordinal: Number, 
+  
+  display_flags: {
+    flavor_max: Number,
+    bake_max: Number,
+    show_name_of_base_product: Boolean
+  },
 
   modifiers: [String], // list of option_type_ids
 
