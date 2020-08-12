@@ -394,12 +394,12 @@ function sleep(milliseconds) {
 }
 
 module.exports = Router({ mergeParams: true })
-  .post('/v1/order/new', ValidationChain, async (req, res, next) => {
+  .post('/v1/order', ValidationChain, async (req, res, next) => {
     const EMAIL_ADDRESS = req.db.KeyValueConfig.EMAIL_ADDRESS;
     const STORE_NAME = req.db.KeyValueConfig.STORE_NAME;
     const STORE_CREDIT_SHEET = req.db.KeyValueConfig.STORE_CREDIT_SHEET;
 
-    req.logger.info(`Received order request: ${req.body}`);
+    req.logger.info(`Received order request: ${JSON.stringify(req.body)}`);
 
     const errors = validationResult(req);
     if (!errors.isEmpty()) {

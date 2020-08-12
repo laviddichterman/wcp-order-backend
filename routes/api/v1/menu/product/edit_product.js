@@ -13,7 +13,7 @@ const ValidationChain = [
   body('revelID').trim().escape(),
   body('squareID').trim().escape(),
   body('disabled').custom((value) => {
-    if (value === null || (typeof value === 'object' && "start" in value && "end" in value && Number.isInteger(value.start) && Number.isInteger(value.end))) {
+    if (!value || (typeof value === 'object' && "start" in value && "end" in value && Number.isInteger(value.start) && Number.isInteger(value.end))) {
       return true;
     }
     throw new Error("Disabled value misformed");

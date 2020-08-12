@@ -14,6 +14,7 @@ var WCatalogItemSchema = new Schema({
 
   // Nice, long description of the product
   // eg: House-ground spicy pork sausage
+  // This is displayed alongside any modifiers for the product
   description: String,
 
   // abbreviation used in store
