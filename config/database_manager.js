@@ -18,6 +18,11 @@ MIGRATION_FUNCTIONS = {
       logger.info("Option DB already migrated");
     }
 
+    //TODO: add display_flags dict to all products and modifiers,
+//  TODO: add is_base to the first product instance found
+//TODO: populate display_flags for product classes
+
+
     // change disabled flag from bool to numbers
     // TODO BEFORE DEPLOYING, THIS NEEDS TO ITERATE OVER ALL DISABLED PRODUCT CLASSES AND 
     const products_update = await dbconn.WProductSchema.updateMany(
