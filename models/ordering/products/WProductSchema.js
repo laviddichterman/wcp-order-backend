@@ -16,6 +16,7 @@ var WProductSchema = new Schema({
   display_flags: {
     flavor_max: Number,
     bake_max: Number,
+    bake_differential: Number,
     show_name_of_base_product: Boolean
   },
 

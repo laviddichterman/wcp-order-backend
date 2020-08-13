@@ -521,13 +521,13 @@ class CatalogProvider {
         shortcode: shortcode,
         disabled: disabled,
         permanent_disable: false,
-        display_flags,
         ordinal: ordinal,
         externalIDs: {
           revelID: revelID,
           squareID: squareID
         }
       },
+      display_flags,
       modifiers: modifiers,
       category_ids: category_ids
     });    
@@ -561,13 +561,13 @@ class CatalogProvider {
             shortcode: shortcode,
             disabled: disabled,
             permanent_disable: false,
-            display_flags,
             ordinal: ordinal,
             externalIDs: {
               revelID: revelID,
               squareID: squareID
             }
           },
+          display_flags,
           modifiers: modifiers,
           category_ids: category_ids
         },
