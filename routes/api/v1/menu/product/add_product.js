@@ -16,6 +16,10 @@ const ValidationChain = [
     throw new Error("Disabled value misformed");
   }),
   //body('permanent_disable').toBoolean(true),
+  body('display_flags.flavor_max').isFloat({min: 0}),
+  body('display_flags.flavor_min').isFloat({min: 0}),
+  body('display_flags.bake_differential_max').isFloat({min: 0}),
+  body('display_flags.show_name_of_base_product').toBoolean(true),
   body('ordinal').exists().isInt({min: 0, max:64}),
   body('price.amount').isInt({ min: 0 }).exists(),
   body('price.currency').exists().isLength({ min: 3, max: 3 }).isIn(['USD']),
@@ -45,7 +49,7 @@ module.exports = Router({ mergeParams: true })
         },
         modifiers: req.body.modifiers,
         category_ids: req.body.category_ids,
-        display_flags: { flavor_max: 100, bake_max: 100, show_name_of_base_product: true }
+        display_flags: req.body.display_flags,
       });
       if (!newproduct) {
         req.logger.info(`Unable to find Modifiers or Categories to create Product`);
