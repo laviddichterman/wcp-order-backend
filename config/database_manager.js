@@ -76,34 +76,34 @@ MIGRATION_FUNCTIONS = {
     {
       // add is_base flag to one WProductInstance
       var num_products = 0;
-      const all_products = await this.#dbconn.WProductSchema.find();
-      all_products.forEach((product) => {
-        const find_base = await dbconn.WProductInstanceSchema.findOne({ 
+      const all_products = await dbconn.WProductSchema.find();
+      all_products.forEach(async (product) => {
+        const find_base = await dbconn.WProductInstanceSchema.find({ 
           "product_id": product._id,
           "is_base": true
         });
         if (find_base.length === 0) {
-          const find_lowest = this.#dbconn.WProductInstanceSchema.findOne({ 
+          const find_base = dbconn.WProductInstanceSchema.findOne({ 
             "product_id": product._id
-          }).sort({ "ordinal": "asc" });
-          const lowest = await find_lowest;
-          const update_lowest = this.#dbconn.WProductInstanceSchema.findByIdAndUpdate(lowest._id, {"is_base": true});;
-          ++num_products;
+          }).sort({ "ordinal": "desc" });
+          const base = await find_base;
+          const update_base = await dbconn.WProductInstanceSchema.findByIdAndUpdate(base._id, {"is_base": true}, {new: true});
+          if (update_base.is_base) {
+            ++num_products;
+            logger.debug(`Updated is_base for ${product._id}.`);
+          }
+          
         }
       });
       logger.debug(`Updated total of ${num_products} product instances to having an is_base flag.`);
     }
-
-
-//  TODO: add is_base to the first product instance found
-
     // change disabled flag from bool to numbers
     // remove product class disables, moving them to the related instances
     {
       // disabling at the product level is depreciated, so we disable the instances
-      const disabled_products_find = await this.#dbconn.WProductSchema.find({ "item.disabled": true });
+      const disabled_products_find = await dbconn.WProductSchema.find({ "item.disabled": true });
       var num_products = 0;
-      disabled_products_find.forEach((product) => {
+      disabled_products_find.forEach(async (product) => {
         const product_instance_disable_update = await dbconn.WProductInstanceSchema.updateMany(
           { "product_id": product._id }, 
           { "item.disabled": { start: 1, end: 0 } });
@@ -134,43 +134,6 @@ MIGRATION_FUNCTIONS = {
       }
     }
   }],
-  "0.2.1": [{ major: 0, minor: 2, patch: 2 }, async (dbconn) => { 
-    // for any products with an item, move the name
-    const products_update = await dbconn.WProductSchema.updateMany(
-      { "name": { $exists: true }}, 
-      { $rename: { "name": "item.display_name"},
-     });
-    if (products_update.nModified > 0) {
-      logger.debug(`Updated ${products_update.nModified} products to new catalog.`);
-    }
-    else {
-      logger.info("Product DB already migrated");
-    }
-
-    // change disabled flag from bool to numbers
-    const products_disable_update = await dbconn.WProductSchema.updateMany(
-      { "item.disabled": true }, 
-      { "item.disabled": { start: 1, end: 0 } });
-    if (products_disable_update.nModified > 0) {
-      logger.debug(`Updated ${products_disable_update.nModified} products to new disabled flag.`);
-    }
-    else {
-      logger.info("Product DB already migrated");
-    }
-    const product_instance_disable_update = await dbconn.WProductInstanceSchema.updateMany(
-      { "item.disabled": true }, 
-      { "item.disabled": { start: 1, end: 0 } });
-    if (product_instance_disable_update.nModified > 0) {
-      logger.debug(`Updated ${product_instance_disable_update.nModified} product instances to new disable flag.`);
-    }
-    const option_disable_update = await dbconn.WOptionSchema.updateMany(
-      { "item.disabled": true }, 
-      { "item.disabled": { start: 1, end: 0 } });
-    if (option_disable_update.nModified > 0) {
-      logger.debug(`Updated ${option_disable_update.nModified} Options to new disable flag.`);
-    }
-  }],
-
 }
 
 class DatabaseManager {

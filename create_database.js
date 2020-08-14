@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const glob = require('glob');
 const path = require('path');
 
-const DBTABLE = process.env.DBTABLE || "wcp_05";
+const DBTABLE = process.env.DBTABLE || "wcp";
 const DBUSER = process.env.DBUSER || null;
 const DBPASS = process.env.DBPASS || null;
 const DBENDPOINT = process.env.DBENDPOINT || 'mongodb://127.0.0.1:27017';
