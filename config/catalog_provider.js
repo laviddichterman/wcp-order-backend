@@ -297,7 +297,7 @@ class CatalogProvider {
     await doc.save();
     await this.SyncModifierTypes();
     this.RecomputeCatalog();
-    this.EmitCatalog();
+    this.EmitCatalog(this.#socketRO);
     return doc;
   };
 
