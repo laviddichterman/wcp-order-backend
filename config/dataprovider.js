@@ -1,4 +1,4 @@
-const WDateUtils = require("@wcp/wcpshared");
+const { WDateUtils } = require("@wcp/wcpshared");
 const logger = require('../logging');
 const process = require('process');
 const DEFAULT_LEAD_TIMES = require("../data/leadtimeschemas.default.json");
