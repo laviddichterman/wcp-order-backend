@@ -20,7 +20,9 @@ const WProductInstanceSchema = new Schema({
   is_base: Boolean,
 
   display_flags: {
-    skip_customization: Boolean
+    hide_from_menu: Boolean,
+    skip_customization: Boolean,
+    menu_adornment: String
   },
 
   // optional catalog data if this is a catalog item

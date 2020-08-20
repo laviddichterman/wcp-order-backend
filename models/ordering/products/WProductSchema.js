@@ -17,7 +17,8 @@ var WProductSchema = new Schema({
     flavor_max: Number,
     bake_max: Number,
     bake_differential: Number,
-    show_name_of_base_product: Boolean
+    show_name_of_base_product: Boolean,
+    singular_noun: String
   },
 
   modifiers: [String], // list of option_type_ids

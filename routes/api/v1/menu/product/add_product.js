@@ -19,6 +19,7 @@ const ValidationChain = [
   body('display_flags.flavor_max').isFloat({min: 0}),
   body('display_flags.bake_max').isFloat({min: 0}),
   body('display_flags.bake_differential').isFloat({min: 0}),
+  // TODO: ensure show_name_of_base_product is TRUE if modifier list length === 0
   body('display_flags.show_name_of_base_product').toBoolean(true),
   body('ordinal').exists().isInt({min: 0, max:64}),
   body('price.amount').isInt({ min: 0 }).exists(),

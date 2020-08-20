@@ -6,6 +6,8 @@ const WOptionTypeSchema = new Schema({
   // Human readable name
   name: { type: String, required: true },
 
+  display_name: String,
+
   // external ids
   externalIDs: ExternalIDsSchema,
 
@@ -23,8 +25,16 @@ const WOptionTypeSchema = new Schema({
     omit_options_if_not_available: Boolean,
     // if there's only two modes for an option, show it as a single select
     // requires min_selected === 1 && max_selected === 1
-    use_toggle_if_only_two_options: Boolean
+    use_toggle_if_only_two_options: Boolean,
+    // if true, this modifier type will not be shown to the end user when 
+    // customizing the associated product
+    hidden: Boolean
   },
+  modifier_class: {
+    type: String,
+    enum: ['SIZE', 'ADDITION', 'SUBSTITUTION', 'REMOVAL', 'NOTE'],
+    required: true
+  }
 });
 
 module.exports = WOptionTypeSchema;

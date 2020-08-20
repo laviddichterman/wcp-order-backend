@@ -1,4 +1,3 @@
-const WDateUtils = require("@wcp/wcpshared");
 const logger = require('../logging');
 
 const ReduceArrayToMapByKey = function(xs, key) {
@@ -62,7 +61,6 @@ const CatalogGenerator = (categories, modifier_types, options, products, product
     api: apiver,
   };
 }
-
 
 class CatalogProvider {
   #dbconn;
@@ -428,6 +426,8 @@ class CatalogProvider {
     can_split, 
     enable_function_name}) => {
     try {
+       //TODO: post update: rebuild all products with the said modifier option since the ordinal might have changed
+       // 
       const updated = await this.#dbconn.WOptionSchema.findByIdAndUpdate(
         mo_id, 
         {
