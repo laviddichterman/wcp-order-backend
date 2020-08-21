@@ -1,3 +1,4 @@
+const wcpshared = require("@wcp/wcpshared");
 const logger = require('../logging');
 
 const ReduceArrayToMapByKey = function(xs, key) {
@@ -61,6 +62,8 @@ const CatalogGenerator = (categories, modifier_types, options, products, product
     api: apiver,
   };
 }
+
+
 
 class CatalogProvider {
   #dbconn;
