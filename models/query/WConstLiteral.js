@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
 
-var WConstLiteral = new Schema({
+const WConstLiteral = new Schema({
   value: Schema.Types.Mixed;
 });
 
