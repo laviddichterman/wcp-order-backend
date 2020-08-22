@@ -8,7 +8,7 @@ var WLogicalOperator = new Schema({
   operandB: WAbstractExpression,
   operator: {
     type: String,
-    enum: ['AND', 'OR', 'NOT', 'EQUALS', 'GT', 'GE', 'LT', 'LE'],
+    enum: ['AND', 'OR', 'NOT', 'EQ', 'NE', 'GT', 'GE', 'LT', 'LE'],
     required: true
   }
 });
