@@ -51,7 +51,7 @@ const ModifierTypeMapGenerator = (modifier_types, options) => {
   return modifier_types_map;
 };
 
-const CatalogGenerator = (categories, modifier_types, options, products, product_instances, apiver) => {
+const CatalogGenerator = (categories, modifier_types, options, products, product_instances, product_instance_functions, apiver) => {
   const modifier_types_map = ModifierTypeMapGenerator(modifier_types, options);
   const [category_map, product_map] = CatalogMapGenerator(categories, products, product_instances);
   return { 
@@ -59,11 +59,69 @@ const CatalogGenerator = (categories, modifier_types, options, products, product
     categories: category_map,
     products: product_map,
     version: Date.now().toString(36).toUpperCase(),
+    product_instance_functions: product_instance_functions,
     api: apiver,
   };
 }
 
+// const GenerateAbstractExpression = async (dbconn, expr) => {
+//   console.log(expr);
+//   const GenerateIfElse = async (ifElseExpr) => {
+//     return new dbconn.WIfElse({
+//       true_branch: await GenerateAbstractExpression(dbconn, ifElseExpr.true_branch),
+//       false_branch: await GenerateAbstractExpression(dbconn, ifElseExpr.false_branch),
+//       test: await GenerateAbstractExpression(dbconn, ifElseExpr.test)
+//     });
+//   }
+//   const GenerateConstLiteral = async (constLiteralexpr) => {
+//     return new dbconn.WConstLiteral({
+//       value: constLiteralexpr.value
+//     });
+//   }
+//   const GenerateModifierPlacementExtraction = async (modPlacementExpr) => {
+//     return new dbconn.WModifierPlacementExtractionOperator({
+//       mtid: modPlacementExpr.mtid,
+//       moid: modPlacementExpr.moid
+//     });
+//   }
+//   const GenerateLogicalOperator = async (logicalExpr) => {
+//     console.log(logicalExpr);
+//     return await new dbconn.WLogicalOperator({
+//       operandA: logicalExpr.operandA ? await GenerateAbstractExpression(dbconn, logicalExpr.operandA) : null,
+//       operandB: logicalExpr.operandB ? await GenerateAbstractExpression(dbconn, logicalExpr.operandB) : null,
+//       operator: logicalExpr.operator
+//     }).save();    
+//   }
 
+//   var ifElseExpr = null;
+//   var constLiteralexpr = null;
+//   var modPlacementExpr = null;
+//   var logicalExpr = null;
+//   console.log(`discrim: ${expr.discriminator}`);
+//   switch (expr.discriminator) {
+//     case 'ConstLiteral': 
+//       constLiteralexpr = await GenerateConstLiteral(expr.const_literal); 
+//       break;
+//     case 'IfElse': 
+//       ifElseExpr = await GenerateIfElse(expr.if_else); 
+//       break;
+//     case 'Logical': 
+//       logicalExpr = await GenerateLogicalOperator(expr.logical); 
+//       break;
+//     case 'ModifierPlacement': 
+//       modPlacementExpr = await GenerateModifierPlacementExtraction(expr.modifier_placement);
+//       break;
+//     default:
+//       throw "No discriminator!";
+//   }
+//   return await new dbconn.WAbstractExpression({
+//     const_literal: constLiteralexpr ? constLiteralexpr._id : null,
+//     if_else: ifElseExpr ? ifElseExpr._id : null,
+//     logical: logicalExpr ? logicalExpr._id : null,
+//     modifier_placement: modPlacementExpr ? modPlacementExpr._id : null,
+//     discriminator: expr.discriminator
+//   }).save();  
+// }
 
 class CatalogProvider {
   #dbconn;
@@ -73,6 +131,7 @@ class CatalogProvider {
   #options;
   #products;
   #product_instances;
+  #product_instance_functions;
   #catalog;
   #apiver;
   constructor(dbconn, socketRO) {
@@ -83,6 +142,7 @@ class CatalogProvider {
     this.#options = [];
     this.#products = [];
     this.#product_instances = [];
+    this.#product_instance_functions = [];
     this.#apiver = { major: 0, minor: 0, patch: 0};
     this.#catalog = CatalogGenerator([], [], [], [], []);
     
@@ -106,6 +166,10 @@ class CatalogProvider {
 
   get ProductInstances() {
     return this.#product_instances;
+  }
+
+  get ProductInstanceFunctions() {
+    return this.#product_instance_functions;
   }
 
   get Catalog() {
@@ -137,7 +201,7 @@ class CatalogProvider {
   SyncOptions = async () => {
     // options
     try {
-      this.#options = await this.#dbconn.WOptionSchema.find().exec();
+      this.#options = await this.#dbconn.WOptionSchema.find().populate("enable_function").exec();
     } catch (err) {
       logger.error(`Failed fetching options with error: ${JSON.stringify(err)}`);
       return false;
@@ -167,12 +231,23 @@ class CatalogProvider {
     return true;
   }
 
+  SyncProductInstanceFunctions = async () => {
+    // product instances
+    try {
+      this.#product_instance_functions = await this.#dbconn.WProductInstanceFunction.find().exec();
+    } catch (err) {
+      logger.error(`Failed fetching product instance functions with error: ${JSON.stringify(err)}`);
+      return false;
+    }    
+    return true;
+  }
+
   EmitCatalog = (dest) => {
     dest.emit('WCP_CATALOG', this.#catalog);
   }
 
   RecomputeCatalog = () => {
-    this.#catalog = CatalogGenerator(this.#categories, this.#modifier_types, this.#options, this.#products, this.#product_instances, this.#apiver);
+    this.#catalog = CatalogGenerator(this.#categories, this.#modifier_types, this.#options, this.#products, this.#product_instances, this.#product_instance_functions, this.#apiver);
   }
 
   Bootstrap = async (cb) => {
@@ -190,6 +265,8 @@ class CatalogProvider {
     await this.SyncProducts();
 
     await this.SyncProductInstances();
+    
+    await this.SyncProductInstanceFunctions();
 
     this.RecomputeCatalog();
 
@@ -357,7 +434,6 @@ class CatalogProvider {
       return doc;
     } catch (err) {
       throw err;
-      return null;
     }
   }
 
@@ -374,7 +450,7 @@ class CatalogProvider {
     flavor_factor, 
     bake_factor, 
     can_split, 
-    enable_function_name,
+    enable_function,
   }) => {
     // first find the Modifier Type ID in the catalog
     var option_type = this.#modifier_types.find(x => x._id.toString() === option_type_id);
@@ -405,7 +481,7 @@ class CatalogProvider {
         bake_factor: bake_factor,
         can_split: can_split,
       },
-      enable_function_name: enable_function_name
+      enable_function: enable_function
     });    
     await doc.save();
     await this.SyncOptions();
@@ -427,7 +503,7 @@ class CatalogProvider {
     flavor_factor, 
     bake_factor, 
     can_split, 
-    enable_function_name}) => {
+    enable_function}) => {
     try {
        //TODO: post update: rebuild all products with the said modifier option since the ordinal might have changed
        // 
@@ -455,7 +531,7 @@ class CatalogProvider {
             bake_factor: bake_factor,
             can_split: can_split,
           },
-          enable_function_name: enable_function_name
+          enable_function: enable_function
         },
         { new: true }
       ).exec();
@@ -714,7 +790,75 @@ class CatalogProvider {
       throw err;
     }
   }
+
+  CreateProductInstanceFunction = async ({
+    name, 
+    expression
+  }) => {
+
+    const expressions = [];
+    const doc = new this.#dbconn.WProductInstanceFunction({
+      name: name,
+      expression: expression//await GenerateAbstractExpression(this.#dbconn, expression)
+    });    
+    await doc.save();
+    await this.SyncProductInstanceFunctions();
+    this.RecomputeCatalog();
+    this.EmitCatalog(this.#socketRO);
+    return doc;
+  };
+
+  UpdateProductInstanceFunction = async ( pif_id, {
+    name, 
+    expression
+  }) => {
+    try {
+      const updated = await this.#dbconn.WProductInstanceFunction.findByIdAndUpdate(
+        pif_id, 
+        {
+          name: name,
+          expression: expression
+        },
+        { new: true }
+      ).exec();
+      if (!updated) {
+        return null;
+      }
+  
+      await this.SyncProductInstanceFunctions();
+      this.RecomputeCatalog();
+      this.EmitCatalog(this.#socketRO);
+      return updated;
+    } catch (err) {
+      throw err;
+    }
+  };
+
+  DeleteProductInstanceFunction = async ( pif_id ) => {
+    logger.debug(`Removing ${pif_id}`);
+    try {
+      const doc = await this.#dbconn.WProductInstanceFunction.findByIdAndDelete(pif_id);
+      if (!doc) {
+        return null;
+      }
+      const options_update = await this.#dbconn.WOptionSchema.updateMany(
+        { enable_function: pif_id }, 
+        { $unset: { "enable_function": ""} });
+      if (options_update.nModified > 0) {
+        logger.debug(`Removed ${doc} from ${options_update.nModified} Modifier Options.`);
+        await this.SyncOptions();
+      }
+      await this.SyncProductInstanceFunctions();
+      this.RecomputeCatalog();
+      this.EmitCatalog(this.#socketRO);
+      return doc;
+    } catch (err) {
+      throw err;
+    }
+  }
 }
+
+
 
 module.exports = ({ dbconn, socketRO, socketAUTH }) => {
   return new CatalogProvider(dbconn, socketRO, socketAUTH);

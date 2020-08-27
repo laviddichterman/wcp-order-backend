@@ -7,8 +7,8 @@ const { CheckJWT } = require('../../../../../config/authorization');
 const ValidationChain = [  
   // kinda wonky since you could potentially re-assign the modifier type here, but it's in the path
   // but we're not allowing re-assigning of the modifier type, for now.
-  param('mt_id').trim().escape().exists(), 
-  param('mo_id').trim().escape().exists(),
+  param('mt_id').trim().escape().exists().isMongoId(), 
+  param('mo_id').trim().escape().exists().isMongoId(),
   body('display_name').trim(),
   body('description').trim(),
   body('shortcode').trim().escape(),
@@ -24,7 +24,7 @@ const ValidationChain = [
   body('price.amount').isInt({min: 0}),
   body('price.currency').isLength({min:3, max: 3}).isIn(['USD']),
   body('ordinal').isInt({min: 0, max:64}),
-  body('enable_function_name').trim().escape().isAscii(),
+  body('enable_function').optional().isMongoId(),
   body('flavor_factor').isFloat({ min: 0, max: 5 }),
   body('bake_factor').isFloat({ min: 0, max: 5 }),
   // don't sanitize this to boolean, but validate that it is a boolean
@@ -50,7 +50,7 @@ module.exports = Router({ mergeParams: true })
         flavor_factor: req.body.flavor_factor, 
         bake_factor: req.body.bake_factor, 
         can_split: req.body.can_split, 
-        enable_function_name: req.body.enable_function_name
+        enable_function: req.body.enable_function
       });
       if (!doc) {
         req.logger.info(`Unable to update ModifierOption: ${req.params.mo_id}`);

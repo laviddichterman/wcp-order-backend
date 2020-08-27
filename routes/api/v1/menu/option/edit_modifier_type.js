@@ -3,7 +3,7 @@ const { param, body, validationResult } = require('express-validator');
 const { CheckJWT } = require('../../../../../config/authorization');
 
 const ValidationChain = [
-  param('mtid').trim().escape().exists(),
+  param('mtid').trim().escape().exists().isMongoId(),
   body('name').trim(),
   body('ordinal').isInt({min: 0, max:64}),
   body('min_selected').isInt({min: 0}).exists(),

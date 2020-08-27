@@ -7,8 +7,8 @@ const { param, validationResult } = require('express-validator');
 const { CheckJWT } = require('../../../../../config/authorization');
 
 const ValidationChain = [  
-  param('p_id').trim().escape().exists(),
-  param('pi_id').trim().escape().exists()
+  param('p_id').trim().escape().exists().isMongoId(),
+  param('pi_id').trim().escape().exists().isMongoId()
 ];
 
 module.exports = Router({ mergeParams: true })

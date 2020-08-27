@@ -3,7 +3,8 @@ const Schema = mongoose.Schema;
 const WAbstractExpression = require("./WAbstractExpression");
 
 const WProductInstanceFunction = new Schema({
-  expression: WAbstractExpression;
+  expression: WAbstractExpression,
+  name: String
 });
 
 module.exports = WProductInstanceFunction;

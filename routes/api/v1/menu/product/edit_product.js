@@ -6,7 +6,7 @@ const { body, param, validationResult } = require('express-validator');
 const { CheckJWT } = require('../../../../../config/authorization');
 
 const ValidationChain = [  
-  param('pid').trim().escape().exists(), 
+  param('pid').trim().escape().exists().isMongoId(), 
   body('display_name').trim(),
   body('description').trim(),
   body('shortcode').trim().escape(),

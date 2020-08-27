@@ -4,7 +4,7 @@ const { body, param, validationResult } = require('express-validator');
 const { CheckJWT } = require('../../../../../config/authorization');
 
 const ValidationChain = [  
-  param('mtid').trim().escape().exists(),
+  param('mtid').trim().escape().exists().isMongoId(),
   body('display_name').trim().exists(),
   body('description').trim(),
   body('shortcode').trim().escape().exists(),
@@ -20,7 +20,7 @@ const ValidationChain = [
   body('price.amount').isInt({min: 0, max:100000}).exists(),
   body('price.currency').exists().isLength({min:3, max: 3}).isIn(['USD']),
   body('ordinal').isInt({min: 0, max:64}).exists(),
-  body('enable_function_name').trim().escape().isAscii(),
+  body('enable_function').optional().isMongoId(),
   body('flavor_factor').isFloat({ min: 0, max: 5 }),
   body('bake_factor').isFloat({ min: 0, max: 5 }),
   body('can_split').toBoolean(true),
@@ -46,7 +46,7 @@ module.exports = Router({ mergeParams: true })
         flavor_factor: req.body.flavor_factor || 0,
         bake_factor: req.body.bake_factor || 0,
         can_split: req.body.can_split || false,
-        enable_function_name: req.body.enable_function_name || "",
+        enable_function: req.body.enable_function || "",
       });
       if (!new_option) {
         req.logger.info(`Unable to find ModifierType ${req.params.mtid} to create Modifier Option`);
