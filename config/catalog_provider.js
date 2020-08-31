@@ -64,65 +64,6 @@ const CatalogGenerator = (categories, modifier_types, options, products, product
   };
 }
 
-// const GenerateAbstractExpression = async (dbconn, expr) => {
-//   console.log(expr);
-//   const GenerateIfElse = async (ifElseExpr) => {
-//     return new dbconn.WIfElse({
-//       true_branch: await GenerateAbstractExpression(dbconn, ifElseExpr.true_branch),
-//       false_branch: await GenerateAbstractExpression(dbconn, ifElseExpr.false_branch),
-//       test: await GenerateAbstractExpression(dbconn, ifElseExpr.test)
-//     });
-//   }
-//   const GenerateConstLiteral = async (constLiteralexpr) => {
-//     return new dbconn.WConstLiteral({
-//       value: constLiteralexpr.value
-//     });
-//   }
-//   const GenerateModifierPlacementExtraction = async (modPlacementExpr) => {
-//     return new dbconn.WModifierPlacementExtractionOperator({
-//       mtid: modPlacementExpr.mtid,
-//       moid: modPlacementExpr.moid
-//     });
-//   }
-//   const GenerateLogicalOperator = async (logicalExpr) => {
-//     console.log(logicalExpr);
-//     return await new dbconn.WLogicalOperator({
-//       operandA: logicalExpr.operandA ? await GenerateAbstractExpression(dbconn, logicalExpr.operandA) : null,
-//       operandB: logicalExpr.operandB ? await GenerateAbstractExpression(dbconn, logicalExpr.operandB) : null,
-//       operator: logicalExpr.operator
-//     }).save();    
-//   }
-
-//   var ifElseExpr = null;
-//   var constLiteralexpr = null;
-//   var modPlacementExpr = null;
-//   var logicalExpr = null;
-//   console.log(`discrim: ${expr.discriminator}`);
-//   switch (expr.discriminator) {
-//     case 'ConstLiteral': 
-//       constLiteralexpr = await GenerateConstLiteral(expr.const_literal); 
-//       break;
-//     case 'IfElse': 
-//       ifElseExpr = await GenerateIfElse(expr.if_else); 
-//       break;
-//     case 'Logical': 
-//       logicalExpr = await GenerateLogicalOperator(expr.logical); 
-//       break;
-//     case 'ModifierPlacement': 
-//       modPlacementExpr = await GenerateModifierPlacementExtraction(expr.modifier_placement);
-//       break;
-//     default:
-//       throw "No discriminator!";
-//   }
-//   return await new dbconn.WAbstractExpression({
-//     const_literal: constLiteralexpr ? constLiteralexpr._id : null,
-//     if_else: ifElseExpr ? ifElseExpr._id : null,
-//     logical: logicalExpr ? logicalExpr._id : null,
-//     modifier_placement: modPlacementExpr ? modPlacementExpr._id : null,
-//     discriminator: expr.discriminator
-//   }).save();  
-// }
-
 class CatalogProvider {
   #dbconn;
   #socketRO;
@@ -133,6 +74,7 @@ class CatalogProvider {
   #product_instances;
   #product_instance_functions;
   #catalog;
+  #menu;
   #apiver;
   constructor(dbconn, socketRO) {
     this.#dbconn = dbconn;
@@ -145,7 +87,6 @@ class CatalogProvider {
     this.#product_instance_functions = [];
     this.#apiver = { major: 0, minor: 0, patch: 0};
     this.#catalog = CatalogGenerator([], [], [], [], []);
-    
   }
 
   get Categories() {
@@ -174,6 +115,10 @@ class CatalogProvider {
 
   get Catalog() {
     return this.#catalog;
+  }
+
+  get Menu() {
+    return this.#menu;
   }
 
   SyncCategories = async () => {
@@ -248,6 +193,7 @@ class CatalogProvider {
 
   RecomputeCatalog = () => {
     this.#catalog = CatalogGenerator(this.#categories, this.#modifier_types, this.#options, this.#products, this.#product_instances, this.#product_instance_functions, this.#apiver);
+    this.#menu = new wcpshared.WMenu(this.#catalog);
   }
 
   Bootstrap = async (cb) => {

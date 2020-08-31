@@ -360,6 +360,20 @@ const CreateSquareOrderAndCharge = async (logger, reference_id, balance, nonce) 
   }
 }
 
+const RebuildOrderFromDTO = (menu, cart) => {
+  const newcart = [];
+  for (var cid in cart) {
+    //[<quantity, {pid, modifiers: {MID: <placement, OID>} } >]
+    const category_cart = [];
+    cart[cid].forEach((entry) => {
+      const [quantity, product_dto] = entry;
+      category_cart.push({ quantity: quantity, product: wcpshared.WCPProductFromDTO(product_dto, menu)});
+    });
+    newcart.push({category: cid, items: category_cart });
+  }
+  return newcart;
+}
+
 const ValidationChain = [  
   body('service_option').isInt({min: 0, max:2}).exists(),
   body('customer_name').trim().escape().exists(),
@@ -386,13 +400,6 @@ const ValidationChain = [
   body('sliced').isBoolean(),
   body('special_instructions').trim().escape()
 ];
-function sleep(milliseconds) {
-  const date = Date.now();
-  let currentDate = null;
-  do {
-    currentDate = Date.now();
-  } while (currentDate - date < milliseconds);
-}
 
 module.exports = Router({ mergeParams: true })
   .post('/v1/order/new', ValidationChain, async (req, res, next) => {
@@ -434,7 +441,7 @@ module.exports = Router({ mergeParams: true })
     };
     const totals = req.body.totals;
     const store_credit = req.body.store_credit;
-    const products = req.body.products;
+    const products = RebuildOrderFromDTO(req.catalog.Menu(), req.body.products);
     const sliced = req.body.sliced || false;
     const special_instructions = req.body.special_instructions;
     let isPaid = false;
