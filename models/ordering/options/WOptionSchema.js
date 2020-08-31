@@ -43,6 +43,12 @@ var WOptionSchema = new Schema({
   // optional function object that operates on a product instance
   // and returns true if the option should be enabled.
   enable_function: { type: Schema.Types.ObjectId, ref: 'WProductInstanceFunction' },
+
+  display_flags: {
+    // supresses listing on the shortname of the end product
+    // if not the pre-populated value for the matching product instance
+    omit_from_shortname: Boolean
+  },
 });
 
 var AutoPopulate = function(next) {

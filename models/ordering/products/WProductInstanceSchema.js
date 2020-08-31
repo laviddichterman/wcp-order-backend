@@ -22,7 +22,12 @@ const WProductInstanceSchema = new Schema({
   display_flags: {
     hide_from_menu: Boolean,
     skip_customization: Boolean,
-    menu_adornment: String
+    menu_adornment: String,
+    price_display: {
+      type: String,
+      enum: ['FROM_X', 'IF_COMPLETE', 'NEVER', 'ALWAYS'],
+      required: true
+    }
   },
 
   // optional catalog data if this is a catalog item
