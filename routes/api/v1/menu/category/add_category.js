@@ -8,7 +8,9 @@ const ValidationChain = [
   body('description').trim(),
   body('subheading').trim(),
   body('ordinal').exists().isInt({min: 0}),
-  body('parent_id').trim().escape()
+  body('parent_id').trim().escape(),
+  body('display_flags.call_line_name').trim().escape(),
+  body('display_flags.call_line_display').isIn(['SHORTCODE', 'SHORTNAME'])
 ];
 
 module.exports = Router({ mergeParams: true })
@@ -23,7 +25,8 @@ module.exports = Router({ mergeParams: true })
         ordinal: req.body.ordinal,
         description: req.body.description,
         subheading: req.body.subheading,
-        parent_id: req.body.parent_id
+        parent_id: req.body.parent_id,
+        display_flags: req.body.display_flags
       });
       const location = `${req.base}${req.originalUrl}/${newcategory.id}`;
       res.setHeader('Location', location);

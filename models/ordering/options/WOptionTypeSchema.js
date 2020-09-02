@@ -32,7 +32,7 @@ const WOptionTypeSchema = new Schema({
   },
   modifier_class: {
     type: String,
-    enum: ['SIZE', 'ADD', 'SUB', 'REMOVAL', 'NOTE'],
+    enum: ['SIZE', 'ADD', 'SUB', 'REMOVAL', 'NOTE', 'PROMPT'],
     required: true
   }
 });

@@ -19,7 +19,18 @@ var WCategorySchema = new Schema({
   parent_id: String,  
 
   // subheading, optional
-  subheading: String
+  subheading: String,
+
+  display_flags: {
+    call_line_name: String,
+    call_line_display: {
+      type: String,
+      enum: ['SHORTCODE', 'SHORTNAME'],
+      required: true
+    }
+  }
+
+
 });
 
 module.exports = WCategorySchema;

@@ -104,52 +104,90 @@ const GenerateDeliverySection = (delivery_info, ishtml) => {
   return `${ishtml ? "<p><strong>" : "\n"}Delivery Address:${ishtml ? "</strong>":""} ${delivery_info.validated_delivery_address}${delivery_unit_info}${delivery_instructions}${ishtml ? "</p>" : ""}`;
 }
 
-const EventTitleStringBuilder = (service, customer, products, special_instructions, sliced, ispaid) => {
+const EventTitleStringBuilder = (CATALOG, service, customer, cart, special_instructions, sliced, ispaid) => {
   // TODO: need to figure out products serialization
   const SERVICE_SHORTHAND = ["P", "DINE", "DELIVER"]; // TODO: move to DB
   const service_string = SERVICE_SHORTHAND[service];
 
   var has_special_instructions = special_instructions && special_instructions.length > 0;
 
-  var num_pizzas = 0;
-  var pizza_shortcodes = "";
-  for (var i in products.pizza) {
-    var quantity = products.pizza[i][0];
-    var shortcode = products.pizza[i][1].shortcode;
-    num_pizzas = num_pizzas + quantity;
-    pizza_shortcodes = pizza_shortcodes + Array(quantity + 1).join(" " + shortcode);
-  }
-  var extras_shortcodes = "";
-  for (var j in products.extras) {
-    var quantity = products.extras[j][0];
-    var shortcode = products.extras[j][1].shortcode;
-    extras_shortcodes = extras_shortcodes + " " + quantity.toString(10) + "x" + shortcode;
-  }
-
-  var pizzas_title = num_pizzas + "x" + pizza_shortcodes;
-  var extras_title = extras_shortcodes.length > 0 ? " Extras" + extras_shortcodes : "";
-
-  return `${service_string}${sliced ? " SLICED" : ""} ${customer} ${pizzas_title}${extras_title}${has_special_instructions ? " *" : ""}${ispaid ? " PAID" : " UNPAID"}`;
+  var titles = [];
+  cart.forEach(category_cart => {
+    const catid = category_cart.category;
+    if (!CATALOG.categories.hasOwnProperty(category_cart.category)) {
+      throw "Cannot find category in the catalog!";
+    }
+    const category = CATALOG.categories[category_cart.category].category;
+    const call_line_category_name_with_space = category.display_flags && category.display_flags.call_line_name ? `${category.display_flags.call_line_name} ` : ""; 
+    switch(category.display_flags?.call_line_display ?? "SHORTNAME") {
+      case "SHORTCODE": 
+        var total = 0;
+        var product_shortcodes = [];
+        category_cart.items.forEach(item => {
+          total += item.quantity;
+          product_shortcodes = product_shortcodes.concat(Array(item.quantity).fill(item.product.shortcode));
+        });    
+        titles.push(`${total.toString(10)}x ${call_line_category_name_with_space}${product_shortcodes.join(" ")}`);
+        break; 
+      default: //SHORTNAME
+        var product_shortcodes = category_cart.items.map(item => `${item.quantity}x${item.product.shortname}`);
+        titles.push(`${call_line_category_name_with_space}${product_shortcodes.join(" ")}`);
+        break; 
+    }
+  });
+  console.log(titles);
+  return `${service_string}${sliced ? " SLICED" : ""} ${customer} ${titles.join("")}${has_special_instructions ? " *" : ""}${ispaid ? " PAID" : " UNPAID"}`;
 };
-
 
 const ServiceTitleBuilder = (service_option_display_string, customer_name, service_date, service_time_interval) => {
   const display_service_time_interval = DateTimeIntervalToDisplayServiceInterval(service_time_interval);
   return `${service_option_display_string} for ${customer_name} on ${service_date.format(DISPLAY_DATE_FORMAT)} at ${display_service_time_interval}`;
 }
 
-const GenerateDisplayCartStringListFromProducts = (products) => {
-  return products.pizza.map(x=> `${x[0]}x: ${x[1].name}`).concat(products.extras.map(x=> `${x[0]}x: ${x[1].name}`));
+const GenerateDisplayCartStringListFromProducts = (cart) => {
+  const display_cart_string_list = [];
+  cart.forEach((category_cart) => {
+    category_cart.items.forEach((item) => {
+      display_cart_string_list.push(`${item.quantity}x: ${item.product.name}`)
+    });
+  });
+  console.log(display_cart_string_list);
+  return display_cart_string_list;
 }
 
-const GenerateShortCartFromProducts = (products, sliced) => {
-  const pizzas_section = [["Pizzas", products.pizza.map(x=> `${x[0]}x: ${x[1].shortname}${sliced ? " SLICED" : ""}`)]];
-  return products.extras.length > 0 ? pizzas_section.concat([["Extras", products.extras.map(x=> `${x[0]}x: ${x[1].name}`)]]) : pizzas_section;
+const GenerateShortCartFromFullCart = (cart, catalog, sliced) => {
+  // TODO: the sliced part of this is a hack. need to move to a modifier that takes into account the service type
+  const short_cart = [];
+  cart.forEach((category_cart) => {
+    if (!catalog.categories.hasOwnProperty(category_cart.category)) {
+      throw "Cannot find category in the catalog!";
+    }
+    if (category_cart.items.length > 0) {
+      const category_name = catalog.categories[category_cart.category].category.name;
+      const category_shortcart = { category_name: category_name, products: category_cart.items.map(x => `${x.quantity}x: ${x.product.shortname}${sliced && category_name === "Pizza" ? " SLICED" : ""}`) };
+      short_cart.push(category_shortcart);
+    }
+  })
+}
+
+const RebuildOrderFromDTO = (menu, cart) => {
+  const newcart = [];
+  for (var cid in cart) {
+    //[<quantity, {pid, modifiers: {MID: <placement, OID>} } >]
+    const items = [];
+    cart[cid].forEach((entry) => {
+      const [quantity, product_dto] = entry;
+      items.push({ quantity: quantity, product: wcpshared.WCPProductFromDTO(product_dto, menu)});
+    });
+    newcart.push({category: cid, items: items });
+  }
+  return newcart;
 }
 
 const CreateInternalEmail = (
   STORE_NAME,
   EMAIL_ADDRESS,
+  CATALOG,
   service_type_enum,
   service_title,
   customer_name,
@@ -158,7 +196,7 @@ const CreateInternalEmail = (
   phonenum,
   user_email,
   delivery_info,
-  products,
+  cart,
   sliced,
   referral,
   special_instructions,
@@ -171,10 +209,10 @@ const CreateInternalEmail = (
   const confirmation_subject_escaped = encodeURI(service_title);
   const payment_section = isPaid ? GeneratePaymentSection(totals, payment_info, store_credit, true) : "";
   const delivery_section = GenerateDeliverySection(delivery_info, true);
-  const shortcart = GenerateShortCartFromProducts(products, sliced);
+  const shortcart = GenerateShortCartFromFullCart(cart, CATALOG, sliced);
   const special_instructions_section = special_instructions && special_instructions.length > 0 ? "<br />Special Instructions: " + special_instructions : "";
   const emailbody = `<p>From: ${customer_name} ${user_email}</p>
-<p>${shortcart.map(x=> `<strong>${x[0]}:</strong><br />${x[1].join("<br />")}`).join("<br />")}
+<p>${shortcart.map(x=> `<strong>${x.category_name}:</strong><br />${x.products.join("<br />")}`).join("<br />")}
 ${special_instructions_section}<br />
 Phone: ${phonenum}</p>
 ${moment().isSame(service_date, "day") ? "" : '<strong style="color: red;">DOUBLE CHECK THIS IS FOR TODAY BEFORE SENDING THE TICKET</strong> <br />'}
@@ -209,7 +247,7 @@ const CreateExternalEmail = (
   service_title,
   phonenum,
   user_email,
-  products,
+  cart,
   special_instructions,
   delivery_info,
   isPaid,
@@ -225,7 +263,7 @@ const CreateExternalEmail = (
   const automated_instructions = service_option_enum == 2 ? DELIVERY_BETA_AUTORESPONSE : NON_DELIVERY_AUTORESPONSE;
   const preamble = STORE_NAME === WCP ? WCP_ORDER_RESPONSE_PREAMBLE : BTP_ORDER_RESPONSE_PREAMBLE;
   const location_info = STORE_NAME === WCP ? WCP_LOCATION_INFO : BTP_LOCATION_INFO;
-  const cartstring = GenerateDisplayCartStringListFromProducts(products);
+  const cartstring = GenerateDisplayCartStringListFromProducts(cart);
   const delivery_section = GenerateDeliverySection(delivery_info, true);
   const location_section = delivery_section ? "" : `<p><strong>Location Information:</strong>
 We are located ${location_info}</p>`;
@@ -257,10 +295,11 @@ ${location_section}We thank you for your take-out and delivery business at this 
 }
 
 const CreateOrderEvent = (
+  CATALOG,
   service_option_enum,
   customer_name,
   phone_number,
-  products,
+  cart,
   special_instructions,
   sliced,
   service_time_interval,
@@ -269,16 +308,12 @@ const CreateOrderEvent = (
   totals,
   payment_info,
   store_credit) => {
-  const shortcart = GenerateShortCartFromProducts(products, sliced);
-  const calendar_event_title = EventTitleStringBuilder(service_option_enum, customer_name, products, special_instructions, sliced, isPaid);
-
+  const shortcart = GenerateShortCartFromFullCart(cart, CATALOG, sliced);
+  const calendar_event_title = EventTitleStringBuilder(CATALOG, service_option_enum, customer_name, cart, special_instructions, sliced, isPaid);
   const special_instructions_section = special_instructions && special_instructions.length > 0 ? "\nSpecial Instructions: " + special_instructions : "";
-
   const payment_section = isPaid ? "\n" + GeneratePaymentSection(totals, payment_info, store_credit, false) : "";
-
   const delivery_section = GenerateDeliverySection(delivery_info, false);
-
-  const calendar_details = `${shortcart.map(x=> `${x[0]}:\n${x[1].join("\n")}`).join("\n")}\nph: ${phone_number}${special_instructions_section}${delivery_section}${payment_section}`;
+  const calendar_details = `${shortcart.map(x=> `${x.category_name}:\n${x.products.join("\n")}`).join("\n")}\nph: ${phone_number}${special_instructions_section}${delivery_section}${payment_section}`;
 
   return GoogleProvider.CreateCalendarEvent(calendar_event_title,
     delivery_info.validated_delivery_address ? delivery_info.validated_delivery_address : "",
@@ -360,20 +395,6 @@ const CreateSquareOrderAndCharge = async (logger, reference_id, balance, nonce) 
   }
 }
 
-const RebuildOrderFromDTO = (menu, cart) => {
-  const newcart = [];
-  for (var cid in cart) {
-    //[<quantity, {pid, modifiers: {MID: <placement, OID>} } >]
-    const category_cart = [];
-    cart[cid].forEach((entry) => {
-      const [quantity, product_dto] = entry;
-      category_cart.push({ quantity: quantity, product: wcpshared.WCPProductFromDTO(product_dto, menu)});
-    });
-    newcart.push({category: cid, items: category_cart });
-  }
-  return newcart;
-}
-
 const ValidationChain = [  
   body('service_option').isInt({min: 0, max:2}).exists(),
   body('customer_name').trim().escape().exists(),
@@ -402,7 +423,7 @@ const ValidationChain = [
 ];
 
 module.exports = Router({ mergeParams: true })
-  .post('/v1/order/new', ValidationChain, async (req, res, next) => {
+  .post('/v1/order', ValidationChain, async (req, res, next) => {
     const EMAIL_ADDRESS = req.db.KeyValueConfig.EMAIL_ADDRESS;
     const STORE_NAME = req.db.KeyValueConfig.STORE_NAME;
     const STORE_CREDIT_SHEET = req.db.KeyValueConfig.STORE_CREDIT_SHEET;
@@ -441,7 +462,7 @@ module.exports = Router({ mergeParams: true })
     };
     const totals = req.body.totals;
     const store_credit = req.body.store_credit;
-    const products = RebuildOrderFromDTO(req.catalog.Menu(), req.body.products);
+    const cart = RebuildOrderFromDTO(req.catalog.Menu(), req.body.products);
     const sliced = req.body.sliced || false;
     const special_instructions = req.body.special_instructions;
     let isPaid = false;
@@ -498,7 +519,7 @@ module.exports = Router({ mergeParams: true })
         service_title,
         phone_number,
         customer_email,
-        products,
+        cart,
         special_instructions,
         delivery_info,
         isPaid,
@@ -508,6 +529,7 @@ module.exports = Router({ mergeParams: true })
       CreateInternalEmail(
         STORE_NAME,
         EMAIL_ADDRESS,
+        req.catalog.Catalog(),
         service_option_enum,
         service_title,
         customer_name,
@@ -516,7 +538,7 @@ module.exports = Router({ mergeParams: true })
         phone_number,
         customer_email,
         delivery_info,
-        products,
+        cart,
         sliced,
         referral,
         special_instructions,
