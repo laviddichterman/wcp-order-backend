@@ -21,6 +21,13 @@ var WProductSchema = new Schema({
     singular_noun: String
   },
 
+  // TODO: implement timing information across products and modifier options that
+  // informs the prep time for the product and for any additional items
+  timing: {
+    min_prep_time: Number,
+    additional_unit_prep_time: Number
+  },
+
   modifiers: [String], // list of option_type_ids
 
   // Corresponding to a WCategorySchema
