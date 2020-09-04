@@ -119,6 +119,8 @@ const EventTitleStringBuilder = (CATALOG, service, customer, cart, special_instr
     }
     const category = CATALOG.categories[category_cart.category].category;
     const call_line_category_name_with_space = category.display_flags && category.display_flags.call_line_name ? `${category.display_flags.call_line_name} ` : ""; 
+    // TODO: this is incomplete since both technically use the shortcode for now. so we don't get modifiers in the call line
+    // pending https://app.asana.com/0/1192054646278650/1192054646278651
     switch(category.display_flags?.call_line_display ?? "SHORTNAME") {
       case "SHORTCODE": 
         var total = 0;
@@ -130,13 +132,13 @@ const EventTitleStringBuilder = (CATALOG, service, customer, cart, special_instr
         titles.push(`${total.toString(10)}x ${call_line_category_name_with_space}${product_shortcodes.join(" ")}`);
         break; 
       default: //SHORTNAME
-        var product_shortcodes = category_cart.items.map(item => `${item.quantity}x${item.product.shortname}`);
+        var product_shortcodes = category_cart.items.map(item => `${item.quantity}x${item.product.shortcode}`);
         titles.push(`${call_line_category_name_with_space}${product_shortcodes.join(" ")}`);
         break; 
     }
   });
   console.log(titles);
-  return `${service_string}${sliced ? " SLICED" : ""} ${customer} ${titles.join("")}${has_special_instructions ? " *" : ""}${ispaid ? " PAID" : " UNPAID"}`;
+  return `${service_string}${sliced ? " SLICED" : ""} ${customer} ${titles.join(" ")}${has_special_instructions ? " *" : ""}${ispaid ? " PAID" : " UNPAID"}`;
 };
 
 const ServiceTitleBuilder = (service_option_display_string, customer_name, service_date, service_time_interval) => {
@@ -168,6 +170,7 @@ const GenerateShortCartFromFullCart = (cart, catalog, sliced) => {
       short_cart.push(category_shortcart);
     }
   })
+  return short_cart;
 }
 
 const RebuildOrderFromDTO = (menu, cart) => {
@@ -177,10 +180,13 @@ const RebuildOrderFromDTO = (menu, cart) => {
     const items = [];
     cart[cid].forEach((entry) => {
       const [quantity, product_dto] = entry;
-      items.push({ quantity: quantity, product: wcpshared.WCPProductFromDTO(product_dto, menu)});
+      const product = wcpshared.WCPProductFromDTO(product_dto, menu);
+      product.Initialize(menu);
+      items.push({ quantity, product });
     });
     newcart.push({category: cid, items: items });
   }
+  console.log(JSON.stringify(newcart));
   return newcart;
 }
 
@@ -462,7 +468,7 @@ module.exports = Router({ mergeParams: true })
     };
     const totals = req.body.totals;
     const store_credit = req.body.store_credit;
-    const cart = RebuildOrderFromDTO(req.catalog.Menu(), req.body.products);
+    const cart = RebuildOrderFromDTO(req.catalog.Menu, req.body.products);
     const sliced = req.body.sliced || false;
     const special_instructions = req.body.special_instructions;
     let isPaid = false;
@@ -529,7 +535,7 @@ module.exports = Router({ mergeParams: true })
       CreateInternalEmail(
         STORE_NAME,
         EMAIL_ADDRESS,
-        req.catalog.Catalog(),
+        req.catalog.Catalog,
         service_option_enum,
         service_title,
         customer_name,
@@ -549,10 +555,11 @@ module.exports = Router({ mergeParams: true })
         store_credit
       );
       CreateOrderEvent(
+        req.catalog.Catalog,
         service_option_enum,
         customer_name,
         phone_number,
-        products,
+        cart,
         special_instructions,
         sliced,
         date_time_interval,
