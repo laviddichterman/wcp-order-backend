@@ -13,6 +13,8 @@ const ValidationChain = [
   body('display_flags.omit_section_if_no_available_options').toBoolean(true),
   body('display_flags.omit_options_if_not_available').toBoolean(true),
   body('display_flags.use_toggle_if_only_two_options').toBoolean(true),
+  body('display_flags.hidden').toBoolean(true),
+  body('display_flags.modifier_class').exists().isIn(['SIZE', 'ADD', 'SUB', 'REMOVAL', 'NOTE', 'PROMPT'])
 ];
 
 module.exports = Router({ mergeParams: true })
@@ -26,12 +28,13 @@ module.exports = Router({ mergeParams: true })
         req.params.mtid,
         {
           name: req.body.name,
+          display_name: req.body.display_name,
           ordinal: req.body.ordinal,
           min_selected: req.body.min_selected,
           max_selected: req.body.max_selected,
           revelID: req.body.revelID,
           squareID: req.body.squareID,
-          display_flags: req.body.display_flags
+          display_flags: req.body.display_flags,
         }
       );
       if (!doc) {

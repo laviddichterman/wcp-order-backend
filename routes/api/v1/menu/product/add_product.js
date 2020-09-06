@@ -21,7 +21,8 @@ const ValidationChain = [
   body('display_flags.bake_differential').isFloat({min: 0}),
   // TODO: ensure show_name_of_base_product is TRUE if modifier list length === 0
   body('display_flags.show_name_of_base_product').toBoolean(true),
-  body('ordinal').exists().isInt({min: 0, max:64}),
+  body('display_flags.singular_noun').trim(),
+  body('ordinal').exists().isInt({min: 0}),
   body('price.amount').isInt({ min: 0 }).exists(),
   body('price.currency').exists().isLength({ min: 3, max: 3 }).isIn(['USD']),
   body('modifiers.*').trim().escape().exists().isMongoId(),

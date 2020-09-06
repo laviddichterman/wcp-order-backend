@@ -308,9 +308,10 @@ class CatalogProvider {
     }
   }
 
-  CreateModifierType = async ({name, ordinal, min_selected, max_selected, revelID, squareID, display_flags}) => {
+  CreateModifierType = async ({name, display_name, ordinal, min_selected, max_selected, revelID, squareID, display_flags}) => {
     const doc = new this.#dbconn.WOptionTypeSchema({
       name: name,
+      display_name: display_name,
       ordinal: ordinal,
       min_selected: min_selected, 
       max_selected: max_selected, 
@@ -327,12 +328,13 @@ class CatalogProvider {
     return doc;
   };
 
-  UpdateModifierType = async ( mt_id, {name, ordinal, min_selected, max_selected, revelID, squareID, display_flags}) => {
+  UpdateModifierType = async ( mt_id, {name, display_name, ordinal, min_selected, max_selected, revelID, squareID, display_flags}) => {
     try {
       const updated = await this.#dbconn.WOptionTypeSchema.findByIdAndUpdate(
         mt_id, 
         {
           name: name,
+          display_name: display_name,
           ordinal: ordinal,
           min_selected: min_selected, 
           max_selected: max_selected, 
@@ -399,6 +401,7 @@ class CatalogProvider {
     bake_factor, 
     can_split, 
     enable_function,
+    display_flags
   }) => {
     // first find the Modifier Type ID in the catalog
     var option_type = this.#modifier_types.find(x => x._id.toString() === option_type_id);
@@ -429,7 +432,8 @@ class CatalogProvider {
         bake_factor: bake_factor,
         can_split: can_split,
       },
-      enable_function: enable_function
+      enable_function: enable_function,
+      display_flags: display_flags
     });    
     await doc.save();
     await this.SyncOptions();
@@ -451,7 +455,8 @@ class CatalogProvider {
     flavor_factor, 
     bake_factor, 
     can_split, 
-    enable_function}) => {
+    enable_function,
+    display_flags}) => {
     try {
        //TODO: post update: rebuild all products with the said modifier option since the ordinal might have changed
        // 
@@ -479,7 +484,8 @@ class CatalogProvider {
             bake_factor: bake_factor,
             can_split: can_split,
           },
-          enable_function: enable_function
+          enable_function: enable_function,
+          display_flags: display_flags
         },
         { new: true }
       ).exec();

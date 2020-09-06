@@ -24,6 +24,7 @@ const ValidationChain = [
   body('flavor_factor').isFloat({ min: 0, max: 5 }),
   body('bake_factor').isFloat({ min: 0, max: 5 }),
   body('can_split').toBoolean(true),
+  body('display_flags.omit_from_shortname').toBoolean(true),
 ];
 
 module.exports = Router({ mergeParams: true })
@@ -47,6 +48,7 @@ module.exports = Router({ mergeParams: true })
         bake_factor: req.body.bake_factor || 0,
         can_split: req.body.can_split || false,
         enable_function: req.body.enable_function || "",
+        display_flags: req.body.display_flags,
       });
       if (!new_option) {
         req.logger.info(`Unable to find ModifierType ${req.params.mtid} to create Modifier Option`);

@@ -6,6 +6,7 @@ const WOptionTypeSchema = new Schema({
   // Human readable name
   name: { type: String, required: true },
 
+  // name override for how we display this to a customer
   display_name: String,
 
   // external ids
@@ -28,13 +29,14 @@ const WOptionTypeSchema = new Schema({
     use_toggle_if_only_two_options: Boolean,
     // if true, this modifier type will not be shown to the end user when 
     // customizing the associated product
-    hidden: Boolean
+    hidden: Boolean,
+    modifier_class: {
+      type: String,
+      enum: ['SIZE', 'ADD', 'SUB', 'REMOVAL', 'NOTE', 'PROMPT'],
+      required: true
+    }
   },
-  modifier_class: {
-    type: String,
-    enum: ['SIZE', 'ADD', 'SUB', 'REMOVAL', 'NOTE', 'PROMPT'],
-    required: true
-  }
+
 });
 
 module.exports = WOptionTypeSchema;

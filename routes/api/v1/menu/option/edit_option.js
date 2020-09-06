@@ -29,6 +29,7 @@ const ValidationChain = [
   body('bake_factor').isFloat({ min: 0, max: 5 }),
   // don't sanitize this to boolean, but validate that it is a boolean
   body('can_split').isBoolean(true), 
+  body('display_flags.omit_from_shortname').toBoolean(true),
 ];
 
 module.exports = Router({ mergeParams: true })
@@ -50,7 +51,8 @@ module.exports = Router({ mergeParams: true })
         flavor_factor: req.body.flavor_factor, 
         bake_factor: req.body.bake_factor, 
         can_split: req.body.can_split, 
-        enable_function: req.body.enable_function
+        enable_function: req.body.enable_function,
+        display_flags: req.body.display_flags,
       });
       if (!doc) {
         req.logger.info(`Unable to update ModifierOption: ${req.params.mo_id}`);
