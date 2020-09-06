@@ -30,6 +30,13 @@ const WOptionTypeSchema = new Schema({
     // if true, this modifier type will not be shown to the end user when 
     // customizing the associated product
     hidden: Boolean,
+    // if this modifier has no selected options, the name string can include reference
+    // to this modifier type by saying nothing, your choice of {display_name}, or if max_selected===1 listing the choices
+    empty_display_as: {
+      type: String,
+      enum: ['OMIT', 'YOUR_CHOICE_OF', 'LIST_CHOICES'],
+      required: true
+    },
     modifier_class: {
       type: String,
       enum: ['SIZE', 'ADD', 'SUB', 'REMOVAL', 'NOTE', 'PROMPT'],
