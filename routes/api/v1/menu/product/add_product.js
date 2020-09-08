@@ -69,7 +69,12 @@ module.exports = Router({ mergeParams: true })
             revelID: req.body.revelID,
             squareID: req.body.squareID
           },
-          display_flags: {},
+          display_flags: {
+            hide_from_menu: false,
+            skip_customization: false,
+            menu_adornment: "",
+            price_display: 'IF_COMPLETE'
+          },
           is_base: true
         });
         if (!pi) {
