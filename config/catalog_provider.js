@@ -584,6 +584,9 @@ class CatalogProvider {
     modifiers,
     category_ids}) => {
     try {
+      const old_modifiers = this.#catalog.products[pid].product.modifiers;
+      const removed_modifiers = old_modifiers.filter(x => !modifiers.includes(x));
+
       const updated = await this.#dbconn.WProductSchema.findByIdAndUpdate(
         pid, 
         {
@@ -608,6 +611,14 @@ class CatalogProvider {
       ).exec();
       if (!updated) {
         return null;
+      }
+      
+      if (removed_modifiers.length) {
+        removed_modifiers.forEach(async (mtid) => { 
+          const product_instance_update = await this.#dbconn.WProductInstanceSchema.updateMany({}, {$pull: {modifiers: {modifier_type_id: mtid}}});
+          logger.debug(`Removed ModifierType ID ${mtid} from ${product_instance_update.nModified} product instances.`);
+        });
+        await this.SyncProductInstances();
       }
 
       await this.SyncProducts();
