@@ -134,6 +134,76 @@ MIGRATION_FUNCTIONS = {
       }
     }
   }],
+  "0.2.2": [{ major: 0, minor: 2, patch: 5 }, async (dbconn) => { 
+    {
+      // add display flags to Category
+      const category_update = await dbconn.WCategorySchema.updateMany(
+        { display_flags: null }, 
+        { $set: { 
+            "display_flags.call_line_name": "",
+            "display_flags.call_line_display": "SHORTNAME"
+          } 
+        });
+      if (category_update.nModified > 0) {
+        logger.debug(`Updated ${category_update.nModified} Categories to new catalog.`);
+      }
+      else {
+        logger.warn("No categories had display_flags added");
+      }
+    }
+
+    {
+      // add display flags to WOptionSchema
+      const option_update = await dbconn.WOptionSchema.updateMany(
+        { display_flags: null }, 
+        { $set: { 
+            "display_flags.omit_from_shortname": false
+          } 
+        });
+      if (option_update.nModified > 0) {
+        logger.debug(`Updated ${option_update.nModified} modifier options to having display flags.`);
+      }
+      else {
+        logger.warn("Didn't add any display flags to modifier options");
+      }
+    }
+
+    {
+      // add display flags to WOptionTypeSchema
+      const mt_update = await dbconn.WOptionTypeSchema.updateMany(
+        { }, 
+        { $set: { 
+            "display_flags.hidden": false,
+            "display_flags.empty_display_as": "OMIT",
+            "display_flags.modifier_class": "ADD"
+          } 
+        });
+      if (mt_update.nModified > 0) {
+        logger.debug(`Updated ${mt_update.nModified} modifiers to this version's display flags.`);
+      }
+      else {
+        logger.warn("Didn't add any display flags to modifier types");
+      }
+    }
+
+    {
+      // add display flags to WProductInstanceSchema
+      const pi_update = await dbconn.WProductInstanceSchema.updateMany(
+        { }, 
+        { $set: { 
+            "display_flags.hide_from_menu": false,
+            "display_flags.menu_adornment": "",
+            "display_flags.price_display": "ALWAYS",
+          } 
+        });
+      if (pi_update.nModified > 0) {
+        logger.debug(`Updated ${pi_update.nModified} product instances to this version's display flags.`);
+      }
+      else {
+        logger.warn("Didn't add any display flags to product instances");
+      }
+    }
+  }],
 }
 
 class DatabaseManager {

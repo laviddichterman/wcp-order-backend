@@ -105,7 +105,6 @@ const GenerateDeliverySection = (delivery_info, ishtml) => {
 }
 
 const EventTitleStringBuilder = (CATALOG, service, customer, cart, special_instructions, sliced, ispaid) => {
-  // TODO: need to figure out products serialization
   const SERVICE_SHORTHAND = ["P", "DINE", "DELIVER"]; // TODO: move to DB
   const service_string = SERVICE_SHORTHAND[service];
 
@@ -137,7 +136,6 @@ const EventTitleStringBuilder = (CATALOG, service, customer, cart, special_instr
         break; 
     }
   });
-  console.log(titles);
   return `${service_string}${sliced ? " SLICED" : ""} ${customer} ${titles.join(" ")}${has_special_instructions ? " *" : ""}${ispaid ? " PAID" : " UNPAID"}`;
 };
 
@@ -153,7 +151,6 @@ const GenerateDisplayCartStringListFromProducts = (cart) => {
       display_cart_string_list.push(`${item.quantity}x: ${item.product.name}`)
     });
   });
-  console.log(display_cart_string_list);
   return display_cart_string_list;
 }
 
@@ -186,7 +183,6 @@ const RebuildOrderFromDTO = (menu, cart) => {
     });
     newcart.push({category: cid, items: items });
   }
-  console.log(JSON.stringify(newcart));
   return newcart;
 }
 
