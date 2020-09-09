@@ -120,7 +120,7 @@ const EventTitleStringBuilder = (CATALOG, service, customer, cart, special_instr
     const call_line_category_name_with_space = category.display_flags && category.display_flags.call_line_name ? `${category.display_flags.call_line_name} ` : ""; 
     // TODO: this is incomplete since both technically use the shortcode for now. so we don't get modifiers in the call line
     // pending https://app.asana.com/0/1192054646278650/1192054646278651
-    switch(category.display_flags?.call_line_display ?? "SHORTNAME") {
+    switch(category.display_flags.call_line_display ?? "SHORTNAME") {
       case "SHORTCODE": 
         var total = 0;
         var product_shortcodes = [];
