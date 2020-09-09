@@ -41,6 +41,7 @@ class SquareProvider {
       }
     };
     try {
+      logger.info(`sending order request: ${JSON.stringify(request_body)}`);
       const response = await orders_api.createOrder(this.#location_id, request_body);
       return { success: true, response: response };
     } catch (error) {
@@ -64,6 +65,7 @@ class SquareProvider {
       }
     };
     try {
+      logger.info(`sending order status change request: ${JSON.stringify(request_body)}`);
       const response = await orders_api.updateOrder(this.#location_id, square_order_id, request_body);
       return { success: true, response: response };
     } catch (error) {
@@ -94,6 +96,7 @@ class SquareProvider {
       idempotency_key: idempotency_key
     };
     try {
+      logger.info(`sending payment request: ${JSON.stringify(request_body)}`);
       const response = await payments_api.createPayment(request_body);
       return { success: true, result: response };
     } catch (error) {
