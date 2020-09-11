@@ -615,7 +615,7 @@ class CatalogProvider {
       
       if (removed_modifiers.length) {
         removed_modifiers.forEach(async (mtid) => { 
-          const product_instance_update = await this.#dbconn.WProductInstanceSchema.updateMany({}, {$pull: {modifiers: {modifier_type_id: mtid}}});
+          const product_instance_update = await this.#dbconn.WProductInstanceSchema.updateMany({ product_id: pid }, {$pull: {modifiers: {modifier_type_id: mtid}}});
           logger.debug(`Removed ModifierType ID ${mtid} from ${product_instance_update.nModified} product instances.`);
         });
         await this.SyncProductInstances();
