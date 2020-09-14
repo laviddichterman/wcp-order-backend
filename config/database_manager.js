@@ -134,15 +134,16 @@ MIGRATION_FUNCTIONS = {
       }
     }
   }],
-  "0.2.2": [{ major: 0, minor: 2, patch: 5 }, async (dbconn) => { 
+  "0.2.2": [{ major: 0, minor: 2, patch: 5 }, async (dbconn) => {
     {
       // add display flags to Category
       const category_update = await dbconn.WCategorySchema.updateMany(
-        { display_flags: null }, 
-        { $set: { 
+        { display_flags: null },
+        {
+          $set: {
             "display_flags.call_line_name": "",
             "display_flags.call_line_display": "SHORTNAME"
-          } 
+          }
         });
       if (category_update.nModified > 0) {
         logger.debug(`Updated ${category_update.nModified} Categories to new catalog.`);
@@ -155,10 +156,11 @@ MIGRATION_FUNCTIONS = {
     {
       // add display flags to WOptionSchema
       const option_update = await dbconn.WOptionSchema.updateMany(
-        { display_flags: null }, 
-        { $set: { 
+        { display_flags: null },
+        {
+          $set: {
             "display_flags.omit_from_shortname": false
-          } 
+          }
         });
       if (option_update.nModified > 0) {
         logger.debug(`Updated ${option_update.nModified} modifier options to having display flags.`);
@@ -171,12 +173,13 @@ MIGRATION_FUNCTIONS = {
     {
       // add display flags to WOptionTypeSchema
       const mt_update = await dbconn.WOptionTypeSchema.updateMany(
-        { }, 
-        { $set: { 
+        {},
+        {
+          $set: {
             "display_flags.hidden": false,
             "display_flags.empty_display_as": "OMIT",
             "display_flags.modifier_class": "ADD"
-          } 
+          }
         });
       if (mt_update.nModified > 0) {
         logger.debug(`Updated ${mt_update.nModified} modifiers to this version's display flags.`);
@@ -189,12 +192,13 @@ MIGRATION_FUNCTIONS = {
     {
       // add display flags to WProductInstanceSchema
       const pi_update = await dbconn.WProductInstanceSchema.updateMany(
-        { }, 
-        { $set: { 
+        {},
+        {
+          $set: {
             "display_flags.hide_from_menu": false,
             "display_flags.menu_adornment": "",
             "display_flags.price_display": "ALWAYS",
-          } 
+          }
         });
       if (pi_update.nModified > 0) {
         logger.debug(`Updated ${pi_update.nModified} product instances to this version's display flags.`);
@@ -203,6 +207,41 @@ MIGRATION_FUNCTIONS = {
         logger.warn("Didn't add any display flags to product instances");
       }
     }
+  }],
+  "0.2.5": [{ major: 0, minor: 2, patch: 6 }, async (dbconn) => {
+    {
+      // update price_display flag
+      const pi_update = await dbconn.WProductInstanceSchema.updateMany(
+        { "display_flags.price_display": "NEVER" },
+        {
+          $set: {
+            "display_flags.price_display": "VARIES",
+          }
+        });
+      if (pi_update.nModified > 0) {
+        logger.debug(`Updated ${pi_update.nModified} product instances from price_display NEVER to VARIES`);
+      }
+      else {
+        logger.warn("Didn't add any display flags to product instances");
+      }
+    }
+    {
+      // update price_display flag
+      const pi_update = await dbconn.WProductInstanceSchema.updateMany(
+        { "display_flags.price_display": "IF_COMPLETE" },
+        {
+          $set: {
+            "display_flags.price_display": "ALWAYS",
+          }
+        });
+      if (pi_update.nModified > 0) {
+        logger.debug(`Updated ${pi_update.nModified} product instances from price_display IF_COMPLETE to ALWAYS`);
+      }
+      else {
+        logger.warn("Didn't add any display flags to product instances");
+      }
+    }
+
   }],
 }
 

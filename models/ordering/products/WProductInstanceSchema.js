@@ -25,7 +25,7 @@ const WProductInstanceSchema = new Schema({
     menu_adornment: String,
     price_display: {
       type: String,
-      enum: ['IF_COMPLETE', 'FROM_X', 'NEVER', 'ALWAYS'],
+      enum: ['FROM_X', 'VARIES', 'ALWAYS'],
       required: true
     }
   },
