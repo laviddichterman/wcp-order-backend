@@ -47,7 +47,7 @@ const CreateExternalEmailRecipient = (EMAIL_ADDRESS, STORE_NAME, payment, sender
 const AppendToStoreCreditSheet = async (STORE_CREDIT_SHEET, payment, recipient, credit_code) => {
   const range = "CurrentWARIO!A1:M1";
   const amount = Number(payment.result.payment.total_money.amount / 100).toFixed(2);
-  const date_added = moment().format(wcpshared.DATE_STRING_INTERNAL_FORMAT);
+  const date_added = moment().format(wcpshared.WDateUtils.DATE_STRING_INTERNAL_FORMAT);
   const fields = [recipient, amount, "MONEY", amount, date_added, "WARIO", date_added, credit_code, "", "", "", "", ""];
   await GoogleProvider.AppendToSheet(STORE_CREDIT_SHEET, range, fields);
 }

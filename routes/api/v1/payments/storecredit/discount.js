@@ -29,8 +29,8 @@ const CreateExternalEmail = (EMAIL_ADDRESS, STORE_NAME, amount, recipient_name_f
 
 const AppendToStoreCreditSheet = async (STORE_CREDIT_SHEET, amount, recipient, credit_code, added_by, expiration, reason) => {
   const range = "CurrentWARIO!A1:M1";
-  const date_added = moment().format(wcpshared.DATE_STRING_INTERNAL_FORMAT);
-  const expiration_str = expiration ? expiration.format(wcpshared.DATE_STRING_INTERNAL_FORMAT) : "";
+  const date_added = moment().format(wcpshared.WDateUtils.DATE_STRING_INTERNAL_FORMAT);
+  const expiration_str = expiration ? expiration.format(wcpshared.WDateUtils.DATE_STRING_INTERNAL_FORMAT) : "";
   const fields = [recipient, amount, "DISCOUNT", amount, date_added, added_by, date_added, credit_code, expiration_str, reason, "", "", ""];
   await GoogleProvider.AppendToSheet(STORE_CREDIT_SHEET, range, fields);
 }
@@ -63,7 +63,7 @@ module.exports = Router({ mergeParams: true })
       }
       const reference_id = Date.now().toString(36).toUpperCase();
       const amount = parseFloat(Number(req.body.amount).toFixed(2));
-      const expiration = req.body.expiration ? moment(req.body.expiration, wcpshared.DATE_STRING_INTERNAL_FORMAT) : ""
+      const expiration = req.body.expiration ? moment(req.body.expiration, wcpshared.WDateUtils.DATE_STRING_INTERNAL_FORMAT) : ""
       const added_by = req.body.added_by;
       const recipient_name_first = req.body.recipient_name_first;
       const recipient_name_last = req.body.recipient_name_last;

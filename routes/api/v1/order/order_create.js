@@ -345,12 +345,12 @@ const CheckAndSpendStoreCredit = async (logger, STORE_CREDIT_SHEET, store_credit
         logger.error(`WE HAVE A CHEATER FOLKS, store credit key ${entry[7]}, expecting encoded: ${JSON.stringify(store_credit.encoded)}.`);
         return [false, [], 0];
       }
-      if (entry[8] && moment(entry[8], wcpshared.DATE_STRING_INTERNAL_FORMAT).isBefore(moment(), "day")) {
+      if (entry[8] && moment(entry[8], wcpshared.WDateUtils.DATE_STRING_INTERNAL_FORMAT).isBefore(moment(), "day")) {
         logger.error(`We have a cheater folks, store credit key ${entry[7]}, attempted to use after expiration of ${entry[8]}.`);
         return [false, [], 0];
       }
       // no shenanagains confirmed
-      const date_modified = moment().format(wcpshared.DATE_STRING_INTERNAL_FORMAT);
+      const date_modified = moment().format(wcpshared.WDateUtils.DATE_STRING_INTERNAL_FORMAT);
       const new_balance = credit_balance - store_credit.amount_used;
       const new_entry = [entry[0], entry[1], entry[2], new_balance, entry[4], entry[5], date_modified, entry[7], entry[8], entry[9], entry[10], entry[11], entry[12]];
       const new_range = `CurrentWARIO!${2 + i}:${2 + i}`;
@@ -448,7 +448,7 @@ module.exports = Router({ mergeParams: true })
     const service_option_enum = req.body.service_option;
     const service_option_display_string = req.db.Services[service_option_enum];
     const customer_name = req.body.customer_name;
-    const service_date = moment(req.body.service_date, wcpshared.DATE_STRING_INTERNAL_FORMAT);
+    const service_date = moment(req.body.service_date, wcpshared.WDateUtils.DATE_STRING_INTERNAL_FORMAT);
     const service_time = req.body.service_time; //minutes offset from beginning of day
     const date_time_interval = DateTimeIntervalBuilder(service_date, service_time, service_option_enum);
     const service_title = ServiceTitleBuilder(service_option_display_string, customer_name, service_date, date_time_interval);
