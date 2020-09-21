@@ -33,7 +33,7 @@
     "googleapis": "^52.1.0",
     "jsonwebtoken": "^8.5.1",
     "jwks-rsa": "^1.9.0",
-    "mongoose": "^5.10.4",
+    "mongoose": "^5.10.6",
     "nodemailer": "^6.4.11",
     "socket.io": "^2.3.0",
     "socketio-jwt": "^4.6.2",

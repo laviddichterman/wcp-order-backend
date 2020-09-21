@@ -24,7 +24,7 @@ const ValidationChain = [
   body('price.amount').isInt({min: 0}),
   body('price.currency').isLength({min:3, max: 3}).isIn(['USD']),
   body('ordinal').isInt({min: 0, max:64}),
-  body('enable_function').optional().isMongoId(),
+  body('enable_function').optional({nullable: true}).isMongoId(),
   body('flavor_factor').isFloat({ min: 0, max: 5 }),
   body('bake_factor').isFloat({ min: 0, max: 5 }),
   // don't sanitize this to boolean, but validate that it is a boolean

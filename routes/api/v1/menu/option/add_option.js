@@ -20,7 +20,7 @@ const ValidationChain = [
   body('price.amount').isInt({min: 0, max:100000}).exists(),
   body('price.currency').exists().isLength({min:3, max: 3}).isIn(['USD']),
   body('ordinal').isInt({min: 0, max:64}).exists(),
-  body('enable_function').optional().isMongoId(),
+  body('enable_function').optional({nullable: true}).isMongoId(),
   body('flavor_factor').isFloat({ min: 0, max: 5 }),
   body('bake_factor').isFloat({ min: 0, max: 5 }),
   body('can_split').toBoolean(true),
