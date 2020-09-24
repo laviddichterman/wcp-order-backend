@@ -73,7 +73,7 @@ module.exports = Router({ mergeParams: true })
             hide_from_menu: false,
             skip_customization: false,
             menu_adornment: "",
-            price_display: 'IF_COMPLETE'
+            price_display: 'ALWAYS'
           },
           is_base: true
         });
