@@ -28,7 +28,8 @@ const IsNativeAreaCode = function (phone, area_codes) {
 };
 
 const DateTimeIntervalBuilder = (date, time, service_type) => {
-  var date_lower = moment(date).add(time, "minutes");
+  // hack for date computation on DST transition days since we're currently not open during the time jump
+  var date_lower = moment(date).add(1, "days").subtract(1440-time, "minutes");
   var date_upper = moment(date_lower);
   // TODO NEED DELIVERY constant
   if (service_type === 2) {
