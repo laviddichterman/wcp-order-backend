@@ -47,7 +47,7 @@ module.exports = Router({ mergeParams: true })
         flavor_factor: req.body.flavor_factor || 0,
         bake_factor: req.body.bake_factor || 0,
         can_split: req.body.can_split || false,
-        enable_function: req.body.enable_function || "",
+        enable_function: req.body.enable_function,
         display_flags: req.body.display_flags,
       });
       if (!new_option) {
