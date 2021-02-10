@@ -2,6 +2,9 @@ const mongoose = require('mongoose');
 const glob = require('glob');
 const path = require('path');
 
+// don't make promises you can't keep
+mongoose.Promise = require('bluebird');
+
 const DBTABLE = process.env.DBTABLE || "wcp";
 const DBUSER = process.env.DBUSER || null;
 const DBPASS = process.env.DBPASS || null;

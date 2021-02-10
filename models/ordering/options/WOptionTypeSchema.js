@@ -41,9 +41,26 @@ const WOptionTypeSchema = new Schema({
       type: String,
       enum: ['SIZE', 'ADD', 'SUB', 'REMOVAL', 'NOTE', 'PROMPT'],
       required: true
-    }
+    },
+
+    // optional function object that operates on a product instance
+    // and returns true if the option type should be enabled.
+    enable_function: { type: Schema.Types.ObjectId, ref: 'WProductInstanceFunction' },
+
+    // string to match in the product description template, not including the brackets
+    template_string: String,
   },
 
 });
+
+var AutoPopulate = function(next) {
+  this.populate('enable_function');
+  next();
+};
+
+WOptionTypeSchema.
+  pre('findOne', AutoPopulate).
+  pre('find', AutoPopulate);
+
 
 module.exports = WOptionTypeSchema;

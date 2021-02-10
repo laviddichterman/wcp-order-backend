@@ -91,7 +91,9 @@ class GoogleProvider {
     };
     this.#smtpTransport.sendMail(mailOptions, (error, response) => {
       if (error) {
-        logger.error(error);
+        logger.error(`Email of ${mailOptions} not sent, got error: ${error}`);
+        this.#smtpTransport.close();
+        throw error;
       }
       else {
         logger.debug(`Sent mail with subject ${subject} to ${to}`);
