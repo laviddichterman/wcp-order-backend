@@ -73,6 +73,7 @@ const GenerateAutoResponseBodyEscaped = function(
 }
 
 const GeneratePaymentSection = (totals, payment_info, store_credit, ishtml) => {
+  // TODO: check that these roundings are working properly and we don't need to switch to Math.round
   const discount = store_credit && store_credit.type == "DISCOUNT" ? `\$${Number(store_credit.amount_used).toFixed(2)}` : "";
   const base_amount = "$" + Number(totals.total - totals.tip).toFixed(2);
   const tip_amount = "$" + Number(totals.tip).toFixed(2);
