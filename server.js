@@ -6,6 +6,7 @@ const moment = require('moment');
 const cors = require('cors');
 const logger = require("./logging");
 const app = express();
+const idempotency = require('express-idempotency');
 const expressWinston = require('express-winston')
 const router = require('./routes/')()
 
@@ -34,6 +35,7 @@ DatabaseManager.Bootstrap(async () => {
   CatalogProvider.Bootstrap();  
 });
 
+app.use(idempotency.idempotency());
 app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));

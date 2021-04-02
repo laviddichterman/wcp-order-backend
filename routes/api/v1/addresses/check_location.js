@@ -4,8 +4,8 @@ const Router = require('express').Router
 const Client = require("@googlemaps/google-maps-services-js").Client;
 const client = new Client({});
 const turf = require('@turf/turf');
-//const { check, validationResult } = require('express-validator');
 
+// uses the google maps services geocode api: https://developers.google.com/maps/documentation/javascript/geocoding#GeocodingAddressTypes
 module.exports = Router({ mergeParams: true })
   .get('/v1/addresses/validate', async (req, res, next) => {
     try {
