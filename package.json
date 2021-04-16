@@ -1,6 +1,6 @@
 {
   "name": "@wcp/wcp-order-backend",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "main": "server.js",
   "scripts": {
     "test": "mocha",
@@ -31,13 +31,13 @@
     "express-idempotency-mongo-adapter": "^1.0.1",
     "express-jwt": "^6.0.0",
     "express-jwt-authz": "^2.4.1",
-    "express-validator": "^6.9.2",
-    "express-winston": "^4.0.5",
+    "express-validator": "^6.10.0",
+    "express-winston": "^4.1.0",
     "googleapis": "^52.1.0",
     "jsonwebtoken": "^8.5.1",
-    "jwks-rsa": "^1.12.2",
-    "mongoose": "^5.11.15",
-    "nodemailer": "^6.4.17",
+    "jwks-rsa": "^1.12.3",
+    "mongoose": "^5.12.4",
+    "nodemailer": "^6.5.0",
     "socket.io": "^2.4.1",
     "socketio-jwt": "^4.6.2",
     "square-connect": "4.20200812.2",
@@ -45,7 +45,7 @@
     "winston": "^3.3.3"
   },
   "devDependencies": {
-    "chai": "^4.3.0",
+    "chai": "^4.3.4",
     "mocha": "^7.2.0",
     "supertest": "^4.0.2"
   },
