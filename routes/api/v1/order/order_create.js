@@ -50,15 +50,15 @@ const GenerateAutoResponseBodyEscaped = function(
   delivery_info,
   isPaid
 ) {
-  const WCP_PICKUP_INSTRUCTIONS = "Come to the door and we'll greet you. If there is a line, please form alongside the patio. Please maintain a 6 foot distance between yourself, our team, and other patrons at all times.";
+  const WCP_PICKUP_INSTRUCTIONS = "Come to the door and we'll greet you. If there is a line, please form along the north of the building. Please maintain a 6 foot distance between yourself, our team, and other patrons at all times.";
   const BTP_PICKUP_INSTRUCTIONS = "We are currently offering curbside pick-up. We will have someone available to assist you at the front door when you arrive. Please maintain a 6 foot distance between yourself, our team, and other patrons at all times.";
 
   const BTP_DINE_IN = "Please arrive promptly with your entire party. Someone will be at the front door to greet you and check your party in. Beverages will be available through our friends at Clock-Out Lounge."
-  const WCP_DINE_IN = "Dine-ins get you to the front of the table queue. We don't reserve seating. Please arrive slightly before your selected time so your pizza is as fresh as possible and you have time to get situated and get beverages!";
+  const WCP_DINE_IN = "Your pizza is scheduled to come out of the oven at the time you've selected, so please arrive before that time with your entire party so we can check you in. Even if ordered ahead, small plates and beverages will be prepared upon your arrival for quality and freshness.";
   const NOTE_DELIVERY_SERVICE = "We appreciate your patience as our in-house delivery service is currently in its infancy. Delivery times are estimated. We might be a little earlier, or a little later.";
 
   const NOTE_PREPAID = "You've already paid, so unless there's an issue with the order, there's no need to handle payment from this point forward.";
-  const NOTE_PAYMENT = "We happily accept any major credit card or cash for payment upon arrival.";
+  const NOTE_PAYMENT = "We happily accept any major credit card or cash for payment.";
 
   const store_address = STORE_NAME === WCP ? WCP_ADDRESS : BTP_ADDRESS;
   const pickup_instructions = STORE_NAME === WCP ? WCP_PICKUP_INSTRUCTIONS : BTP_PICKUP_INSTRUCTIONS;
@@ -105,7 +105,7 @@ const GenerateDeliverySection = (delivery_info, ishtml) => {
   return `${ishtml ? "<p><strong>" : "\n"}Delivery Address:${ishtml ? "</strong>":""} ${delivery_info.validated_delivery_address}${delivery_unit_info}${delivery_instructions}${ishtml ? "</p>" : ""}`;
 }
 
-const EventTitleStringBuilder = (CATALOG, service, customer, cart, special_instructions, sliced, ispaid) => {
+const EventTitleStringBuilder = (CATALOG, service, customer, number_guests, cart, special_instructions, sliced, ispaid) => {
   const SERVICE_SHORTHAND = ["P", "DINE", "DELIVER"]; // TODO: move to DB
   const service_string = SERVICE_SHORTHAND[service];
 
@@ -137,12 +137,12 @@ const EventTitleStringBuilder = (CATALOG, service, customer, cart, special_instr
         break; 
     }
   });
-  return `${service_string}${sliced ? " SLICED" : ""} ${customer} ${titles.join(" ")}${has_special_instructions ? " *" : ""}${ispaid ? " PAID" : " UNPAID"}`;
+  return `${service_string}${sliced ? " SLICED" : ""} ${customer}${number_guests > 1 ? `+${number_guests-1}` : ""} ${titles.join(" ")}${has_special_instructions ? " *" : ""}${ispaid ? " PAID" : " UNPAID"}`;
 };
 
-const ServiceTitleBuilder = (service_option_display_string, customer_name, service_date, service_time_interval) => {
+const ServiceTitleBuilder = (service_option_display_string, customer_name, number_guests, service_date, service_time_interval) => {
   const display_service_time_interval = DateTimeIntervalToDisplayServiceInterval(service_time_interval);
-  return `${service_option_display_string} for ${customer_name} on ${service_date.format(DISPLAY_DATE_FORMAT)} at ${display_service_time_interval}`;
+  return `${service_option_display_string} for ${customer_name}${number_guests > 1 ? `+${number_guests-1}` : ""} on ${service_date.format(DISPLAY_DATE_FORMAT)} at ${display_service_time_interval}`;
 }
 
 const GenerateDisplayCartStringListFromProducts = (cart) => {
@@ -194,6 +194,7 @@ const CreateInternalEmail = (
   service_type_enum,
   service_title,
   customer_name,
+  number_guests,
   service_date, // moment
   date_time_interval,
   phonenum,
@@ -214,7 +215,7 @@ const CreateInternalEmail = (
   const delivery_section = GenerateDeliverySection(delivery_info, true);
   const shortcart = GenerateShortCartFromFullCart(cart, CATALOG, sliced);
   const special_instructions_section = special_instructions && special_instructions.length > 0 ? "<br />Special Instructions: " + special_instructions : "";
-  const emailbody = `<p>From: ${customer_name} ${user_email}</p>
+  const emailbody = `<p>From: ${customer_name} ${user_email}</p>${number_guests > 1 ? `<strong>Number Guests:</strong> ${number_guests}<br \>` : ""}
 <p>${shortcart.map(x=> `<strong>${x.category_name}:</strong><br />${x.products.join("<br />")}`).join("<br />")}
 ${special_instructions_section}<br />
 Phone: ${phonenum}</p>
@@ -259,7 +260,7 @@ const CreateExternalEmail = (
   const NON_DELIVERY_AUTORESPONSE = "We'll get back to you shortly to confirm your order.";
   const DELIVERY_BETA_AUTORESPONSE = "Our delivery service is now in beta. Delivery times are rough estimates and we will make every attempt to be prompt. We'll contact you to confirm the order shortly.";
   const WCP_ORDER_RESPONSE_PREAMBLE = "<p>Thanks so much for ordering Seattle's best Chicago-style pan deep-dish pizza!</p>"
-  const BTP_ORDER_RESPONSE_PREAMBLE = `<p>Thanks so much for ordering Seattle's best Chicago-ish, Detroit-ish, pan deep-dish pizza!</p>`
+  const BTP_ORDER_RESPONSE_PREAMBLE = `<p>Thanks so much for ordering Seattle's best Chicago-ish/Detroit-ish, pan deep-dish pizza!</p>`
   const WCP_LOCATION_INFO = `at (<a href="http://bit.ly/WindyCityPieMap">${WCP_ADDRESS}</a>).`;
   const BTP_LOCATION_INFO = `inside Clock-Out Lounge (<a href="http://bit.ly/BreezyTownAtClockOut">${BTP_ADDRESS}</a>).`;
 
@@ -285,7 +286,7 @@ ${cartstring.join("<br />")}
 ${special_instructions_section}
 ${delivery_section}
 ${isPaid && payment_info ? `<br /><a href="${payment_info.result.payment.receipt_url}">Here's a link to your receipt!</a>` : ""}
-${location_section}We thank you for your take-out and delivery business at this time.`;
+${location_section}We thank you for your support!`;
   GoogleProvider.SendEmail(
     {
       name: STORE_NAME,
@@ -301,6 +302,7 @@ const CreateOrderEvent = (
   CATALOG,
   service_option_enum,
   customer_name,
+  number_guests,
   phone_number,
   cart,
   special_instructions,
@@ -312,11 +314,12 @@ const CreateOrderEvent = (
   payment_info,
   store_credit) => {
   const shortcart = GenerateShortCartFromFullCart(cart, CATALOG, sliced);
-  const calendar_event_title = EventTitleStringBuilder(CATALOG, service_option_enum, customer_name, cart, special_instructions, sliced, isPaid);
+  const calendar_event_title = EventTitleStringBuilder(CATALOG, service_option_enum, customer_name, number_guests, cart, special_instructions, sliced, isPaid);
   const special_instructions_section = special_instructions && special_instructions.length > 0 ? "\nSpecial Instructions: " + special_instructions : "";
+  const number_guests_section = number_guests > 1 ? `Number Guests: ${number_guests}\n` : "";
   const payment_section = isPaid ? "\n" + GeneratePaymentSection(totals, payment_info, store_credit, false) : "";
   const delivery_section = GenerateDeliverySection(delivery_info, false);
-  const calendar_details = `${shortcart.map(x=> `${x.category_name}:\n${x.products.join("\n")}`).join("\n")}\nph: ${phone_number}${special_instructions_section}${delivery_section}${payment_section}`;
+  const calendar_details = `${shortcart.map(x=> `${x.category_name}:\n${x.products.join("\n")}`).join("\n")}\n${number_guests_section}ph: ${phone_number}${special_instructions_section}${delivery_section}${payment_section}`;
 
   return GoogleProvider.CreateCalendarEvent(calendar_event_title,
     delivery_info.validated_delivery_address ? delivery_info.validated_delivery_address : "",
@@ -449,10 +452,11 @@ module.exports = Router({ mergeParams: true })
     const service_option_enum = req.body.service_option;
     const service_option_display_string = req.db.Services[service_option_enum];
     const customer_name = req.body.customer_name;
+    const number_guests = req.body.number_guests ?? 1;
     const service_date = moment(req.body.service_date, wcpshared.WDateUtils.DATE_STRING_INTERNAL_FORMAT);
     const service_time = req.body.service_time; //minutes offset from beginning of day
     const date_time_interval = DateTimeIntervalBuilder(service_date, service_time, service_option_enum);
-    const service_title = ServiceTitleBuilder(service_option_display_string, customer_name, service_date, date_time_interval);
+    const service_title = ServiceTitleBuilder(service_option_display_string, customer_name, number_guests, service_date, date_time_interval);
     const phone_number = req.body.phonenum; // 10 digits matching the required regex
     const customer_email = req.body.user_email;
     const referral = req.body.referral;
@@ -514,6 +518,9 @@ module.exports = Router({ mergeParams: true })
 
     // step 3: fire off success emails and create order in calendar
     try {
+
+      // TODO, need to actually test the failure of these service calls and some sort of retrying
+      // for example, the event not created error happens, and it doesn't fail the service call. it should
       // send email to customer
       CreateExternalEmail(
         STORE_NAME,
@@ -536,6 +543,7 @@ module.exports = Router({ mergeParams: true })
         service_option_enum,
         service_title,
         customer_name,
+        number_guests,
         service_date,
         date_time_interval,
         phone_number,
@@ -555,6 +563,7 @@ module.exports = Router({ mergeParams: true })
         req.catalog.Catalog,
         service_option_enum,
         customer_name,
+        number_guests,
         phone_number,
         cart,
         special_instructions,
