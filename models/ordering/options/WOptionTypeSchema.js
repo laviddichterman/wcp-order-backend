@@ -15,9 +15,17 @@ const WOptionTypeSchema = new Schema({
   // ordinal
   ordinal: { type: Number, required: true },
 
+  // if the option type should NOT be enabled, then the min requirements need not be met for
+  // a complete product.
   min_selected: { type: Number, required: true },
 
+  // if the option type should NOT be enabled, then the max requirements need not be met for
+  // a complete product.
   max_selected: { type: Number, required: false },
+
+  // optional function object that operates on a product instance
+  // and returns true if the option type should be enabled.
+  enable_function: { type: Schema.Types.ObjectId, ref: 'WProductInstanceFunction' },
 
   display_flags: {
     // if no options can be selected, don't display this modifier section at all
@@ -32,6 +40,7 @@ const WOptionTypeSchema = new Schema({
     hidden: Boolean,
     // if this modifier has no selected options, the name string can include reference
     // to this modifier type by saying nothing, your choice of {display_name}, or if max_selected===1 listing the choices
+    // if the enable_function returns false, then no text is displayed
     empty_display_as: {
       type: String,
       enum: ['OMIT', 'YOUR_CHOICE_OF', 'LIST_CHOICES'],
@@ -42,11 +51,6 @@ const WOptionTypeSchema = new Schema({
       enum: ['SIZE', 'ADD', 'SUB', 'REMOVAL', 'NOTE', 'PROMPT'],
       required: true
     },
-
-    // optional function object that operates on a product instance
-    // and returns true if the option type should be enabled.
-    enable_function: { type: Schema.Types.ObjectId, ref: 'WProductInstanceFunction' },
-
     // string to match in the product description template, not including the brackets
     template_string: String,
   },
