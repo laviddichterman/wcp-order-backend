@@ -11,6 +11,8 @@ var WStoreCredit = new Schema({
   associated_orders: [String],
   creation_date: String,
   last_used_date: String,
+  //Needs something like this for accounting: 
+  //transactions: [WValueChange]
   //payment_info: 
 });
 
