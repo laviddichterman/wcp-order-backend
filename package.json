@@ -35,7 +35,7 @@
     "express-winston": "^4.1.0",
     "googleapis": "^52.1.0",
     "jsonwebtoken": "^8.5.1",
-    "jwks-rsa": "^2.0.2",
+    "jwks-rsa": "^2.0.3",
     "mongoose": "^5.12.5",
     "nodemailer": "^6.5.0",
     "socket.io": "^2.4.1",
