@@ -243,6 +243,8 @@ MIGRATION_FUNCTIONS = {
       }
     }
   }],
+  "0.2.6": [{ major: 0, minor: 2, patch: 8 }, async (dbconn) => {
+  }],
   "0.2.8": [{ major: 0, minor: 2, patch: 9 }, async (dbconn) => {
     {
       // change each WProduct's modifiers list to the modifiers2 list with an empty enable function (aka always enable)
