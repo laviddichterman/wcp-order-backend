@@ -78,6 +78,29 @@ const FindModifierPlacementExpressionsForMTID = function(expr, mtid) {
       return operandA_expressions.concat(operandB_expressions);
     case "ModifierPlacement":
       return expr.modifier_placement.mtid === mtid ? [expr] : [];
+    case "HasAnyOfModifierType":      
+    case "ConstLiteral":
+    default:
+      return [];
+  }
+  // should throw an error or something here?
+  return [];
+}
+
+//TODO this should exist in the WAbstractExpression class file
+const FindHasAnyModifierExpressionsForMTID = function(expr, mtid) {
+  switch(expr.discriminator) { 
+    case "IfElse":
+      return FindHasAnyModifierExpressionsForMTID(expr.if_else.true_branch, mtid).concat(
+        FindHasAnyModifierExpressionsForMTID(expr.if_else.false_branch, mtid)).concat(
+          FindHasAnyModifierExpressionsForMTID(expr.if_else.test, mtid));
+    case "Logical":
+      const operandA_expressions = expr.logical.operandA ? FindHasAnyModifierExpressionsForMTID(expr.logical.operandA, mtid) : [];
+      const operandB_expressions = expr.logical.operandB ? FindHasAnyModifierExpressionsForMTID(expr.logical.operandB, mtid) : [];
+      return operandA_expressions.concat(operandB_expressions);
+    case "HasAnyOfModifierType":
+      return expr.has_any_of_modifier.mtid === mtid ? [expr] : [];
+    case "ModifierPlacement":
     case "ConstLiteral":
     default:
       return [];
@@ -335,14 +358,13 @@ class CatalogProvider {
     }
   }
 
-  CreateModifierType = async ({name, display_name, ordinal, min_selected, max_selected, enable_function, revelID, squareID, display_flags}) => {
+  CreateModifierType = async ({name, display_name, ordinal, min_selected, max_selected, revelID, squareID, display_flags}) => {
     const doc = new this.#dbconn.WOptionTypeSchema({
       name: name,
       display_name: display_name,
       ordinal: ordinal,
       min_selected: min_selected, 
       max_selected: max_selected, 
-      enable_function: enable_function,
       externalIDs: {
         revelID: revelID,
         squareID: squareID
@@ -356,7 +378,7 @@ class CatalogProvider {
     return doc;
   };
 
-  UpdateModifierType = async ( mt_id, {name, display_name, ordinal, min_selected, max_selected, enable_function, revelID, squareID, display_flags}) => {
+  UpdateModifierType = async ( mt_id, {name, display_name, ordinal, min_selected, max_selected, revelID, squareID, display_flags}) => {
     try {
       const updated = await this.#dbconn.WOptionTypeSchema.findByIdAndUpdate(
         mt_id, 
@@ -366,7 +388,6 @@ class CatalogProvider {
           ordinal: ordinal,
           min_selected: min_selected, 
           max_selected: max_selected, 
-          enable_function: enable_function,
           externalIDs: {
             revelID: revelID,
             squareID: squareID
@@ -409,6 +430,10 @@ class CatalogProvider {
       // need to delete any ProductInstanceFunctions that use this MT
       await Promise.all(this.#product_instance_functions.map(async (pif) => {
         if (FindModifierPlacementExpressionsForMTID(pif.expression, mt_id).length > 0) {
+          logger.debug(`Found product instance function composed of ${mt_id}, removing PIF with ID: ${pif._id}.`);
+          // the PIF and any dependent objects will be synced, but the catalog will not be recomputed / emitted
+          await this.DeleteProductInstanceFunction(pif._id, true);
+        } else if (FindHasAnyModifierExpressionsForMTID(pif.expression, mt_id).length > 0) {
           logger.debug(`Found product instance function composed of ${mt_id}, removing PIF with ID: ${pif._id}.`);
           // the PIF and any dependent objects will be synced, but the catalog will not be recomputed / emitted
           await this.DeleteProductInstanceFunction(pif._id, true);
@@ -861,13 +886,7 @@ class CatalogProvider {
         logger.debug(`Removed ${doc} from ${options_update.nModified} Modifier Options.`);
         await this.SyncOptions();
       }
-      const modifier_types_update = await this.#dbconn.WOptionTypeSchema.updateMany(
-        { enable_function: pif_id }, 
-        { $unset: { "enable_function": ""} });
-      if (modifier_types_update.nModified > 0) {
-        logger.debug(`Removed ${doc} from ${modifier_types_update.nModified} Modifier Types.`);
-        await this.SyncModifierTypes();
-      }
+      // TODO: remove enable function from Products' modifiers2 array
       await this.SyncProductInstanceFunctions();
       if (!suppress_catalog_recomputation) {
         this.RecomputeCatalog();

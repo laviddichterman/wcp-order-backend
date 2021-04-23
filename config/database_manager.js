@@ -1,4 +1,5 @@
 const logger = require('../logging');
+const Promise = require('bluebird');
 const PACKAGE_JSON = require('../package.json');
 
 const SetVersion = async (dbconn, new_version) => { 
@@ -241,7 +242,23 @@ MIGRATION_FUNCTIONS = {
         logger.warn("Didn't add any display flags to product instances");
       }
     }
-
+  }],
+  "0.2.8": [{ major: 0, minor: 2, patch: 9 }, async (dbconn) => {
+    {
+      // change each WProduct's modifiers list to the modifiers2 list with an empty enable function (aka always enable)
+      var promises = [];
+      const products = await dbconn.WProductSchema.find({ "modifiers.0": { "$exists": true } });
+      products.forEach(async function(product) {
+        product.modifiers2 = product.modifiers.map(function(mtid) { return {mtid: mtid, enable: null}; } );
+        promises.push(
+        await product.save().then(function() { 
+          logger.debug(`Updated product ID: ${product._id}'s modifiers.`);
+        }).catch(function(err) {
+          logger.error(`Unable to update product ID: ${product._id}'s modifiers. Got error: ${JSON.stringify(err)}`);
+        }));
+      })
+      await Promise.all(promises);
+    }
   }],
 }
 

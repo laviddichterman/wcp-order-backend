@@ -23,10 +23,6 @@ const WOptionTypeSchema = new Schema({
   // a complete product.
   max_selected: { type: Number, required: false },
 
-  // optional function object that operates on a product instance
-  // and returns true if the option type should be enabled.
-  enable_function: { type: Schema.Types.ObjectId, ref: 'WProductInstanceFunction' },
-
   display_flags: {
     // if no options can be selected, don't display this modifier section at all
     omit_section_if_no_available_options: Boolean,
