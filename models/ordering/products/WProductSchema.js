@@ -46,5 +46,14 @@ var WProductSchema = new Schema({
   category_ids: [String],
 });
 
+var AutoPopulate = function(next) {
+  this.populate({path: "modifiers2", populate: { path: 'enable' } });
+  next();
+};
+
+WProductSchema.
+  pre('findOne', AutoPopulate).
+  pre('find', AutoPopulate);
+
 
 module.exports = WProductSchema;
