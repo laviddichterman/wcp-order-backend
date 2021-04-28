@@ -28,7 +28,8 @@ const ValidationChain = [
   body('ordinal').exists().isInt({min: 0}),
   body('price.amount').isInt({min: 0, max:100000}),
   body('price.currency').isLength({min:3, max: 3}).isIn(['USD']),
-  body('modifiers.*').trim().escape().exists(),
+  body('modifiers.*.mtid').trim().escape().exists().isMongoId(),
+  body('modifiers.*.enable').optional({nullable: true}).isMongoId(),
   body('category_ids.*').trim().escape().exists()
 ];
 

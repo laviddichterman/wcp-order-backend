@@ -109,6 +109,14 @@ const FindHasAnyModifierExpressionsForMTID = function(expr, mtid) {
   return [];
 }
 
+const ValidateProductModifiersFunctionsCategories = function(modifiers, category_ids, catalog) {
+  const found_all_modifiers = modifiers.map(entry => 
+    catalog.ModifierTypes.some(x => x._id.toString() === entry.mtid) && 
+    (entry.enable === null || catalog.ProductInstanceFunctions.some(x => x._id.toString() === entry.enable))).every(x => x === true);
+  const found_all_categories = category_ids.map(cid => catalog.Categories.some(x => x._id.toString() === cid)).every(x => x === true);
+  return found_all_modifiers && found_all_modifiers;
+}
+
 class CatalogProvider {
   #dbconn;
   #socketRO;
@@ -598,6 +606,8 @@ class CatalogProvider {
     }
   }
 
+
+
   CreateProduct = async ({
     display_name, 
     description, 
@@ -611,10 +621,7 @@ class CatalogProvider {
     modifiers,
     category_ids
   }) => {
-    // first find the Modifier Type IDs in the catalog
-    const found_all_modifiers = modifiers.map(mtid => this.#modifier_types.some(x => x._id.toString() === mtid)).every(x => x === true);
-    const found_all_categories = category_ids.map(cid => this.#categories.some(x => x._id.toString() === cid)).every(x => x === true);
-    if (!found_all_categories || !found_all_modifiers) {
+    if (!ValidateProductModifiersFunctionsCategories(modifiers, category_ids, this)) {
       return null;
     }
 
@@ -633,7 +640,7 @@ class CatalogProvider {
         }
       },
       display_flags,
-      modifiers: modifiers,
+      modifiers2: modifiers,
       category_ids: category_ids
     });    
     await doc.save();
@@ -656,6 +663,9 @@ class CatalogProvider {
     modifiers,
     category_ids}) => {
     try {
+      if (!ValidateProductModifiersFunctionsCategories(modifiers, category_ids, this)) {
+        return null;
+      }  
       const old_modifiers = this.#catalog.products[pid].product.modifiers;
       const removed_modifiers = old_modifiers.filter(x => !modifiers.includes(x));
       const updated = await this.#dbconn.WProductSchema.findByIdAndUpdate(
@@ -675,7 +685,7 @@ class CatalogProvider {
             }
           },
           display_flags,
-          modifiers: modifiers,
+          modifiers2: modifiers,
           category_ids: category_ids
         },
         { new: true }
@@ -685,9 +695,9 @@ class CatalogProvider {
       }
       
       if (removed_modifiers.length) {
-        await Promise.all(removed_modifiers.map(async (mtid) => { 
-          const product_instance_update = await this.#dbconn.WProductInstanceSchema.updateMany({ product_id: pid }, {$pull: {modifiers: {modifier_type_id: mtid}}});
-          logger.debug(`Removed ModifierType ID ${mtid} from ${product_instance_update.nModified} product instances.`);
+        await Promise.all(removed_modifiers.map(async (entry) => { 
+          const product_instance_update = await this.#dbconn.WProductInstanceSchema.updateMany({ product_id: pid }, {$pull: {modifiers: {modifier_type_id: entry.mtid}}});
+          logger.debug(`Removed ModifierType ID ${entry.mtid} from ${product_instance_update.nModified} product instances.`);
         }));
         await this.SyncProductInstances();
       }
