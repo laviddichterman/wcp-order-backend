@@ -25,6 +25,7 @@ const ValidationChain = [
   body('bake_factor').isFloat({ min: 0, max: 5 }),
   body('can_split').toBoolean(true),
   body('display_flags.omit_from_shortname').toBoolean(true),
+  body('display_flags.omit_from_name').toBoolean(true),
 ];
 
 module.exports = Router({ mergeParams: true })

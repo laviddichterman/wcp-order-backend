@@ -640,7 +640,7 @@ class CatalogProvider {
         }
       },
       display_flags,
-      modifiers2: modifiers,
+      modifiers: modifiers,
       category_ids: category_ids
     });    
     await doc.save();
@@ -666,7 +666,7 @@ class CatalogProvider {
       if (!ValidateProductModifiersFunctionsCategories(modifiers, category_ids, this)) {
         return null;
       }  
-      const old_modifiers = this.#catalog.products[pid].product.modifiers2.map(x => x.mtid.toString());
+      const old_modifiers = this.#catalog.products[pid].product.modifiers.map(x => x.mtid.toString());
       const new_modifiers_mtids = modifiers.map(x => String(x.mtid));
       const removed_modifiers = old_modifiers.filter(x => !new_modifiers_mtids.includes(x));
       const updated = await this.#dbconn.WProductSchema.findByIdAndUpdate(
@@ -686,7 +686,7 @@ class CatalogProvider {
             }
           },
           display_flags,
-          modifiers2: modifiers,
+          modifiers: modifiers,
           category_ids: category_ids
         },
         { new: true }
@@ -873,7 +873,7 @@ class CatalogProvider {
       }
       // since the product instance function is bound to the modifier types and modifier options that contain them, we need to sync those objects here
       await this.SyncOptions();
-      await this.SyncModifierTypes();
+      await this.SyncProducts();
       await this.SyncProductInstanceFunctions();
       this.RecomputeCatalog();
       this.EmitCatalog(this.#socketRO);
@@ -897,7 +897,13 @@ class CatalogProvider {
         logger.debug(`Removed ${doc} from ${options_update.nModified} Modifier Options.`);
         await this.SyncOptions();
       }
-      // TODO: remove enable function from Products' modifiers2 array
+      const products_update = await this.#dbconn.WProductSchema.updateMany(
+        { "modifiers.enable": pif_id  },
+        { $unset: { "modifiers.$.enable": ""} });
+      if (products_update.nModified > 0) {
+        logger.debug(`Removed ${doc} from ${products_update.nModified} Products.`);
+        await this.SyncProducts();
+      }
       await this.SyncProductInstanceFunctions();
       if (!suppress_catalog_recomputation) {
         this.RecomputeCatalog();

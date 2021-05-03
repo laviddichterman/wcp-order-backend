@@ -25,6 +25,7 @@ const ValidationChain = [
   body('display_flags.hide_from_menu').toBoolean(true),
   body('display_flags.price_display').exists().isIn(['FROM_X', 'VARIES', 'ALWAYS']),
   body('display_flags.menu_adornment').trim(),
+  body('display_flags.suppress_exhaustive_modifier_list').toBoolean(true),
   body('ordinal').exists().isInt({min: 0}),
   body('price.amount').exists().isInt({ min: 0 }),
   body('price.currency').exists().isLength({ min: 3, max: 3 }).isIn(['USD']),

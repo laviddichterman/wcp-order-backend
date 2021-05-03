@@ -48,7 +48,19 @@ const WOptionTypeSchema = new Schema({
       required: true
     },
     // string to match in the product description template, not including the brackets
+    // limited to alphanumeric characters
     template_string: String,
+
+    // separator to be used in joining the individual options together for display
+    multiple_item_separator: String,
+
+    // when the section is not empty, string to PREpend to the whole modifier type section when used in description/title, etc
+    non_empty_group_prefix: String,
+    
+    // when the section is not empty, string to append to the whole modifier type section when used in description/title, etc
+    non_empty_group_suffix: String,
+
+
   },
 
 });

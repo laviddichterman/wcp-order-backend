@@ -35,11 +35,6 @@ var WOptionSchema = new Schema({
     can_split: Boolean,
   },
 
-  // optional function name to call to enable this product, 
-  // always enabled if not specified
-  // DEPRECIATED
-  enable_function_name: String,
-
   // optional function object that operates on a product instance
   // and returns true if the option should be enabled.
   enable_function: { type: Schema.Types.ObjectId, ref: 'WProductInstanceFunction' },
@@ -47,7 +42,11 @@ var WOptionSchema = new Schema({
   display_flags: {
     // supresses listing on the shortname of the end product
     // if not the pre-populated value for the matching product instance
-    omit_from_shortname: Boolean
+    omit_from_shortname: Boolean,
+
+    // supresses listing on the name of the end product
+    // if not the pre-populated value for the matching product instance
+    omit_from_name: Boolean
   },
 });
 

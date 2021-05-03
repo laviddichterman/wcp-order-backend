@@ -30,6 +30,7 @@ const ValidationChain = [
   // don't sanitize this to boolean, but validate that it is a boolean
   body('can_split').isBoolean(true), 
   body('display_flags.omit_from_shortname').toBoolean(true),
+  body('display_flags.omit_from_name').toBoolean(true),
 ];
 
 module.exports = Router({ mergeParams: true })

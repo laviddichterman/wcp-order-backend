@@ -16,7 +16,11 @@ const ValidationChain = [
   body('display_flags.use_toggle_if_only_two_options').toBoolean(true),
   body('display_flags.hidden').toBoolean(true),
   body('display_flags.modifier_class').exists().isIn(['SIZE', 'ADD', 'SUB', 'REMOVAL', 'NOTE', 'PROMPT']),
-  body('display_flags.empty_display_as').exists().isIn(['OMIT', 'YOUR_CHOICE_OF', 'LIST_CHOICES'])
+  body('display_flags.empty_display_as').exists().isIn(['OMIT', 'YOUR_CHOICE_OF', 'LIST_CHOICES']),
+  body('display_flags.template_string').exists().isAlphanumeric(),
+  body('display_flags.multiple_item_separator').exists(),
+  body('display_flags.non_empty_group_prefix').exists(),
+  body('display_flags.non_empty_group_suffix').exists()
 ];
 
 module.exports = Router({ mergeParams: true })

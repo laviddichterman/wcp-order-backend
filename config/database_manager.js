@@ -243,7 +243,7 @@ MIGRATION_FUNCTIONS = {
       }
     }
   }],
-  "0.2.6": [{ major: 0, minor: 2, patch: 8 }, async (dbconn) => {
+  "0.2.6": [{ major: 0, minor: 2, patch: 8 }, async (_dbconn) => {
   }],
   "0.2.8": [{ major: 0, minor: 2, patch: 9 }, async (dbconn) => {
     {
@@ -260,6 +260,92 @@ MIGRATION_FUNCTIONS = {
         }));
       })
       await Promise.all(promises);
+    }
+  }],
+  "0.2.9": [{ major: 0, minor: 2, patch: 10 }, async (dbconn) => {
+    {
+      // copy modifiers2 to modifiers
+      {
+        var promises = [];
+        const products = await dbconn.WProductSchema.find({ "modifiers2.0": { "$exists": true } });
+        products.forEach(async function(product) {
+          product.modifiers = product.modifiers2;
+          promises.push(
+          await product.save().then(function() { 
+            logger.debug(`Updated product ID: ${product._id}'s modifiers.`);
+          }).catch(function(err) {
+            logger.error(`Unable to update product ID: ${product._id}'s modifiers. Got error: ${JSON.stringify(err)}`);
+          }));
+        })
+        await Promise.all(promises);
+      }
+      {
+        // add display flag to WProductInstance
+        const pi_update = await dbconn.WProductInstanceSchema.updateMany(
+          {},
+          {
+            $set: {
+              "display_flags.suppress_exhaustive_modifier_list": false
+            }
+          });
+        if (pi_update.nModified > 0) {
+          logger.debug(`Updated ${pi_update.nModified} product instances to specify suppress_exhaustive_modifier_list to false.`);
+        }
+        else {
+          logger.warn("Didn't add any display flags to product instances");
+        }
+      }
+      {
+        // add display flags to WOptionTypeSchema
+        const mt_update = await dbconn.WOptionTypeSchema.updateMany(
+          {},
+          {
+            $set: {
+              "display_flags.template_string": "",
+              "display_flags.multiple_item_separator": " + ",
+              "display_flags.non_empty_group_prefix": "",
+              "display_flags.non_empty_group_suffix": "",
+            }
+          });
+        if (mt_update.nModified > 0) {
+          logger.debug(`Updated ${mt_update.nModified} modifiers to this version's display flags.`);
+        }
+        else {
+          logger.warn("Didn't add any display flags to modifier types");
+        }
+      }
+      {
+        // add display flags to WOptionSchema part 1
+        const mo_update_true = await dbconn.WOptionSchema.updateMany(
+          { "display_flags.omit_from_shortname": true }, 
+          {
+            $set: {
+              "display_flags.omit_from_name": true
+            }
+          });
+        if (mo_update_true.nModified > 0) {
+          logger.debug(`Updated ${mo_update_true.nModified} modifier options with omit_from_shortname set to true to also have omit_from_name set to true.`);
+        }
+        else {
+          logger.warn("Didn't add any omit_from_name: true to any modifier options");
+        }
+      }
+      {
+        // add display flags to WOptionSchema part 1
+        const mo_update_false = await dbconn.WOptionSchema.updateMany(
+          { "display_flags.omit_from_shortname": false }, 
+          {
+            $set: {
+              "display_flags.omit_from_name": false
+            }
+          });
+        if (mo_update_false.nModified > 0) {
+          logger.debug(`Updated ${mo_update_false.nModified} modifier options with omit_from_shortname set to false to also have omit_from_name set to false.`);
+        }
+        else {
+          logger.warn("Didn't add any omit_from_name: false to any modifier options");
+        }
+      }
     }
   }],
 }

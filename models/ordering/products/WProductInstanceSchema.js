@@ -27,7 +27,11 @@ const WProductInstanceSchema = new Schema({
       type: String,
       enum: ['FROM_X', 'VARIES', 'ALWAYS'],
       required: true
-    }
+    },
+    
+    // suppress the default pizza functionality where the full modifier list is surfaced on the product display
+    // and instead use the templating strings to determine what is/isn't displayed
+    suppress_exhaustive_modifier_list: Boolean
   },
 
   // optional catalog data if this is a catalog item

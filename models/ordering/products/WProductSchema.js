@@ -36,10 +36,10 @@ var WProductSchema = new Schema({
     additional_unit_prep_time: Number
   },
 
-  // depreciated
-  modifiers: [String], // list of option_type_ids
+  // list of option type IDs and nullable product instance function IDs
+  modifiers: [ProductModifierSchema],
   
-  // new parameter for use until modifiers can be repurposed ETA: 0.2.10
+  // depreciated
   modifiers2: [ProductModifierSchema],
 
   // Corresponding to a WCategorySchema
@@ -48,6 +48,7 @@ var WProductSchema = new Schema({
 
 var AutoPopulate = function(next) {
   this.populate({path: "modifiers2", populate: { path: 'enable' } });
+  this.populate({path: "modifiers", populate: { path: 'enable' } });
   next();
 };
 
