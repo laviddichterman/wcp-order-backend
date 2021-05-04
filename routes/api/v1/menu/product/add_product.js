@@ -74,7 +74,8 @@ module.exports = Router({ mergeParams: true })
             hide_from_menu: false,
             skip_customization: false,
             menu_adornment: "",
-            price_display: 'ALWAYS'
+            price_display: 'ALWAYS',
+            suppress_exhaustive_modifier_list: false
           },
           is_base: true
         });
