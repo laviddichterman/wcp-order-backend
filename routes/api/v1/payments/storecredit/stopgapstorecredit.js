@@ -4,13 +4,12 @@ const moment = require('moment');
 const voucher_codes = require('voucher-code-generator');
 const wcpshared = require("@wcp/wcpshared");
 
-
 const { body, validationResult } = require('express-validator');
 const SquareProvider = require("../../../../../config/square");
 const GoogleProvider = require("../../../../../config/google");
 
 const CreateExternalEmailSender = (EMAIL_ADDRESS, STORE_NAME, payment, sender_email, recipient_name_first, recipient_name_last, credit_code) => {
-  const amount = payment.result.payment.total_money.amount / 100;
+  const amount = Number(payment.result.payment.totalMoney.amount) / 100;
   const emailbody = `<h2>Thanks for thinking of Windy City Pie and Breezy Town Pizza for someone close to you!</h2>
   <p>We're happy to acknowledge that we've received a payment of \$${amount} for ${recipient_name_first} ${recipient_name_last}'s store credit. <br />
   This gift of store credit never expires and is valid at both Windy City Pie and Breezy Town Pizza locations.<br />
@@ -28,7 +27,7 @@ const CreateExternalEmailSender = (EMAIL_ADDRESS, STORE_NAME, payment, sender_em
 };
 
 const CreateExternalEmailRecipient = (EMAIL_ADDRESS, STORE_NAME, payment, sender, recipient_name_first, recipient_name_last, recipient_email, additional_message, credit_code) => {
-  const amount = payment.result.payment.total_money.amount / 100;
+  const amount = Number(payment.result.payment.totalMoney.amount) / 100;
   const sender_message = additional_message && additional_message.length > 0 ? `<p><h3>${sender} wanted us to relay the following to you:</h3><em>${additional_message}</em></p>` : "";
   const emailbody = `<h2>Hey ${recipient_name_first}, ${sender} sent you some digital pizza!</h2>
   <p>This gift of store credit never expires and is valid at both Windy City Pie and Breezy Town Pizza locations. 
@@ -46,7 +45,7 @@ const CreateExternalEmailRecipient = (EMAIL_ADDRESS, STORE_NAME, payment, sender
 }
 const AppendToStoreCreditSheet = async (STORE_CREDIT_SHEET, payment, recipient, credit_code) => {
   const range = "CurrentWARIO!A1:M1";
-  const amount = Number(payment.result.payment.total_money.amount / 100).toFixed(2);
+  const amount = Number(Number(payment.result.payment.totalMoney.amount) / 100).toFixed(2);
   const date_added = moment().format(wcpshared.WDateUtils.DATE_STRING_INTERNAL_FORMAT);
   const fields = [recipient, amount, "MONEY", amount, date_added, "WARIO", date_added, credit_code, "", "", "", "", ""];
   await GoogleProvider.AppendToSheet(STORE_CREDIT_SHEET, range, fields);
@@ -89,7 +88,7 @@ module.exports = Router({ mergeParams: true })
       const recipient_message = req.body.recipient_message.replace("&", "and").replace("<", "").replace(">", "");;
       const credit_code = voucher_codes.generate({pattern: "###-##-###"})[0];
       const joint_credit_code = `${credit_code}-${reference_id}`;
-      const create_order_response = await SquareProvider.CreateOrderStoreCredit(reference_id, amount_money);
+      const create_order_response = await SquareProvider.CreateOrderStoreCredit(reference_id, amount_money, `Purchase of store credit code: ${joint_credit_code}`);
       if (create_order_response.success === true) {
         const square_order_id = create_order_response.response.order.id;
         req.logger.info(`For internal id ${reference_id} created Square Order ID: ${square_order_id} for ${amount_money}`)
@@ -101,11 +100,16 @@ module.exports = Router({ mergeParams: true })
           }
           await AppendToStoreCreditSheet(STORE_CREDIT_SHEET, payment_response, `${recipient_name_first} ${recipient_name_last}`, joint_credit_code);
           req.logger.info(`Store credit code: ${joint_credit_code} and Square Order ID: ${square_order_id} payment for ${amount_money} successful, credit logged to spreadsheet.`)
-          return res.status(200).json({reference_id, joint_credit_code, square_order_id, amount_money, payment_response});
+          return res.status(200).json({reference_id, 
+            joint_credit_code, 
+            square_order_id, 
+            amount_money: Number(payment_response.result.payment.totalMoney.amount), 
+            last4: payment_response.result.payment.cardDetails.card.last4, 
+            receipt_url: payment_response.result.payment.receiptUrl});
         }
         else {
           req.logger.error("Failed to process payment: %o", payment_response);
-          const order_cancel_response = await SquareProvider.OrderStateChange(square_order_id, create_order_response.response.order.version, "CANCELED");
+          const order_cancel_response = await SquareProvider.OrderStateChange(square_order_id, create_order_response.response.order.version + 1, "CANCELED");
           return res.status(400).json(payment_response);
         }
       } else {

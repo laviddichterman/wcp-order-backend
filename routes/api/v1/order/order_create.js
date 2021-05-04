@@ -21,6 +21,14 @@ const MI_AREA_CODES = ["231", "248", "269", "313", "517", "586", "616", "734", "
 const BTP_AREA_CODES = IL_AREA_CODES.concat(MI_AREA_CODES);
 const WCP_AREA_CODES = IL_AREA_CODES;
 
+const BigIntStringify = (str) => (
+  JSON.stringify(str, (key, value) =>
+            typeof value === 'bigint'
+                ? Number(value)
+                : value // return everything else unchanged
+        ) )
+
+
 const IsNativeAreaCode = function (phone, area_codes) {
   const numeric_phone = phone.match(/\d/g).join("");
   const area_code = numeric_phone.slice(0, 3);
@@ -79,11 +87,11 @@ const GeneratePaymentSection = (totals, payment_info, store_credit, ishtml) => {
   const tip_amount = "$" + Number(totals.tip).toFixed(2);
   const total_amount = "$" + Number(totals.total).toFixed(2);
   const store_credit_money_amount = store_credit && store_credit.type == "MONEY" && store_credit.amount_used ? "$" + Number(store_credit.amount_used).toFixed(2) : "";
-  const paid_by_credit_card = payment_info && payment_info.result.payment.total_money.amount ? "$" + payment_info.result.payment.total_money.amount/100 : ""
-  const receipt_url = payment_info ? payment_info.result.payment.receipt_url : "";
+  const paid_by_credit_card = payment_info && payment_info.result.payment.totalMoney.amount ? "$" + Number(payment_info.result.payment.totalMoney.amount)/100 : ""
+  const receipt_url = payment_info ? payment_info.result.payment.receiptUrl : "";
   const discount_section = discount ? `NOTE BEFORE CLOSING OUT: Apply discount of ${discount}, pre-tax. Credit code used: ${store_credit.code}.${ishtml ? "<br />" : "\n"}` : "";
   const store_credit_money_section = store_credit_money_amount ? `Applied store credit value ${store_credit_money_amount} using code ${store_credit.code}.${ishtml ? "<br />" : "\n"}` : "";
-  const card_payment_section = paid_by_credit_card ? `Paid ${paid_by_credit_card} by card ending in ${payment_info.result.payment.card_details.card.last_4}.${ishtml ? "<br />" : "\n"}` : "";
+  const card_payment_section = paid_by_credit_card ? `Paid ${paid_by_credit_card} by card ending in ${payment_info.result.payment.cardDetails.card.last4}.${ishtml ? "<br />" : "\n"}` : "";
   return ishtml ? `${discount_section}
   <p>Received payment of: <strong>${total_amount}</strong></p>
   <p>Base Amount: <strong>${base_amount}</strong><br />
@@ -286,7 +294,7 @@ Order contents:<br />
 ${cartstring.join("<br />")}
 ${special_instructions_section}
 ${delivery_section}
-${isPaid && payment_info ? `<br /><a href="${payment_info.result.payment.receipt_url}">Here's a link to your receipt!</a>` : ""}
+${isPaid && payment_info ? `<br /><a href="${payment_info.result.payment.receiptUrl}">Here's a link to your receipt!</a>` : ""}
 ${location_section}We thank you for your support!`;
   GoogleProvider.SendEmail(
     {
@@ -379,17 +387,16 @@ const CheckAndRefundStoreCredit = async (STORE_CREDIT_SHEET, old_entry, index) =
   return true;
 }
 
-const CreateSquareOrderAndCharge = async (logger, reference_id, balance, nonce) => {
+const CreateSquareOrderAndCharge = async (logger, reference_id, balance, nonce, note) => {
   const amount_to_charge = Math.round(balance * 100);
-  const create_order_response = await SquareProvider.CreateOrderStoreCredit(reference_id, amount_to_charge);
+  const create_order_response = await SquareProvider.CreateOrderStoreCredit(reference_id, amount_to_charge, note);
   if (create_order_response.success === true) {
     const square_order_id = create_order_response.response.order.id;
     logger.info(`For internal id ${reference_id} created Square Order ID: ${square_order_id} for ${amount_to_charge}`)
     const payment_response = await SquareProvider.ProcessPayment(nonce, amount_to_charge, reference_id, square_order_id);
     if (!payment_response.success) {
       logger.error("Failed to process payment: %o", payment_response);
-      const order_cancel_response = await SquareProvider.OrderStateChange(square_order_id, create_order_response.response.order.version, "CANCELED");
-      logger.debug(JSON.stringify(order_cancel_response));
+      const order_cancel_response = await SquareProvider.OrderStateChange(square_order_id, create_order_response.response.order.version+1, "CANCELED");
       return [false, payment_response];
     }
     else {
@@ -475,6 +482,8 @@ module.exports = Router({ mergeParams: true })
     const special_instructions = req.body.special_instructions;
     let isPaid = false;
 
+    const square_order_note = `This credit is applied to your order for: ${service_title}`;
+
     // TODO: wrap all function calls in a try/catch block, or triple check that an exception would be handled in the provider class
     
     // step 1: attempt to process store credit, keep track of old store credit balance in case of failure
@@ -483,7 +492,7 @@ module.exports = Router({ mergeParams: true })
       store_credit_response = await CheckAndSpendStoreCredit(req.logger, STORE_CREDIT_SHEET, store_credit);
       if (!store_credit_response[0]) {
         req.logger.error("Failed to process store credit step of ordering");
-        return res.status(404).json({success: false, result: JSON.stringify({errors: [{detail: "Unable to debit store credit."}]})});
+        return res.status(404).json({success: false, result: {errors: [{detail: "Unable to debit store credit."}]} });
       }
     }
 
@@ -495,15 +504,15 @@ module.exports = Router({ mergeParams: true })
     let charging_response = [false, undefined];
     if (totals.balance > 0 && nonce) {
       try {
-        charging_response = await CreateSquareOrderAndCharge(req.logger, reference_id, totals.balance, nonce)
+        charging_response = await CreateSquareOrderAndCharge(req.logger, reference_id, totals.balance, nonce, square_order_note)
       } catch (error) {
         // if any part of step 2 fails, restore old store credit balance
         if (store_credit.amount_used > 0) {
           req.logger.info(`Refunding ${store_credit.code} after failed credit card payment.`);
           await CheckAndRefundStoreCredit(STORE_CREDIT_SHEET, store_credit_response[1], store_credit_response[2]);
         }
-        req.logger.error(`Nasty error in processing payment: ${JSON.stringify(error)}.`);
-        return res.status(500).json({success:false, result: JSON.stringify({errors: [error]})});
+        req.logger.error(`Nasty error in processing payment: ${BigIntStringify(error)}.`);
+        return res.status(500).json({success:false, result: {errors: [BigIntStringify(error)]} });
       }
       if (!charging_response[0]) {
         if (store_credit.amount_used > 0) {
@@ -577,7 +586,14 @@ module.exports = Router({ mergeParams: true })
         store_credit
       );
       // send response to user
-      return charging_response[0] ? res.status(200).json(charging_response[1]) : res.status(200).json({ success: true });
+      return charging_response[0] ? 
+        res.status(200).json({ 
+          money_charged: Number(charging_response[1].result.payment.totalMoney.amount), 
+          last4: charging_response[1].result.payment.cardDetails.card.last4, 
+          receipt_url: charging_response[1].result.payment.receiptUrl,
+          success: charging_response[1].success
+        }) : 
+        res.status(200).json({ success: true });
 
     } catch (error) {
       GoogleProvider.SendEmail(

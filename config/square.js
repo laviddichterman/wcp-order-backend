@@ -1,19 +1,23 @@
 const SquareConnect = require('square-connect');
+const {  ApiError, Client, Environment, CreatePaymentRequest, Money } = require('square')
+
 const crypto = require('crypto');
 const logger = require('../logging');
 
 class SquareProvider {
-  #defaultClient;
+  #client;
   #location_id;
   constructor() {
-    this.#defaultClient = SquareConnect.ApiClient.instance;
   }
 
   BootstrapProvider = (db) => {
     const cfg = db.KeyValueConfig;
-    if (cfg.SQUARE_ENDPOINT && cfg.SQUARE_TOKEN && cfg.SQUARE_LOCATION) {
-      this.#defaultClient.basePath = cfg.SQUARE_ENDPOINT;
-      this.#defaultClient.authentications['oauth2'].accessToken = cfg.SQUARE_TOKEN;
+    if (cfg.SQUARE_TOKEN && cfg.SQUARE_LOCATION) {
+      this.#client = new Client({
+        timeout: 3000,
+        environment: Environment.Production, // `Environment.Sandbox` to access sandbox resources // TODO: configure this
+        accessToken: cfg.SQUARE_TOKEN,
+      });
       this.#location_id = cfg.SQUARE_LOCATION;
     }
     else {
@@ -23,7 +27,7 @@ class SquareProvider {
 
   CreateOrderStoreCredit = async (reference_id, amount_money) => {
     const idempotency_key = crypto.randomBytes(22).toString('hex');
-    const orders_api = new SquareConnect.OrdersApi();
+    const orders_api = this.#client.ordersApi;
     const request_body = {
       idempotency_key: idempotency_key,
       order: {
@@ -55,7 +59,7 @@ class SquareProvider {
 
   OrderStateChange = async (square_order_id, order_version, new_state) => {
     const idempotency_key = crypto.randomBytes(22).toString('hex');
-    const orders_api = new SquareConnect.OrdersApi();
+    const orders_api = this.#client.ordersApi;
     const request_body = {
       idempotency_key: idempotency_key,
       order: {
@@ -81,19 +85,19 @@ class SquareProvider {
     const idempotency_key = crypto.randomBytes(22).toString('hex');
     const payments_api = new SquareConnect.PaymentsApi();
     const request_body = {
-      source_id: nonce,
-      amount_money: {
+      sourceId: nonce,
+      amountMoney: {
         amount: amount_money,
         currency: 'USD'
       },
-      reference_id: reference_id,
-      order_id: square_order_id,
-      location_id: this.#location_id,
+      referenceId: reference_id,
+      orderId: square_order_id,
+      locationId: this.#location_id,
       autocomplete: true,
-      accept_partial_authorization: false,
-      statement_description: "WCP/BTP Online Order",
+      acceptPartialAuthorization: false,
+      statementDescriptionIdentifier: "WCP/BTP Online Order",
       //verification_token: request_params.verification_token, //TODO: VERIFICATION TOKEN FOR SCA
-      idempotency_key: idempotency_key
+      idempotencyKey: idempotency_key
     };
     try {
       logger.info(`sending payment request: ${JSON.stringify(request_body)}`);
