@@ -39,9 +39,6 @@ var WProductSchema = new Schema({
   // list of option type IDs and nullable product instance function IDs
   modifiers: [ProductModifierSchema],
   
-  // depreciated
-  modifiers2: [ProductModifierSchema],
-
   // Corresponding to a WCategorySchema
   category_ids: [String],
 });
