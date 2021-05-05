@@ -47,7 +47,6 @@ var WProductSchema = new Schema({
 });
 
 var AutoPopulate = function(next) {
-  this.populate({path: "modifiers2", populate: { path: 'enable' } });
   this.populate({path: "modifiers", populate: { path: 'enable' } });
   next();
 };

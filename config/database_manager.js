@@ -348,6 +348,23 @@ MIGRATION_FUNCTIONS = {
       }
     }
   }],
+  "0.2.10": [{ major: 0, minor: 2, patch: 11 }, async (dbconn) => {
+    {
+      // remove modifiers2
+      {
+        // add display flags to WOptionSchema part 1
+        const p_update = await dbconn.WProductSchema.updateMany(
+          { },
+          { $unset: { "modifiers2": "" } });
+        if (p_update.nModified > 0) {
+          logger.debug(`Updated ${p_update.nModified} WProductSchema documents to remove modifiers2 field.`);
+        }
+        else {
+          logger.warn("Didn't remove modifiers2 from any WProductSchema documents");
+        }
+      }
+    }
+  }],
 }
 
 class DatabaseManager {
