@@ -158,7 +158,7 @@ const GenerateDisplayCartStringListFromProducts = (cart) => {
   const display_cart_string_list = [];
   cart.forEach((category_cart) => {
     category_cart.items.forEach((item) => {
-      display_cart_string_list.push(`${item.quantity}x: ${item.product.name}`)
+      display_cart_string_list.push(`${item.quantity}x: ${item.product.processed_name}`)
     });
   });
   return display_cart_string_list;
