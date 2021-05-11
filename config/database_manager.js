@@ -6,7 +6,7 @@ const SetVersion = async (dbconn, new_version) => {
   return await dbconn.DBVersionSchema.findOneAndUpdate({}, new_version, {new: true, upsert: true});
 }
 
-MIGRATION_FUNCTIONS = {
+const UPGRADE_MIGRATION_FUNCTIONS = {
   "0.0.0": [{ major: 0, minor: 2, patch: 2 }, async (dbconn) => { 
     {
       // move catalog_item to item in WOptionSchema
@@ -365,6 +365,60 @@ MIGRATION_FUNCTIONS = {
       }
     }
   }],
+  "0.2.11": [{ major: 0, minor: 2, patch: 12 }, async (dbconn) => {
+    {
+      {
+        //populate...
+        // display_flags.menu.ordinal
+        // display_flags.menu.hide
+        // display_flags.menu.price_display
+        // display_flags.menu.adornment:
+        // display_flags.menu.suppress_exhaustive_modifier_list
+
+        // display_flags.order.ordinal
+        // display_flags.order.hide
+        // display_flags.order.skip_customization
+        // display_flags.order.price_display
+        // display_flags.order.adornment
+        // display_flags.order.suppress_exhaustive_modifier_list
+
+        // set modifiers.[].options.[].qualifier = "REGULAR";
+        var promises = [];
+        const product_instances = await dbconn.WProductInstanceSchema.find();
+        product_instances.forEach(async function(pi) {
+          pi.modifiers = pi.modifiers.map((x) => { 
+            return { 
+              modifier_type_id: x.modifier_type_id,
+              options: x.options.map((oi) => { return { option_id: oi.option_id, placement: oi.placement, qualifier: "REGULAR" }; }) 
+            };   
+          });
+          pi.display_flags.menu = { 
+            ordinal: pi.ordinal,
+            hide: pi.display_flags.hide_from_menu,
+            price_display: pi.display_flags.price_display,
+            adornment: pi.display_flags.menu_adornment,
+            suppress_exhaustive_modifier_list: pi.display_flags.suppress_exhaustive_modifier_list,
+            
+          };
+          pi.display_flags.order = { 
+            ordinal: pi.ordinal,
+            hide: pi.display_flags.hide_from_menu,
+            skip_customization: pi.display_flags.skip_customization,
+            price_display: pi.display_flags.price_display,
+            adornment: pi.display_flags.menu_adornment,
+            suppress_exhaustive_modifier_list: pi.display_flags.suppress_exhaustive_modifier_list
+          };
+          
+          promises.push(pi.save().then(function() { 
+            logger.debug(`Updated product instance ${pi.item.display_name} (${pi._id}) display flags and modifiers.`);
+          }).catch(function(err) {
+            logger.error(`Unable to update product instance ${pi.item.display_name} (${pi._id}) display flags and modifiers. Got error: ${JSON.stringify(err)}`);
+          }));
+        })
+        await Promise.all(promises);
+      }
+    }
+  }],
 }
 
 class DatabaseManager {
@@ -393,8 +447,8 @@ class DatabaseManager {
 
     // run update loop
     while (PACKAGE_JSON.version !== current_db_version) {
-      if (current_db_version in MIGRATION_FUNCTIONS) {
-        const [next_ver, migration_function] = MIGRATION_FUNCTIONS[current_db_version];
+      if (current_db_version in UPGRADE_MIGRATION_FUNCTIONS) {
+        const [next_ver, migration_function] = UPGRADE_MIGRATION_FUNCTIONS[current_db_version];
         const next_ver_string = `${next_ver.major}.${next_ver.minor}.${next_ver.patch}`;
         logger.info(`Running migration function from ${current_db_version} to ${next_ver_string}`);
         await migration_function(this.#dbconn);

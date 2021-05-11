@@ -18,7 +18,7 @@ var WProductSchema = new Schema({
     required: true 
   },
 
-  // ordinal
+  // this can probably go away
   ordinal: Number, 
   
   display_flags: {
@@ -39,9 +39,6 @@ var WProductSchema = new Schema({
   // list of option type IDs and nullable product instance function IDs
   modifiers: [ProductModifierSchema],
   
-  // depreciated
-  modifiers2: [ProductModifierSchema],
-
   // Corresponding to a WCategorySchema
   category_ids: [String],
 });
