@@ -16,19 +16,26 @@ const ValidationChain = [
     }
     throw new Error("Disabled value misformed");
   }),
-  //body('permanent_disable').toBoolean(true),
   body('is_base').toBoolean(true),
-  body('display_flags.skip_customization').toBoolean(true),
-  body('display_flags.hide_from_menu').toBoolean(true),
-  body('display_flags.price_display').exists().isIn(['FROM_X', 'VARIES', 'ALWAYS']),
-  body('display_flags.menu_adornment').trim(),
-  body('display_flags.suppress_exhaustive_modifier_list').toBoolean(true),
+  body('display_flags.menu.ordinal').exists().isInt({min: 0}),
+  body('display_flags.menu.hide').toBoolean(true),
+  body('display_flags.menu.price_display').exists().isIn(['FROM_X', 'VARIES', 'ALWAYS', 'MIN_TO_MAX', 'LIST']),
+  body('display_flags.menu.adornment').trim(),
+  body('display_flags.menu.suppress_exhaustive_modifier_list').toBoolean(true),
+  body('display_flags.order.ordinal').exists().isInt({min: 0}),
+  body('display_flags.order.hide').toBoolean(true),
+  body('display_flags.order.skip_customization').toBoolean(true),
+  body('display_flags.order.price_display').exists().isIn(['FROM_X', 'VARIES', 'ALWAYS', 'MIN_TO_MAX', 'LIST']),
+  body('display_flags.order.adornment').trim(),
+  body('display_flags.order.suppress_exhaustive_modifier_list').toBoolean(true),
+  body('display_flags.menu.hide').toBoolean(true),
   body('ordinal').exists().isInt({min: 0}),
   body('price.amount').isInt({ min: 0 }).exists(),
   body('price.currency').exists().isLength({ min: 3, max: 3 }).isIn(['USD']),
-  body('modifiers.*.modifier_type_id').trim().escape().exists(),
-  body('modifiers.*.options.*.option_id').trim().escape().exists(),
-  body('modifiers.*.options.*.placement').exists().isIn(['NONE', 'LEFT', 'RIGHT', 'WHOLE'])
+  body('modifiers.*.modifier_type_id').trim().escape().exists().isMongoId(),
+  body('modifiers.*.options.*.option_id').trim().escape().exists().isMongoId(),
+  body('modifiers.*.options.*.placement').exists().isIn(['NONE', 'LEFT', 'RIGHT', 'WHOLE']),
+  body('modifiers.*.options.*.qualifier').exists().isIn(['REGULAR', 'LITE', 'HEAVY', 'OTS'])
 ];
 
 module.exports = Router({ mergeParams: true })

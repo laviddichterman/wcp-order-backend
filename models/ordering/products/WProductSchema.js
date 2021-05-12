@@ -18,7 +18,7 @@ var WProductSchema = new Schema({
     required: true 
   },
 
-  // ordinal
+  // this can probably go away
   ordinal: Number, 
   
   display_flags: {

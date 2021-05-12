@@ -45,7 +45,8 @@ var WCatalogItemSchema = new Schema({
     end: Number
   },
 
-  // flag to PERMANENTLY turn off this product
+  // flag to PERMANENTLY turn off this product, roughly equivalent to a deletion,
+  // but not because we want to be able to be able to reference the product later on
   permanent_disable: Boolean
 }, { _id: false});
 

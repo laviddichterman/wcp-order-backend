@@ -11,6 +11,12 @@ const WOptionInstanceSchema = new Schema({
     type: String,
     enum: ['NONE', 'LEFT', 'RIGHT', 'WHOLE'],
     required: true
+  },
+
+  qualifier: {
+    type: String,
+    enum: ['REGULAR', 'LITE', 'HEAVY', 'OTS'],
+    //required: true // todo: make required
   }
 }, { _id: false});
 
