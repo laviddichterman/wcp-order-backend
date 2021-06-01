@@ -18,8 +18,11 @@ var WCategorySchema = new Schema({
   // parent category ID if any
   parent_id: String,  
 
-  // subheading, optional
+  // subheading, optional, HTML allowed
   subheading: String,
+
+  // footnotes (like for health dept warnings), optional, HTML allowed
+  footnotes: String,
 
   display_flags: {
     call_line_name: String,

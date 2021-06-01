@@ -279,13 +279,14 @@ class CatalogProvider {
     }
   };
 
-  CreateCategory = async ({description, name, ordinal, parent_id, subheading, display_flags}) => {
+  CreateCategory = async ({description, name, ordinal, parent_id, subheading, footer, display_flags}) => {
     const doc = new this.#dbconn.WCategorySchema({
       description: description,
       name: name,
       ordinal: ordinal,
       parent_id: parent_id,
       subheading: subheading,
+      footer,
       display_flags: display_flags
     });
     await doc.save();
@@ -295,7 +296,7 @@ class CatalogProvider {
     return doc;
   };
 
-  UpdateCategory = async ( category_id, {name, description, ordinal, subheading, parent_id, display_flags}) => {
+  UpdateCategory = async ( category_id, {name, description, ordinal, subheading, footer, parent_id, display_flags}) => {
     try {
       const category_id_map = ReduceArrayToMapByKey(this.#categories, "_id");
       if (!category_id_map[category_id]) {
@@ -322,6 +323,7 @@ class CatalogProvider {
       category_id_map[category_id].parent_id = parent_id;
       category_id_map[category_id].ordinal = ordinal;
       category_id_map[category_id].subheading = subheading;
+      category_id_map[category_id].footer = footer;
       category_id_map[category_id].display_flags = display_flags;
       await category_id_map[category_id].save();
       if (cycle_update_promise) {

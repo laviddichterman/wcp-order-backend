@@ -10,6 +10,10 @@ var SettingsSchema = new Schema({
     type: Number,
     default: 15
   },
+  time_step2: [{
+    type: Number,
+    default: 15
+  }],
   pipeline_info: {
     baking_pipeline: [{ slots: Number, time: Number }],
     transfer_padding: Number

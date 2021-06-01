@@ -9,6 +9,7 @@ const ValidationChain = [
   body('name').trim().exists(),
   body('description').trim(),
   body('subheading').trim(),
+  body('footer').trim(),
   body('ordinal').exists().isInt({min: 0}),
   body('parent_id').trim().escape(),
   body('display_flags.call_line_name').trim().escape(),
@@ -29,6 +30,7 @@ module.exports = Router({ mergeParams: true })
           ordinal: req.body.ordinal,
           description: req.body.description,
           subheading: req.body.subheading,
+          footer: req.body.footer,
           parent_id: req.body.parent_id,
           display_flags: req.body.display_flags
         });

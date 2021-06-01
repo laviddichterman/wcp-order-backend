@@ -71,11 +71,22 @@ module.exports = Router({ mergeParams: true })
             squareID: req.body.squareID
           },
           display_flags: {
-            hide_from_menu: false,
-            skip_customization: false,
-            menu_adornment: "",
-            price_display: 'ALWAYS',
-            suppress_exhaustive_modifier_list: false
+            menu: { 
+              ordinal: req.body.ordinal,
+              hide: false,
+              price_display: 'ALWAYS',
+              adornment: "",
+              suppress_exhaustive_modifier_list: false,
+              show_modifier_options: false            
+            },
+            order: { 
+              ordinal: pi.ordinal,
+              hide: pi.display_flags.hide_from_menu,
+              skip_customization: false,
+              price_display: 'ALWAYS',
+              adornment: "",
+              suppress_exhaustive_modifier_list: false
+            }
           },
           is_base: true
         });

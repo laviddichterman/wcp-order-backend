@@ -367,13 +367,17 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
   }],
   "0.2.11": [{ major: 0, minor: 2, patch: 12 }, async (dbconn) => {
     {
+      var promises = [];
       {
         //populate...
+        // set modifiers.[].options.[].qualifier = "REGULAR";
+        
         // display_flags.menu.ordinal
         // display_flags.menu.hide
         // display_flags.menu.price_display
         // display_flags.menu.adornment:
         // display_flags.menu.suppress_exhaustive_modifier_list
+        // display_flags.menu.show_modifier_options
 
         // display_flags.order.ordinal
         // display_flags.order.hide
@@ -381,9 +385,6 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
         // display_flags.order.price_display
         // display_flags.order.adornment
         // display_flags.order.suppress_exhaustive_modifier_list
-
-        // set modifiers.[].options.[].qualifier = "REGULAR";
-        var promises = [];
         const product_instances = await dbconn.WProductInstanceSchema.find();
         product_instances.forEach(async function(pi) {
           pi.modifiers = pi.modifiers.map((x) => { 
@@ -398,7 +399,7 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
             price_display: pi.display_flags.price_display,
             adornment: pi.display_flags.menu_adornment,
             suppress_exhaustive_modifier_list: pi.display_flags.suppress_exhaustive_modifier_list,
-            
+            show_modifier_options: false            
           };
           pi.display_flags.order = { 
             ordinal: pi.ordinal,
@@ -408,15 +409,41 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
             adornment: pi.display_flags.menu_adornment,
             suppress_exhaustive_modifier_list: pi.display_flags.suppress_exhaustive_modifier_list
           };
-          
           promises.push(pi.save().then(function() { 
             logger.debug(`Updated product instance ${pi.item.display_name} (${pi._id}) display flags and modifiers.`);
           }).catch(function(err) {
             logger.error(`Unable to update product instance ${pi.item.display_name} (${pi._id}) display flags and modifiers. Got error: ${JSON.stringify(err)}`);
           }));
         })
-        await Promise.all(promises);
       }
+      {
+        // add footnotes field
+        const category_update = await dbconn.WCategorySchema.updateMany(
+          { },
+          {
+            $set: {
+              "footnotes": ""
+            }
+          });
+        if (category_update.nModified > 0) {
+          logger.debug(`Updated ${category_update.nModified} Categories to have empty footnotes.`);
+        }
+        else {
+          logger.warn("No categories had footnotes added");
+        }
+      }
+      {
+        // create time_step2 field in SettingsSchema
+        const found_services = await dbconn.StringListSchema.findOne();
+        const found_settings = await dbconn.SettingsSchema.findOne();
+        found_settings.time_step2 = found_services.services.map(()=> found_settings.time_step);
+        promises.push(found_settings.save().then(function() { 
+          logger.debug(`Added time_step2 settings.`);
+        }).catch(function(err) {
+          logger.error(`Unable to update SettingsSchema with time_step2 settings. Got error: ${JSON.stringify(err)}`);
+        }));
+      }
+      await Promise.all(promises);
     }
   }],
 }
