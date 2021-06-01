@@ -12,9 +12,6 @@ const GOOGLE_EVENTS_DATETIME_FORMAT = "YYYY-MM-DDTHH:mm:ss";
 const DISPLAY_TIME_FORMAT = "h:mmA";
 const DISPLAY_DATE_FORMAT = "dddd, MMMM DD, Y";
 
-const WCP_ADDRESS = "5918 Phinney Ave N, 98103";
-const BTP_ADDRESS = "4864 Beacon Ave S, 98108";
-
 const IL_AREA_CODES = ["217", "309", "312", "630", "331", "618", "708", "773", "815", "779", "847", "224", "872"];
 const MI_AREA_CODES = ["231", "248", "269", "313", "517", "586", "616", "734", "810", "906", "947", "989", "679"];
 
@@ -52,31 +49,25 @@ const DateTimeIntervalToDisplayServiceInterval = (interval) => {
 
 const GenerateAutoResponseBodyEscaped = function(
   STORE_NAME,
+  PICKUP_INSTRUCTIONS,
+  DINE_INSTRUCTIONS,
+  DELIVERY_INSTRUCTIONS,
+  STORE_ADDRESS,
   service_type_enum, 
   date_time_interval,
   phone_number, 
   delivery_info,
   isPaid
 ) {
-  const WCP_PICKUP_INSTRUCTIONS = "Come to the door and we'll greet you. If there is a line, please form along the north of the building. Please maintain a 6 foot distance between yourself, our team, and other patrons at all times.";
-  const BTP_PICKUP_INSTRUCTIONS = "We are currently offering curbside pick-up. We will have someone available to assist you at the front door when you arrive. Please maintain a 6 foot distance between yourself, our team, and other patrons at all times.";
-
-  const BTP_DINE_IN = "Please arrive promptly with your entire party. Someone will be at the front door to greet you and check your party in. Beverages will be available through our friends at Clock-Out Lounge."
-  const WCP_DINE_IN = "Your pizza is scheduled to come out of the oven at the time you've selected, so please arrive before that time with your entire party so we can check you in. Even if ordered ahead, small plates and beverages will be prepared upon your arrival for quality and freshness.";
-  const NOTE_DELIVERY_SERVICE = "We appreciate your patience as our in-house delivery service is currently in its infancy. Delivery times are estimated. We might be a little earlier, or a little later.";
-
   const NOTE_PREPAID = "You've already paid, so unless there's an issue with the order, there's no need to handle payment from this point forward.";
   const NOTE_PAYMENT = "We happily accept any major credit card or cash for payment.";
 
-  const store_address = STORE_NAME === WCP ? WCP_ADDRESS : BTP_ADDRESS;
-  const pickup_instructions = STORE_NAME === WCP ? WCP_PICKUP_INSTRUCTIONS : BTP_PICKUP_INSTRUCTIONS;
-  const dinein_instructions = STORE_NAME === WCP ? WCP_DINE_IN : BTP_DINE_IN;
-  const service_instructions = [pickup_instructions, dinein_instructions, NOTE_DELIVERY_SERVICE];
+  const service_instructions = [PICKUP_INSTRUCTIONS, DINE_INSTRUCTIONS, DELIVERY_INSTRUCTIONS];
   const nice_area_code = IsNativeAreaCode(phone_number, STORE_NAME === WCP ? WCP_AREA_CODES : BTP_AREA_CODES);
   const payment_section = isPaid ? NOTE_PREPAID : NOTE_PAYMENT;
   const display_time = DateTimeIntervalToDisplayServiceInterval(date_time_interval);
   const confirm = [`We're happy to confirm your ${display_time} pickup at`, `We're happy to confirm your ${display_time} order at`, `We're happy to confirm your delivery around ${display_time} at`];
-  const where = [store_address, store_address, delivery_info.validated_delivery_address];
+  const where = [STORE_ADDRESS, STORE_ADDRESS, delivery_info.validated_delivery_address];
   return encodeURI(`${nice_area_code ? "Hey, nice area code!" : "Thanks!"} ${confirm[service_type_enum]} ${where[service_type_enum]}.\n\n${service_instructions[service_type_enum]} ${payment_section}`);
 }
 
@@ -198,6 +189,10 @@ const RebuildOrderFromDTO = (menu, cart) => {
 
 const CreateInternalEmail = (
   STORE_NAME,
+  PICKUP_INSTRUCTIONS,
+  DINE_INSTRUCTIONS,
+  DELIVERY_INSTRUCTIONS,
+  STORE_ADDRESS,
   EMAIL_ADDRESS,
   CATALOG,
   service_type_enum,
@@ -218,7 +213,7 @@ const CreateInternalEmail = (
   totals,
   payment_info,
   store_credit) => {
-  const confirmation_body_escaped = GenerateAutoResponseBodyEscaped(STORE_NAME, service_type_enum, date_time_interval, phonenum, delivery_info, isPaid)
+  const confirmation_body_escaped = GenerateAutoResponseBodyEscaped(STORE_NAME, PICKUP_INSTRUCTIONS, DINE_INSTRUCTIONS, DELIVERY_INSTRUCTIONS, STORE_ADDRESS, service_type_enum, date_time_interval, phonenum, delivery_info, isPaid)
   const confirmation_subject_escaped = encodeURI(service_title);
   const payment_section = isPaid ? GeneratePaymentSection(totals, payment_info, store_credit, true) : "";
   const delivery_section = GenerateDeliverySection(delivery_info, true);
@@ -255,6 +250,8 @@ Submit: ${website_metrics.time_submit}<br />
 
 const CreateExternalEmail = (
   STORE_NAME,
+  ORDER_RESPONSE_PREAMBLE,
+  LOCATION_INFO,
   EMAIL_ADDRESS,
   service_option_enum,
   service_title,
@@ -268,20 +265,13 @@ const CreateExternalEmail = (
 ) => {
   const NON_DELIVERY_AUTORESPONSE = "We'll get back to you shortly to confirm your order.";
   const DELIVERY_BETA_AUTORESPONSE = "Our delivery service is now in beta. Delivery times are rough estimates and we will make every attempt to be prompt. We'll contact you to confirm the order shortly.";
-  const WCP_ORDER_RESPONSE_PREAMBLE = "<p>Thanks so much for ordering Seattle's best Chicago-style pan deep-dish pizza!</p>"
-  const BTP_ORDER_RESPONSE_PREAMBLE = `<p>Thanks so much for ordering Seattle's best Chicago-ish/Detroit-ish, pan deep-dish pizza!</p>`
-  const WCP_LOCATION_INFO = `at (<a href="http://bit.ly/WindyCityPieMap">${WCP_ADDRESS}</a>).`;
-  const BTP_LOCATION_INFO = `inside Clock-Out Lounge (<a href="http://bit.ly/BreezyTownAtClockOut">${BTP_ADDRESS}</a>).`;
-
   const automated_instructions = service_option_enum == 2 ? DELIVERY_BETA_AUTORESPONSE : NON_DELIVERY_AUTORESPONSE;
-  const preamble = STORE_NAME === WCP ? WCP_ORDER_RESPONSE_PREAMBLE : BTP_ORDER_RESPONSE_PREAMBLE;
-  const location_info = STORE_NAME === WCP ? WCP_LOCATION_INFO : BTP_LOCATION_INFO;
   const cartstring = GenerateDisplayCartStringListFromProducts(cart);
   const delivery_section = GenerateDeliverySection(delivery_info, true);
   const location_section = delivery_section ? "" : `<p><strong>Location Information:</strong>
-We are located ${location_info}</p>`;
+We are located ${LOCATION_INFO}</p>`;
   const special_instructions_section = special_instructions && special_instructions.length > 0 ? "<p><strong>Special Instructions</strong>: " + special_instructions  + "</p>": "";
-  const emailbody = `${preamble}
+  const emailbody = `<p>${ORDER_RESPONSE_PREAMBLE}</p>
 <p>We take your health seriously; be assured your order has been prepared with the utmost care.</p>
 <p>Note that all gratuity is shared with the entire ${STORE_NAME} family.</p>
 <p>${automated_instructions}</p>
@@ -440,6 +430,12 @@ module.exports = Router({ mergeParams: true })
   .post('/v1/order', ValidationChain, async (req, res, next) => {
     const EMAIL_ADDRESS = req.db.KeyValueConfig.EMAIL_ADDRESS;
     const STORE_NAME = req.db.KeyValueConfig.STORE_NAME;
+    const ORDER_RESPONSE_PREAMBLE = req.db.KeyValueConfig.ORDER_RESPONSE_PREAMBLE;
+    const LOCATION_INFO = req.db.KeyValueConfig.LOCATION_INFO;
+    const PICKUP_INSTRUCTIONS = req.db.KeyValueConfig.PICKUP_INSTRUCTIONS;
+    const DINE_INSTRUCTIONS = req.db.KeyValueConfig.DINE_INSTRUCTIONS;
+    const DELIVERY_INSTRUCTIONS = req.db.KeyValueConfig.DELIVERY_INSTRUCTIONS;
+    const STORE_ADDRESS = req.db.KeyValueConfig.STORE_ADDRESS;
     const STORE_CREDIT_SHEET = req.db.KeyValueConfig.STORE_CREDIT_SHEET;
 
     req.logger.info(`Received order request: ${JSON.stringify(req.body)}`);
@@ -534,6 +530,8 @@ module.exports = Router({ mergeParams: true })
       // send email to customer
       CreateExternalEmail(
         STORE_NAME,
+        ORDER_RESPONSE_PREAMBLE,
+        LOCATION_INFO,
         EMAIL_ADDRESS,
         service_option_enum,
         service_title,
@@ -548,6 +546,10 @@ module.exports = Router({ mergeParams: true })
       // send email to eat(pie)
       CreateInternalEmail(
         STORE_NAME,
+        PICKUP_INSTRUCTIONS,
+        DINE_INSTRUCTIONS,
+        DELIVERY_INSTRUCTIONS,
+        STORE_ADDRESS,
         EMAIL_ADDRESS,
         req.catalog.Catalog,
         service_option_enum,
