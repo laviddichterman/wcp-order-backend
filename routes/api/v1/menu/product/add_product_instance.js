@@ -29,7 +29,6 @@ const ValidationChain = [
   body('display_flags.order.price_display').exists().isIn(['FROM_X', 'VARIES', 'ALWAYS', 'MIN_TO_MAX', 'LIST']),
   body('display_flags.order.adornment').trim(),
   body('display_flags.order.suppress_exhaustive_modifier_list').toBoolean(true),
-  body('display_flags.order.hide').toBoolean(true),
   body('ordinal').exists().isInt({min: 0}),
   body('price.amount').isInt({ min: 0 }).exists(),
   body('price.currency').exists().isLength({ min: 3, max: 3 }).isIn(['USD']),
