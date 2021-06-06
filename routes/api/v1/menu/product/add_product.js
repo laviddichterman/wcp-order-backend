@@ -80,8 +80,8 @@ module.exports = Router({ mergeParams: true })
               show_modifier_options: false            
             },
             order: { 
-              ordinal: pi.ordinal,
-              hide: pi.display_flags.hide_from_menu,
+              ordinal: req.body.ordinal,
+              hide: false,
               skip_customization: false,
               price_display: 'ALWAYS',
               adornment: "",
