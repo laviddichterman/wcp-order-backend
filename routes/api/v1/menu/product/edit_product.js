@@ -12,12 +12,6 @@ const ValidationChain = [
   body('shortcode').trim().escape(),
   body('revelID').trim().escape(),
   body('squareID').trim().escape(),
-  body('disabled').custom((value) => {
-    if (!value || (typeof value === 'object' && "start" in value && "end" in value && Number.isInteger(value.start) && Number.isInteger(value.end))) {
-      return true;
-    }
-    throw new Error("Disabled value misformed");
-  }),
   // don't sanitize this to boolean, but validate that it is a boolean
   //body('permanent_disable').isBoolean(true),
   body('display_flags.flavor_max').isFloat({min: 0}),
@@ -25,7 +19,6 @@ const ValidationChain = [
   body('display_flags.bake_differential').isFloat({min: 0}),
   body('display_flags.show_name_of_base_product').toBoolean(true),
   body('display_flags.singular_noun').trim(),
-  body('ordinal').exists().isInt({min: 0}),
   body('price.amount').isInt({min: 0, max:100000}),
   body('price.currency').isLength({min:3, max: 3}).isIn(['USD']),
   body('modifiers.*.mtid').trim().escape().exists().isMongoId(),
@@ -45,9 +38,6 @@ module.exports = Router({ mergeParams: true })
         description: req.body.description,
         display_name: req.body.display_name,
         shortcode: req.body.shortcode,
-        disabled: req.body.disabled,
-        permanent_disable: false,
-        ordinal: req.body.ordinal,
         externalIDs: {
           revelID: req.body.revelID,
           squareID: req.body.squareID

@@ -18,6 +18,11 @@ class DataProvider {
     this.#dbconn = dbconn;
     this.#services = null;
     this.#settings = null;
+    // blocked_off is stored in the memory/wire format here of:
+    // [service_index][<String, [<start, end>]>], 
+    // meaning an array indexed by service_index of...
+    // ... an array of two-tuples ...
+    // ... whose 0th element is the string representation of the date, and whose 1th element is a list of interval tuples
     this.#blocked_off = [];
     this.#leadtimes = [];
     this.#delivery_area = {};

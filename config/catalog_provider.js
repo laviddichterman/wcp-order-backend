@@ -615,9 +615,7 @@ class CatalogProvider {
     description, 
     price, 
     shortcode, 
-    disabled, 
     display_flags,
-    ordinal, 
     revelID, 
     squareID, 
     modifiers,
@@ -633,9 +631,7 @@ class CatalogProvider {
         description: description,
         display_name: display_name,
         shortcode: shortcode,
-        disabled: disabled,
         permanent_disable: false,
-        ordinal: ordinal,
         externalIDs: {
           revelID: revelID,
           squareID: squareID
@@ -657,9 +653,7 @@ class CatalogProvider {
     description, 
     price, 
     shortcode, 
-    disabled, 
     display_flags,
-    ordinal, 
     revelID, 
     squareID, 
     modifiers,
@@ -679,9 +673,6 @@ class CatalogProvider {
             description: description,
             display_name: display_name,
             shortcode: shortcode,
-            disabled: disabled,
-            permanent_disable: false,
-            ordinal: ordinal,
             externalIDs: {
               revelID: revelID,
               squareID: squareID

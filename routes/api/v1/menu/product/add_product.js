@@ -22,7 +22,7 @@ const ValidationChain = [
   // TODO: ensure show_name_of_base_product is TRUE if modifier list length === 0
   body('display_flags.show_name_of_base_product').toBoolean(true),
   body('display_flags.singular_noun').trim(),
-  body('ordinal').exists().isInt({min: 0}),
+  body('ordinal').optional({nullable: true}).isInt({min: 0}),
   body('price.amount').isInt({ min: 0 }).exists(),
   body('price.currency').exists().isLength({ min: 3, max: 3 }).isIn(['USD']),
   body('modifiers.*.mtid').trim().escape().exists().isMongoId(),
@@ -43,9 +43,6 @@ module.exports = Router({ mergeParams: true })
         description: req.body.description,
         display_name: req.body.display_name,
         shortcode: req.body.shortcode,
-        disabled: req.body.disabled,
-        permanent_disable: false,
-        ordinal: req.body.ordinal,
         externalIDs: {
           revelID: req.body.revelID,
           squareID: req.body.squareID
