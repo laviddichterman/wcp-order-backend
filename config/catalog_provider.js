@@ -283,9 +283,9 @@ class CatalogProvider {
     const doc = new this.#dbconn.WCategorySchema({
       description: description,
       name: name,
-      ordinal: ordinal,
-      parent_id: parent_id,
-      subheading: subheading,
+      ordinal,
+      parent_id,
+      subheading,
       footnotes,
       display_flags: display_flags
     });

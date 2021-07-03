@@ -24,25 +24,26 @@ class GoogleProvider {
     this.#sheetsAPI = google.sheets('v4');
   }
 
-  RefreshAccessToken = () => {
+  RefreshAccessToken = async () => {
     try {
-      this.#accessToken = this.#oauth2Client.getAccessToken();
+      logger.debug("Refreshing Google OAUTH2 access token.");
+      this.#accessToken = await this.#oauth2Client.getAccessToken();
     }
     catch (error) {
       logger.error(`Failed to refresh Google access token, got error ${JSON.stringify(error)}`);
     }
   }
 
-  BootstrapProvider = (db) => {
+  BootstrapProvider = async (db) => {
     const cfg = db.KeyValueConfig;
     if (cfg.GOOGLE_REFRESH_TOKEN && cfg.EMAIL_ADDRESS) {
       logger.debug("Got refresh token from DB config: %o", cfg.GOOGLE_REFRESH_TOKEN);
       this.#oauth2Client.setCredentials({
         refresh_token: cfg.GOOGLE_REFRESH_TOKEN
       });
-      this.RefreshAccessToken();
+      await this.RefreshAccessToken();
       // refreshes token every 45 minutes
-      const REFRESH_ACCESS_INTERVAL = setInterval(() => {
+      const _REFRESH_ACCESS_INTERVAL = setInterval(() => {
         this.RefreshAccessToken();
       }, 2700000);
 
@@ -57,7 +58,7 @@ class GoogleProvider {
           refreshToken: cfg.GOOGLE_REFRESH_TOKEN
         }
       });
-      this.#smtpTransport.set('oauth2_provision_cb', (user, renew, callback) => {
+      this.#smtpTransport.set('oauth2_provision_cb', (_user, renew, callback) => {
         if (renew) {
           this.RefreshAccessToken();
         }
@@ -80,7 +81,7 @@ class GoogleProvider {
     return this.#accessToken;
   };
 
-  SendEmail = (from, to, subject, replyto, htmlbody) => {
+  SendEmail = async (from, to, subject, replyto, htmlbody) => {
     const mailOptions = {
       from: from,
       to: to,
@@ -89,20 +90,18 @@ class GoogleProvider {
       replyTo: replyto,
       html: htmlbody
     };
-    this.#smtpTransport.sendMail(mailOptions, (error, response) => {
-      if (error) {
-        logger.error(`Email of ${mailOptions} not sent, got error: ${error}`);
-        this.#smtpTransport.close();
-        throw error;
-      }
-      else {
-        logger.debug(`Sent mail with subject ${subject} to ${to}`);
-      }
+    try { 
+      const res = await this.#smtpTransport.sendMail(mailOptions);
+      logger.debug(`Sent mail with subject ${subject} to ${to}`);
+    }
+    catch (error) { 
+      logger.error(`Email of ${mailOptions} not sent, got error: ${error}`);
       this.#smtpTransport.close();
-    });
+      throw error;
+    }    
   };
 
-  CreateCalendarEvent = (summary, location, description, start, end) => {
+  CreateCalendarEvent = async (summary, location, description, start, end) => {
     const eventjson = {
       summary: summary,
       location: location,
@@ -110,20 +109,19 @@ class GoogleProvider {
       start: start,
       end: end
     };
-    this.#calendarAPI.events.insert({
-      auth: this.#oauth2Client,
-      calendarId: 'primary',
-      resource: eventjson
-    }, (err, event) => {
-      if (err) {
+    try { 
+      const event = await this.#calendarAPI.events.insert({
+        auth: this.#oauth2Client,
+        calendarId: 'primary',
+        resource: eventjson
+      });
+      logger.debug("Created event: %o", event);
+    }
+    catch (err) {
         logger.error("event not created: %o", eventjson);
         logger.error(err);
         throw (err);
-      }
-      else {
-        logger.debug("Created event: %o", event);
-      }
-    });
+    }
   };
 
   GetEventsForDate = async (min_date, max_date, tz) => {

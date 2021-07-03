@@ -29,10 +29,10 @@ const SquareProvider = require("./config/square");
 // needs to run first
 DatabaseManager.Bootstrap(async () => {
   DataProvider.Bootstrap(async () => {
-    GoogleProvider.BootstrapProvider(DataProvider);
+    await GoogleProvider.BootstrapProvider(DataProvider);
     SquareProvider.BootstrapProvider(DataProvider);
   });
-  CatalogProvider.Bootstrap();  
+  await CatalogProvider.Bootstrap();  
 });
 
 app.use(idempotency.idempotency());

@@ -2,6 +2,7 @@
 const Router = require('express').Router
 const moment = require('moment');
 const { body, validationResult } = require('express-validator');
+const Promise = require('bluebird');
 const GoogleProvider = require("../../../../config/google");
 const SquareProvider = require("../../../../config/square");
 const wcpshared = require("@wcp/wcpshared");
@@ -187,7 +188,7 @@ const RebuildOrderFromDTO = (menu, cart) => {
   return newcart;
 }
 
-const CreateInternalEmail = (
+const CreateInternalEmail = async (
   STORE_NAME,
   PICKUP_INSTRUCTIONS,
   DINE_INSTRUCTIONS,
@@ -237,7 +238,7 @@ Load: ${website_metrics.load_time}<br />
 Time select: ${website_metrics.time_selection_time}<br />
 Submit: ${website_metrics.time_submit}<br />
 <p>Useragent: ${website_metrics.ua}</p>`;
-  GoogleProvider.SendEmail(
+  await GoogleProvider.SendEmail(
     {
       name: customer_name,
       address: EMAIL_ADDRESS
@@ -248,7 +249,7 @@ Submit: ${website_metrics.time_submit}<br />
     emailbody);
 }
 
-const CreateExternalEmail = (
+const CreateExternalEmail = async (
   STORE_NAME,
   ORDER_RESPONSE_PREAMBLE,
   LOCATION_INFO,
@@ -286,7 +287,7 @@ ${special_instructions_section}
 ${delivery_section}
 ${isPaid && payment_info ? `<br /><a href="${payment_info.result.payment.receiptUrl}">Here's a link to your receipt!</a>` : ""}
 ${location_section}We thank you for your support!`;
-  GoogleProvider.SendEmail(
+  return await GoogleProvider.SendEmail(
     {
       name: STORE_NAME,
       address: EMAIL_ADDRESS
@@ -297,7 +298,7 @@ ${location_section}We thank you for your support!`;
     emailbody);
 }
 
-const CreateOrderEvent = (
+const CreateOrderEvent = async (
   CATALOG,
   service_option_enum,
   customer_name,
@@ -320,7 +321,7 @@ const CreateOrderEvent = (
   const delivery_section = GenerateDeliverySection(delivery_info, false);
   const calendar_details = `${shortcart.map(x=> `${x.category_name}:\n${x.products.join("\n")}`).join("\n")}\n${number_guests_section}ph: ${phone_number}${special_instructions_section}${delivery_section}${payment_section}`;
 
-  return GoogleProvider.CreateCalendarEvent(calendar_event_title,
+  return await GoogleProvider.CreateCalendarEvent(calendar_event_title,
     delivery_info.validated_delivery_address ? delivery_info.validated_delivery_address : "",
     calendar_details,
     { dateTime: service_time_interval[0].format(GOOGLE_EVENTS_DATETIME_FORMAT),
@@ -524,11 +525,11 @@ module.exports = Router({ mergeParams: true })
 
     // step 3: fire off success emails and create order in calendar
     try {
-
+      var service_calls = [];
       // TODO, need to actually test the failure of these service calls and some sort of retrying
       // for example, the event not created error happens, and it doesn't fail the service call. it should
       // send email to customer
-      CreateExternalEmail(
+      service_calls.push(CreateExternalEmail(
         STORE_NAME,
         ORDER_RESPONSE_PREAMBLE,
         LOCATION_INFO,
@@ -541,10 +542,10 @@ module.exports = Router({ mergeParams: true })
         special_instructions,
         delivery_info,
         isPaid,
-        charging_response[1]);
+        charging_response[1]));
 
       // send email to eat(pie)
-      CreateInternalEmail(
+      service_calls.push(CreateInternalEmail(
         STORE_NAME,
         PICKUP_INSTRUCTIONS,
         DINE_INSTRUCTIONS,
@@ -570,8 +571,8 @@ module.exports = Router({ mergeParams: true })
         totals,
         charging_response[1],
         store_credit
-      );
-      CreateOrderEvent(
+      ));
+      service_calls.push(CreateOrderEvent(
         req.catalog.Catalog,
         service_option_enum,
         customer_name,
@@ -586,7 +587,8 @@ module.exports = Router({ mergeParams: true })
         totals,
         charging_response[1],
         store_credit
-      );
+      ));
+      await Promise.all(service_calls);
       // send response to user
       return charging_response[0] ? 
         res.status(200).json({ 
