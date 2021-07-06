@@ -446,6 +446,10 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
       await Promise.all(promises);
     }
   }],
+  "0.2.12": [{ major: 0, minor: 2, patch: 13 }, async (dbconn) => {
+    { // do nothing
+    }
+  }],
 }
 
 class DatabaseManager {

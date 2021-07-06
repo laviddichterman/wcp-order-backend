@@ -1,6 +1,6 @@
 {
   "name": "@wcp/wcp-order-backend",
-  "version": "0.2.12",
+  "version": "0.2.13",
   "main": "server.js",
   "scripts": {
     "test": "mocha",
@@ -21,7 +21,7 @@
   "dependencies": {
     "@googlemaps/google-maps-services-js": "^3.1.16",
     "@turf/turf": "^5.1.6",
-    "@wcp/wcpshared": "^2.2.1",
+    "@wcp/wcpshared": "^2.2.3",
     "bluebird": "^3.7.2",
     "body-parser": "^1.19.0",
     "connect-mongo": "^3.2.0",
@@ -46,7 +46,7 @@
   },
   "devDependencies": {
     "chai": "^4.3.4",
-    "mocha": "^8.3.2",
+    "mocha": "^9.0.2",
     "supertest": "^6.1.3"
   },
   "description": "backend ordering service",
