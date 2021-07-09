@@ -215,6 +215,7 @@ const CreateInternalEmail = async (
   payment_info,
   store_credit) => {
   const confirmation_body_escaped = GenerateAutoResponseBodyEscaped(STORE_NAME, PICKUP_INSTRUCTIONS, DINE_INSTRUCTIONS, DELIVERY_INSTRUCTIONS, STORE_ADDRESS, service_type_enum, date_time_interval, phonenum, delivery_info, isPaid)
+  // TODO check why escaping isn't properly happening here (https://app.asana.com/0/1200204889676691/1200581525177284/f)
   const confirmation_subject_escaped = encodeURI(service_title);
   const payment_section = isPaid ? GeneratePaymentSection(totals, payment_info, store_credit, true) : "";
   const delivery_section = GenerateDeliverySection(delivery_info, true);
