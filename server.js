@@ -25,12 +25,14 @@ const DataProvider = require("./config/dataprovider")({ dbconn: DatabaseConnecti
 const CatalogProvider = require("./config/catalog_provider")({socketRO: socket_ro, dbconn: DatabaseConnection});
 const GoogleProvider = require("./config/google");
 const SquareProvider = require("./config/square");
+const StoreCreditProvider = require("./config/store_credit_provider");
 
 // needs to run first
 DatabaseManager.Bootstrap(async () => {
   DataProvider.Bootstrap(async () => {
     await GoogleProvider.BootstrapProvider(DataProvider);
     SquareProvider.BootstrapProvider(DataProvider);
+    StoreCreditProvider.BootstrapProvider(DataProvider);
   });
   await CatalogProvider.Bootstrap();  
 });
