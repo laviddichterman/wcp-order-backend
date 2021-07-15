@@ -398,12 +398,6 @@ module.exports = Router({ mergeParams: true })
 
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      GoogleProvider.SendEmail(
-        EMAIL_ADDRESS,
-        [EMAIL_ADDRESS, "dave@windycitypie.com"],
-        "ERROR IN ORDER PROCESSING. CONTACT DAVE IMMEDIATELY",
-        "dave@windycitypie.com",
-        `<p>Order request: ${JSON.stringify(req.body)}</p><p>Error info:${JSON.stringify(errors.array())}</p>`);
       return res.status(422).json({ errors: errors.array() });
     }
 
