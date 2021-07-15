@@ -1,12 +1,10 @@
 // some thing relating to payments
 const Router = require('express').Router
-const moment = require('moment');
-const voucher_codes = require('voucher-code-generator');
-const wcpshared = require("@wcp/wcpshared");
 
 const { body, validationResult } = require('express-validator');
 const SquareProvider = require("../../../../../config/square");
 const GoogleProvider = require("../../../../../config/google");
+const StoreCreditProvider = require("../../../../config/store_credit_provider");
 
 const CreateExternalEmailSender = (EMAIL_ADDRESS, STORE_NAME, payment, sender_email, recipient_name_first, recipient_name_last, credit_code) => {
   const amount = Number(payment.result.payment.totalMoney.amount) / 100;
@@ -43,13 +41,7 @@ const CreateExternalEmailRecipient = (EMAIL_ADDRESS, STORE_NAME, payment, sender
     EMAIL_ADDRESS,
     emailbody);
 }
-const AppendToStoreCreditSheet = async (STORE_CREDIT_SHEET, payment, recipient, credit_code) => {
-  const range = "CurrentWARIO!A1:M1";
-  const amount = Number(Number(payment.result.payment.totalMoney.amount) / 100).toFixed(2);
-  const date_added = moment().format(wcpshared.WDateUtils.DATE_STRING_INTERNAL_FORMAT);
-  const fields = [recipient, amount, "MONEY", amount, date_added, "WARIO", date_added, credit_code, "", "", "", "", ""];
-  await GoogleProvider.AppendToSheet(STORE_CREDIT_SHEET, range, fields);
-}
+
 
 const ValidationChain = [
   body('credit_amount').exists().isFloat({ min: 1, max: 500 }),
@@ -66,7 +58,6 @@ module.exports = Router({ mergeParams: true })
   .post('/v1/payments/storecredit/stopgap', ValidationChain, async (req, res, next) => {
     const EMAIL_ADDRESS = req.db.KeyValueConfig.EMAIL_ADDRESS;
     const STORE_NAME = req.db.KeyValueConfig.STORE_NAME;
-    const STORE_CREDIT_SHEET = req.db.KeyValueConfig.STORE_CREDIT_SHEET;
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
@@ -86,8 +77,7 @@ module.exports = Router({ mergeParams: true })
       const recipient_name_last = req.body.recipient_name_last.replace("&", "and").replace("<", "").replace(">", "");;
       const recipient_email_address = req.body.recipient_email_address;
       const recipient_message = req.body.recipient_message.replace("&", "and").replace("<", "").replace(">", "");;
-      const credit_code = voucher_codes.generate({pattern: "###-##-###"})[0];
-      const joint_credit_code = `${credit_code}-${reference_id}`;
+      const joint_credit_code = StoreCreditProvider.GenerateCreditCode();
       const create_order_response = await SquareProvider.CreateOrderStoreCredit(reference_id, amount_money, `Purchase of store credit code: ${joint_credit_code}`);
       if (create_order_response.success === true) {
         const square_order_id = create_order_response.response.order.id;
@@ -98,7 +88,8 @@ module.exports = Router({ mergeParams: true })
           if (req.body.send_email_to_recipient) {
             CreateExternalEmailRecipient(EMAIL_ADDRESS, STORE_NAME, payment_response, sender_name, recipient_name_first, recipient_name_last, recipient_email_address, recipient_message, joint_credit_code);
           }
-          await AppendToStoreCreditSheet(STORE_CREDIT_SHEET, payment_response, `${recipient_name_first} ${recipient_name_last}`, joint_credit_code);
+          const amount = Number(Number(payment_response.result.payment.totalMoney.amount) / 100).toFixed(2);
+          await StoreCreditProvider.CreateCreditFromCreditCode(`${recipient_name_first} ${recipient_name_last}`, amount, "MONEY", joint_credit_code, "", "WARIO", "");
           req.logger.info(`Store credit code: ${joint_credit_code} and Square Order ID: ${square_order_id} payment for ${amount_money} successful, credit logged to spreadsheet.`)
           return res.status(200).json({reference_id, 
             joint_credit_code, 

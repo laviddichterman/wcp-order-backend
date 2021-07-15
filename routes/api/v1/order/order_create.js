@@ -5,6 +5,7 @@ const { body, validationResult } = require('express-validator');
 const Promise = require('bluebird');
 const GoogleProvider = require("../../../../config/google");
 const SquareProvider = require("../../../../config/square");
+const StoreCreditProvider = require("../../../../config/store_credit_provider");
 const wcpshared = require("@wcp/wcpshared");
 const WCP = "Windy City Pie";
 const DELIVERY_INTERVAL_TIME = 30;
@@ -333,52 +334,6 @@ const CreateOrderEvent = async (
      });
 }
 
-const CheckAndSpendStoreCredit = async (logger, STORE_CREDIT_SHEET, store_credit) => {
-  const range = "CurrentWARIO!A2:M";
-  const values = await GoogleProvider.GetValuesFromSheet(STORE_CREDIT_SHEET, range);
-  for (let i = 0; i < values.values.length; ++i) {
-    const entry = values.values[i];
-    if (entry[7] == store_credit.code) {
-      const credit_balance = parseFloat(Number(entry[3]).toFixed(2));
-      if (store_credit.amount_used > credit_balance) {
-        logger.error(`We have a cheater folks, store credit key ${entry[7]}, attempted to use ${store_credit.amount_used} but had balance ${credit_balance}`);
-        return [false, [], 0];
-      }
-      if (entry[10] != store_credit.encoded.enc ||
-        entry[11] != store_credit.encoded.iv || 
-        entry[12] != store_credit.encoded.auth) {
-        logger.error(`WE HAVE A CHEATER FOLKS, store credit key ${entry[7]}, expecting encoded: ${JSON.stringify(store_credit.encoded)}.`);
-        return [false, [], 0];
-      }
-      if (entry[8] && moment(entry[8], wcpshared.WDateUtils.DATE_STRING_INTERNAL_FORMAT).isBefore(moment(), "day")) {
-        logger.error(`We have a cheater folks, store credit key ${entry[7]}, attempted to use after expiration of ${entry[8]}.`);
-        return [false, [], 0];
-      }
-      // no shenanagains confirmed
-      const date_modified = moment().format(wcpshared.WDateUtils.DATE_STRING_INTERNAL_FORMAT);
-      const new_balance = credit_balance - store_credit.amount_used;
-      const new_entry = [entry[0], entry[1], entry[2], new_balance, entry[4], entry[5], date_modified, entry[7], entry[8], entry[9], entry[10], entry[11], entry[12]];
-      const new_range = `CurrentWARIO!${2 + i}:${2 + i}`;
-      // TODO switch to volatile-esq update API call
-      await GoogleProvider.UpdateValuesInSheet(STORE_CREDIT_SHEET, new_range, new_entry);
-      logger.info(`Debited ${store_credit.amount_used} from code ${store_credit.code} yielding balance of ${new_balance}.`);
-      return [true, entry, i];
-    }
-  }
-  logger.error(`Not sure how, but the store credit key wasn't found: ${store_credit}`);
-  return [false, [], 0];
-}
-
-const CheckAndRefundStoreCredit = async (STORE_CREDIT_SHEET, old_entry, index) => {
-  // TODO: we're re-validating the encryption key to ensure there's not a race condition or a bug
-  // TODO: throw an exception or figure out how to communicate this error
-
-  const new_range = `CurrentWARIO!${2 + index}:${2 + index}`;
-  // TODO switch to volatile-esq update API call
-  await GoogleProvider.UpdateValuesInSheet(STORE_CREDIT_SHEET, new_range, old_entry);
-  return true;
-}
-
 const CreateSquareOrderAndCharge = async (logger, reference_id, balance, nonce, note) => {
   const amount_to_charge = Math.round(balance * 100);
   const create_order_response = await SquareProvider.CreateOrderStoreCredit(reference_id, amount_to_charge, note);
@@ -438,7 +393,6 @@ module.exports = Router({ mergeParams: true })
     const DINE_INSTRUCTIONS = req.db.KeyValueConfig.DINE_INSTRUCTIONS;
     const DELIVERY_INSTRUCTIONS = req.db.KeyValueConfig.DELIVERY_INSTRUCTIONS;
     const STORE_ADDRESS = req.db.KeyValueConfig.STORE_ADDRESS;
-    const STORE_CREDIT_SHEET = req.db.KeyValueConfig.STORE_CREDIT_SHEET;
 
     req.logger.info(`Received order request: ${JSON.stringify(req.body)}`);
 
@@ -487,8 +441,8 @@ module.exports = Router({ mergeParams: true })
     // step 1: attempt to process store credit, keep track of old store credit balance in case of failure
     let store_credit_response;
     if (store_credit.amount_used > 0) {
-      store_credit_response = await CheckAndSpendStoreCredit(req.logger, STORE_CREDIT_SHEET, store_credit);
-      if (!store_credit_response[0]) {
+      store_credit_response = await StoreCreditProvider.ValidateLockAndSpend(store_credit.code, store_credit.encoded, store_credit.amount_used);
+      if (!store_credit_response.success) {
         req.logger.error("Failed to process store credit step of ordering");
         return res.status(404).json({success: false, result: {errors: [{detail: "Unable to debit store credit."}]} });
       }
@@ -507,7 +461,7 @@ module.exports = Router({ mergeParams: true })
         // if any part of step 2 fails, restore old store credit balance
         if (store_credit.amount_used > 0) {
           req.logger.info(`Refunding ${store_credit.code} after failed credit card payment.`);
-          await CheckAndRefundStoreCredit(STORE_CREDIT_SHEET, store_credit_response[1], store_credit_response[2]);
+          await StoreCreditProvider.CheckAndRefundStoreCredit(store_credit_response.entry, store_credit_response.index);
         }
         req.logger.error(`Nasty error in processing payment: ${BigIntStringify(error)}.`);
         return res.status(500).json({success:false, result: {errors: [BigIntStringify(error)]} });
@@ -515,7 +469,7 @@ module.exports = Router({ mergeParams: true })
       if (!charging_response[0]) {
         if (store_credit.amount_used > 0) {
           req.logger.info(`Refunding ${store_credit.code} after failed credit card payment.`);
-          await CheckAndRefundStoreCredit(STORE_CREDIT_SHEET, store_credit_response[1], store_credit_response[2]);
+          await StoreCreditProvider.CheckAndRefundStoreCredit(store_credit_response.entry, store_credit_response.index);
         }
         return res.status(400).json(charging_response[1]);
       }
