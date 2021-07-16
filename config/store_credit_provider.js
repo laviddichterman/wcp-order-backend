@@ -1,3 +1,4 @@
+const moment = require('moment');
 const voucher_codes = require('voucher-code-generator');
 const wcpshared = require("@wcp/wcpshared");
 const GoogleProvider = require("./google");
@@ -41,7 +42,7 @@ BootstrapProvider = async (db) => {
   CreateCreditFromCreditCode = async (recipient, amount, credit_type, credit_code, expiration, generated_by, reason) => {
     const date_added = moment().format(wcpshared.WDateUtils.DATE_STRING_INTERNAL_FORMAT);
     const fields = [recipient, amount, credit_type, amount, date_added, generated_by, date_added, credit_code, expiration, reason, "", "", ""];
-    return await GoogleProvider.AppendToSheet(db.KeyValueConfig.STORE_CREDIT_SHEET, `${ACTIVE_RANGE}!A1:M1`, fields);
+    return await GoogleProvider.AppendToSheet(this.#db.KeyValueConfig.STORE_CREDIT_SHEET, `${ACTIVE_SHEET}!A1:M1`, fields);
   }
 
   /**
@@ -55,7 +56,7 @@ BootstrapProvider = async (db) => {
     // TODO: remove dashes from credit code
     const [enc, iv, auth] = aes256gcm.encrypt(credit_code);
     const values = await values_promise;
-    const i = values.indexOf(credit_code);
+    const i = values.values.findIndex(x=>x[7] === credit_code);
     if (i === -1) { 
       return {valid: false, type: "MONEY", lock: {}, balance: 0};
     }

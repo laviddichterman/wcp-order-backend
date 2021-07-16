@@ -81,14 +81,15 @@ class GoogleProvider {
     return this.#accessToken;
   };
 
-  SendEmail = async (from, to, subject, replyto, htmlbody) => {
+  SendEmail = async (from, to, subject, replyto, htmlbody, attachments=[]) => {
     const mailOptions = {
       from: from,
       to: to,
       subject: subject,
       generateTextFromHTML: true,
       replyTo: replyto,
-      html: htmlbody
+      html: htmlbody,
+      attachments
     };
     try { 
       const res = await this.#smtpTransport.sendMail(mailOptions);
@@ -100,7 +101,6 @@ class GoogleProvider {
       throw error;
     }    
   };
-
   CreateCalendarEvent = async (summary, location, description, start, end) => {
     const eventjson = {
       summary: summary,

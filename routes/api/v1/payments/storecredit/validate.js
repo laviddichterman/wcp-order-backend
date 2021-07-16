@@ -1,9 +1,8 @@
 // some thing relating to payments
 const Router = require('express').Router
-const moment = require('moment');
 const { query, validationResult } = require('express-validator');
 const GoogleProvider = require("../../../../../config/google");
-const StoreCreditProvider = require("../../../../config/store_credit_provider");
+const StoreCreditProvider = require("../../../../../config/store_credit_provider");
 
 const ValidationChain = [
   query('code').exists().isLength({min: 19, max: 19})
@@ -20,7 +19,7 @@ module.exports = Router({ mergeParams: true })
       const credit_code = req.query.code;
       const validate_response = await StoreCreditProvider.ValidateAndLockCode(credit_code);
       if (validate_response.valid) {
-        req.logger.info(`Found and locked ${credit_code} with value ${amount}.`);
+        req.logger.info(`Found and locked ${credit_code} with value ${validate_response.balance}.`);
         return res.status(200).json({enc: validate_response.lock.enc, 
           iv: validate_response.lock.iv.toString('hex'), 
           auth: validate_response.lock.auth.toString('hex'), 

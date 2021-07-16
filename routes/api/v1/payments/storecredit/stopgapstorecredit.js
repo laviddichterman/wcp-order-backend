@@ -4,7 +4,7 @@ const Router = require('express').Router
 const { body, validationResult } = require('express-validator');
 const SquareProvider = require("../../../../../config/square");
 const GoogleProvider = require("../../../../../config/google");
-const StoreCreditProvider = require("../../../../config/store_credit_provider");
+const StoreCreditProvider = require("../../../../../config/store_credit_provider");
 
 const CreateExternalEmailSender = (EMAIL_ADDRESS, STORE_NAME, payment, sender_email, recipient_name_first, recipient_name_last, credit_code) => {
   const amount = Number(payment.result.payment.totalMoney.amount) / 100;
