@@ -1,5 +1,7 @@
 const moment = require('moment');
 const voucher_codes = require('voucher-code-generator');
+const qrcode = require('qrcode');
+const Stream = require('stream');
 const wcpshared = require("@wcp/wcpshared");
 const GoogleProvider = require("./google");
 const aes256gcm = require('./crypto-aes-256-gcm');
@@ -29,6 +31,27 @@ BootstrapProvider = async (db) => {
   }
 
   /**
+   * Generates an image file stream for the passed QR code
+   * @param {String} code 
+   * @returns {Stream.PassThrough} file stream for the generated QR code
+   */
+  GenerateQRCodeFS = async (code) => {
+    const qr_code_fs = new Stream.PassThrough();
+    await qrcode.toFileStream(qr_code_fs, code, {
+      errorCorrectionLevel: "H",
+      type: "png",
+      width: 300,
+      margin: 1,
+      color: {
+        dark: "#000000ff",//"#B3DDF2FF", uncomment for Chicago flag blue
+        light: "#0000"        
+      }
+
+    });
+    return qr_code_fs;
+  }
+
+  /**
    * 
    * @param {String} recipient - name of the person that holds the credit
    * @param {Number} amount - a floating point number corresponding to the credit stored
@@ -42,7 +65,7 @@ BootstrapProvider = async (db) => {
   CreateCreditFromCreditCode = async (recipient, amount, credit_type, credit_code, expiration, generated_by, reason) => {
     const date_added = moment().format(wcpshared.WDateUtils.DATE_STRING_INTERNAL_FORMAT);
     const fields = [recipient, amount, credit_type, amount, date_added, generated_by, date_added, credit_code, expiration, reason, "", "", ""];
-    return await GoogleProvider.AppendToSheet(this.#db.KeyValueConfig.STORE_CREDIT_SHEET, `${ACTIVE_SHEET}!A1:M1`, fields);
+    return GoogleProvider.AppendToSheet(this.#db.KeyValueConfig.STORE_CREDIT_SHEET, `${ACTIVE_SHEET}!A1:M1`, fields);
   }
 
   /**

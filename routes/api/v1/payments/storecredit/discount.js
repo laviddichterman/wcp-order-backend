@@ -1,7 +1,5 @@
 // some thing relating to payments
 const Router = require('express').Router
-const qrcode = require('qrcode');
-const Stream = require('stream');
 const moment = require('moment');
 const StoreCreditProvider = require("../../../../../config/store_credit_provider");
 const wcpshared = require("@wcp/wcpshared");
@@ -18,7 +16,7 @@ const CreateExternalEmail = async (EMAIL_ADDRESS, STORE_NAME, amount, recipient_
   <p>Credit code: <strong>${credit_code}</strong> valuing <strong>\$${amount}</strong> for ${recipient_name_first} ${recipient_name_last}.<br />
   <p>Use this discount code when ordering online or in person at either Windy City Pie or Breezy Town Pizza.${expiration_section}</p><br />
   Keep this email in your records and let us know if you have any questions!</p>
-  <p>Copy and paste the code above into the appropriate field when paying online or, if redeeming in person, show this QR code:<br/> <img src="cid:${credit_code}" /></p>`;
+  <p>Copy and paste the code above into the "Use Digital Gift Card / Store Credit" field when paying online or, if redeeming in person, show this QR code:<br/> <img src="cid:${credit_code}" /></p>`;
   await GoogleProvider.SendEmail(
     {
       name: STORE_NAME,
@@ -59,11 +57,7 @@ module.exports = Router({ mergeParams: true })
       const recipient_email = req.body.recipient_email;
       const reason = req.body.reason;
       const credit_code = StoreCreditProvider.GenerateCreditCode();
-      const qr_code_fs = new Stream.PassThrough();
-      await qrcode.toFileStream(qr_code_fs, credit_code, {
-        errorCorrectionLevel: "H",
-        type: "png"
-      });
+      const qr_code_fs = await StoreCreditProvider.GenerateQRCodeFS(credit_code);
       const expiration_formatted = expiration ? expiration.format(wcpshared.WDateUtils.DATE_STRING_INTERNAL_FORMAT) : "";
       await StoreCreditProvider.CreateCreditFromCreditCode(`${recipient_name_first} ${recipient_name_last}`, amount, "DISCOUNT", credit_code, expiration_formatted, added_by, reason);
       await CreateExternalEmail(EMAIL_ADDRESS, STORE_NAME, amount, recipient_name_first, recipient_name_last, recipient_email, credit_code, expiration, qr_code_fs);
