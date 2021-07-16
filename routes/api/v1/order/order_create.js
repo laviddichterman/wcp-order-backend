@@ -435,7 +435,7 @@ module.exports = Router({ mergeParams: true })
     // step 1: attempt to process store credit, keep track of old store credit balance in case of failure
     let store_credit_response;
     if (store_credit.amount_used > 0) {
-      store_credit_response = await StoreCreditProvider.ValidateLockAndSpend(store_credit.code, store_credit.encoded, store_credit.amount_used);
+      store_credit_response = await StoreCreditProvider.ValidateLockAndSpend(store_credit.code, store_credit.encoded, store_credit.amount_used, STORE_NAME);
       if (!store_credit_response.success) {
         req.logger.error("Failed to process store credit step of ordering");
         return res.status(404).json({success: false, result: {errors: [{detail: "Unable to debit store credit."}]} });

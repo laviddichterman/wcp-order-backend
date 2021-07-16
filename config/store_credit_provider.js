@@ -73,7 +73,7 @@ BootstrapProvider = async (db) => {
       balance: parseFloat(Number(entry[3]).toFixed(2)) };
   }
 
-  ValidateLockAndSpend = async (credit_code, lock, amount) => {
+  ValidateLockAndSpend = async (credit_code, lock, amount, updated_by) => {
     const values = await GoogleProvider.GetValuesFromSheet(this.#db.KeyValueConfig.STORE_CREDIT_SHEET, ACTIVE_RANGE);
     for (let i = 0; i < values.values.length; ++i) {
       const entry = values.values[i];
@@ -96,7 +96,7 @@ BootstrapProvider = async (db) => {
         // no shenanagains confirmed
         const date_modified = moment().format(wcpshared.WDateUtils.DATE_STRING_INTERNAL_FORMAT);
         const new_balance = credit_balance - amount;
-        const new_entry = [entry[0], entry[1], entry[2], new_balance, entry[4], entry[5], date_modified, entry[7], entry[8], entry[9], entry[10], entry[11], entry[12]];
+        const new_entry = [entry[0], entry[1], entry[2], new_balance, entry[4], updated_by, date_modified, entry[7], entry[8], entry[9], entry[10], entry[11], entry[12]];
         const new_range = `${ACTIVE_SHEET}!${2 + i}:${2 + i}`;
         // TODO switch to volatile-esq update API call
         await GoogleProvider.UpdateValuesInSheet(this.#db.KeyValueConfig.STORE_CREDIT_SHEET, new_range, new_entry);

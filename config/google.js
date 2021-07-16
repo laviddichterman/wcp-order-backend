@@ -169,7 +169,7 @@ class GoogleProvider {
       auth: this.#oauth2Client,
       spreadsheetId: sheetId,
       range: range,
-      valueInputOption: "RAW",
+      valueInputOption: "USER_ENTERED",
       resource: {
         majorDimension: "ROWS",
         values: [fields]
