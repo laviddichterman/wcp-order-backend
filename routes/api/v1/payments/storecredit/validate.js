@@ -18,7 +18,7 @@ module.exports = Router({ mergeParams: true })
       }
       const credit_code = req.query.code;
       const validate_response = await StoreCreditProvider.ValidateAndLockCode(credit_code);
-      if (validate_response.valid) {
+      if (validate_response.valid && validate_response.balance > 0) {
         req.logger.info(`Found and locked ${credit_code} with value ${validate_response.balance}.`);
         return res.status(200).json({enc: validate_response.lock.enc, 
           iv: validate_response.lock.iv.toString('hex'), 

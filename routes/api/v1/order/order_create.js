@@ -70,7 +70,7 @@ const GenerateAutoResponseBodyEscaped = function(
   const display_time = DateTimeIntervalToDisplayServiceInterval(date_time_interval);
   const confirm = [`We're happy to confirm your ${display_time} pickup at`, `We're happy to confirm your ${display_time} order at`, `We're happy to confirm your delivery around ${display_time} at`];
   const where = [STORE_ADDRESS, STORE_ADDRESS, delivery_info.validated_delivery_address];
-  return encodeURI(`${nice_area_code ? "Hey, nice area code!" : "Thanks!"} ${confirm[service_type_enum]} ${where[service_type_enum]}.\n\n${service_instructions[service_type_enum]} ${payment_section}`);
+  return encodeURIComponent(`${nice_area_code ? "Hey, nice area code!" : "Thanks!"} ${confirm[service_type_enum]} ${where[service_type_enum]}.\n\n${service_instructions[service_type_enum]} ${payment_section}`);
 }
 
 const GeneratePaymentSection = (totals, payment_info, store_credit, ishtml) => {
@@ -216,8 +216,7 @@ const CreateInternalEmail = async (
   payment_info,
   store_credit) => {
   const confirmation_body_escaped = GenerateAutoResponseBodyEscaped(STORE_NAME, PICKUP_INSTRUCTIONS, DINE_INSTRUCTIONS, DELIVERY_INSTRUCTIONS, STORE_ADDRESS, service_type_enum, date_time_interval, phonenum, delivery_info, isPaid)
-  // TODO check why escaping isn't properly happening here (https://app.asana.com/0/1200204889676691/1200581525177284/f)
-  const confirmation_subject_escaped = encodeURI(service_title);
+  const confirmation_subject_escaped = encodeURIComponent(service_title);
   const payment_section = isPaid ? GeneratePaymentSection(totals, payment_info, store_credit, true) : "";
   const delivery_section = GenerateDeliverySection(delivery_info, true);
   const shortcart = GenerateShortCartFromFullCart(cart, CATALOG, sliced);
