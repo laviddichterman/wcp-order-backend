@@ -9,13 +9,21 @@ const app = express();
 const idempotency = require('express-idempotency');
 const expressWinston = require('express-winston')
 const router = require('./routes/')()
-
+const PORT = process.env.PORT || 4001;
 const server = http.createServer(app);
-const io = socketIo(server);
+const io = socketIo(server, 
+  {
+    transports: ["websocket", "polling"], 
+    allowEIO3: true,
+    cors: {
+      origin: [/https:\/\/.*\.windycitypie\.com$/, /https:\/\/.*\.breezytownpizza\.com$/, `http://localhost:${PORT}`],
+      methods: ["GET", "POST"],
+      credentials: true
+    }
+  });
 const socket_auth = io.of("/nsAuth");
 const socket_ro = io.of("/nsRO");
 
-const PORT = process.env.PORT || 4001;
 const { SocketIoJwtAuthenticateAndAuthorize } = require('./config/authorization');
 //const jwtAuthz = require('express-jwt-authz');
 
