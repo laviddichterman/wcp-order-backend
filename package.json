@@ -19,7 +19,7 @@
   },
   "homepage": "https://github.com/laviddichterman/wcp-order-backend#readme",
   "dependencies": {
-    "@googlemaps/google-maps-services-js": "^3.1.16",
+    "@googlemaps/google-maps-services-js": "^3.2.5",
     "@turf/invariant": "^6.5.0",
     "@turf/turf": "^6.5.0",
     "@wcp/wcpshared": "^2.2.4",
