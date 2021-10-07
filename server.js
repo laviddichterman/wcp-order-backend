@@ -24,6 +24,7 @@ const io = socketIo(server,
 const socket_auth = io.of("/nsAuth");
 const socket_ro = io.of("/nsRO");
 
+const { SocketIoJwtAuthenticateAndAuthorize } = require('./config/authorization');
 //const jwtAuthz = require('express-jwt-authz');
 
 const DatabaseConnection = require('./create_database')({ logger })
@@ -63,6 +64,42 @@ app.use((req, res, next) => {
 });
 
 app.use('/api', router);
+
+// handle authenticated socketIO
+socket_auth.on('connect', SocketIoJwtAuthenticateAndAuthorize(['read:order_config', 'write:order_config']))
+  .on('authenticated', (socket) => {
+    logger.debug(`New client authenticated with permissions: ${socket.decoded_token.permissions}`);
+    socket.emit('AUTH_KEYVALUES', DataProvider.KeyValueConfig);
+    socket.on('AUTH_SERVICES', function (msg) {
+      logger.error("SOMEHOW Got socket message on AUTH_SERVICES channel: %o", msg);
+      //socket_ro.emit('WCP_SERVICES', DataProvider.Services);
+    });
+    socket.on('AUTH_BLOCKED_OFF', function (msg) {
+      logger.debug("Got socket message on AUTH_BLOCKED_OFF channel: %o", msg);
+      DataProvider.BlockedOff = msg;
+      socket_ro.emit('WCP_BLOCKED_OFF', DataProvider.BlockedOff);
+    });
+    socket.on('AUTH_LEAD_TIMES', function (msg) {
+      logger.debug("Got socket message on AUTH_LEAD_TIMES channel: %o", msg);
+      DataProvider.LeadTimes = msg;
+      socket_ro.emit('WCP_LEAD_TIMES', DataProvider.LeadTimes);
+    });
+    socket.on('AUTH_SETTINGS', function (msg) {
+      logger.debug("Got socket message on AUTH_SETTINGS channel: %o", msg);
+      DataProvider.Settings = msg;
+      socket_ro.emit('WCP_SETTINGS', DataProvider.Settings);
+    });
+    socket.on('AUTH_DELIVERY_AREA', function (msg) {
+      logger.debug("Got socket message on AUTH_DELIVERY_AREA channel: %o", msg);
+      DataProvider.DeliveryArea = msg;
+      socket_ro.emit('WCP_DELIVERY_AREA', DataProvider.DeliveryArea);
+    });
+    socket.on('AUTH_KEYVALUES', function (msg) {
+      logger.debug("Got socket message on AUTH_KEYVALUES channel: %o", msg);
+      DataProvider.KeyValueConfig = msg;
+      socket.broadcast.emit('AUTH_KEYVALUES', DataProvider.KeyValueConfig);
+    });
+  });
 
 socket_ro.on('connect',(socket) => { 
   const connect_time = new moment();
