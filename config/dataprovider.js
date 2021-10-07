@@ -1,6 +1,5 @@
 const { WDateUtils } = require("@wcp/wcpshared");
 const logger = require('../logging');
-const process = require('process');
 const DEFAULT_LEAD_TIMES = require("../data/leadtimeschemas.default.json");
 const DEFAULT_SETTINGS = require("../data/settingsschemas.default.json");
 const DEFAULT_SERVICES = require("../data/servicesschemas.default.json");
@@ -255,7 +254,7 @@ class DataProvider {
       }
       db_key_values.settings = settings_list;
       db_key_values.save()
-        .then(e => { logger.debug("Saved key/value config %o", db_key_values);       process.exit(0); })
+        .then(e => { logger.debug("Saved key/value config %o", db_key_values) })
         .catch(err => { logger.error("Error saving key/value config %o", err) });
     });
   }
