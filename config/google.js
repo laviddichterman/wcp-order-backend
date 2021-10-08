@@ -1,6 +1,7 @@
 const nodemailer = require("nodemailer");
 const { google } = require("googleapis");
 const OAUTH2_KEYS = require("../authentication/auth");
+const { ExponentialBackoff } = require('../utils');
 const logger = require('../logging');
 const OAuth2 = google.auth.OAuth2;
 
@@ -81,7 +82,7 @@ class GoogleProvider {
     return this.#accessToken;
   };
 
-  SendEmail = async (from, to, subject, replyto, htmlbody, attachments=[]) => {
+  SendEmail = async (from, to, subject, replyto, htmlbody, attachments=[], retry=0, max_retry=5) => {    
     const mailOptions = {
       from: from,
       to: to,
@@ -91,17 +92,22 @@ class GoogleProvider {
       html: htmlbody,
       attachments
     };
-    try { 
-      const res = await this.#smtpTransport.sendMail(mailOptions);
-      logger.debug(`Sent mail with subject ${subject} to ${to}`);
+    const call_fxn = async () => {
+      try { 
+        const res = await this.#smtpTransport.sendMail(mailOptions);
+        logger.debug(`Sent mail with subject ${subject} to ${to}`);
+        return res;
+      }
+      catch (error) { 
+        logger.error(`Email of ${JSON.stringify(mailOptions)} not sent, got error: ${error}`);
+        //this.#smtpTransport.close(); not sure if this is needed or not?
+        throw error;
+      }
     }
-    catch (error) { 
-      logger.error(`Email of ${mailOptions} not sent, got error: ${error}`);
-      this.#smtpTransport.close();
-      throw error;
-    }    
+    return await ExponentialBackoff(call_fxn, () => true, retry, max_retry);
   };
-  CreateCalendarEvent = async (summary, location, description, start, end) => {
+
+  CreateCalendarEvent = async (summary, location, description, start, end, retry=0, max_retry=5) => {
     const eventjson = {
       summary: summary,
       location: location,
@@ -109,19 +115,23 @@ class GoogleProvider {
       start: start,
       end: end
     };
-    try { 
-      const event = await this.#calendarAPI.events.insert({
-        auth: this.#oauth2Client,
-        calendarId: 'primary',
-        resource: eventjson
-      });
-      logger.debug("Created event: %o", event);
-    }
-    catch (err) {
+    const call_fxn = async () => {
+      try { 
+        const event = await this.#calendarAPI.events.insert({
+          auth: this.#oauth2Client,
+          calendarId: 'primary',
+          resource: eventjson
+        });
+        logger.debug("Created event: %o", event);
+        return event;
+      }
+      catch (err) {
         logger.error("event not created: %o", eventjson);
         logger.error(err);
         throw (err);
+      }  
     }
+    return await ExponentialBackoff(call_fxn, () => true, retry, max_retry);
   };
 
   GetEventsForDate = async (min_date, max_date, tz) => {
@@ -135,7 +145,6 @@ class GoogleProvider {
     });
     return(res.data.items);
   }
-
 
   AppendToSheet = async (sheetId, range, fields) => {
     const res = await this.#sheetsAPI.spreadsheets.values.append({
