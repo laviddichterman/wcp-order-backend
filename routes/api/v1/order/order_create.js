@@ -238,6 +238,7 @@ ${payment_section}
 Load: ${website_metrics.load_time}<br />
 Time select: ${website_metrics.time_selection_time}<br />
 Submit: ${website_metrics.time_submit}<br />
+User IP: ${website_metrics.ip}<br />
 <p>Useragent: ${website_metrics.ua}</p>`;
   await GoogleProvider.SendEmail(
     {
@@ -418,7 +419,8 @@ module.exports = Router({ mergeParams: true })
       load_time: req.body.load_time,
       time_selection_time: req.body.time_selection_time,
       time_submit: req.body.submittime,
-      ua: req.body.useragent
+      ua: req.body.useragent,
+      ip: req.headers['x-real-ip'] || req.headers['x-forwarded-for'] || req.socket.remoteAddress 
     };
     const totals = req.body.totals;
     const store_credit = req.body.store_credit;
