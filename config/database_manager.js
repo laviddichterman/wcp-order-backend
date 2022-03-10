@@ -462,6 +462,10 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
     { // do nothing
     }
   }],
+  "0.2.16": [{ major: 0, minor: 2, patch: 17 }, async (_dbconn) => {
+    { // do nothing
+    }
+  }],
 }
 
 class DatabaseManager {

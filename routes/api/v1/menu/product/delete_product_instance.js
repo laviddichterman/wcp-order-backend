@@ -4,7 +4,7 @@
 
 const Router = require('express').Router
 const { param, validationResult } = require('express-validator');
-const { CheckJWT } = require('../../../../../config/authorization');
+const { CheckJWT, ScopeDeleteCatalog } = require('../../../../../config/authorization');
 
 const ValidationChain = [  
   param('p_id').trim().escape().exists().isMongoId(),
@@ -12,7 +12,7 @@ const ValidationChain = [
 ];
 
 module.exports = Router({ mergeParams: true })
-  .delete('/v1/menu/product/:p_id/:pi_id', ValidationChain, CheckJWT, async (req, res, next) => {
+  .delete('/v1/menu/product/:p_id/:pi_id', CheckJWT, ScopeDeleteCatalog, ValidationChain, async (req, res, next) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {

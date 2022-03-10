@@ -13,7 +13,7 @@ const DBENDPOINT = process.env.DBENDPOINT || 'mongodb://127.0.0.1:27017';
 module.exports = ({ logger }) => {
   const url = `${DBENDPOINT}/${DBTABLE}`;
   mongoose.connect(url, 
-    { useNewUrlParser: true, useUnifiedTopology: true, useFindAndModify: false, user: DBUSER, pass: DBPASS })
+    { useNewUrlParser: true, useUnifiedTopology: true, user: DBUSER, pass: DBPASS })
   const db = glob.sync('./models/**/*.js', { cwd: __dirname })
     .map(filename => {
       return {

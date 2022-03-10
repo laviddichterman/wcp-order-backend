@@ -1,7 +1,7 @@
 // creates a new option type in the catalog
 const Router = require('express').Router
 const { body, validationResult } = require('express-validator');
-const { CheckJWT } = require('../../../../../config/authorization');
+const { CheckJWT, ScopeWriteCatalog } = require('../../../../../config/authorization');
 
 const ValidationChain = [  
   body('name').trim().exists(),
@@ -24,7 +24,7 @@ const ValidationChain = [
 ];
 
 module.exports = Router({ mergeParams: true })
-  .post('/v1/menu/option/', ValidationChain, CheckJWT, async (req, res, next) => {
+  .post('/v1/menu/option/', CheckJWT, ScopeWriteCatalog, ValidationChain, async (req, res, next) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {

@@ -1,7 +1,7 @@
 // creates a new option in the catalog
 const Router = require('express').Router
 const { body, validationResult } = require('express-validator');
-const { CheckJWT } = require('../../../../../config/authorization');
+const { CheckJWT, ScopeWriteCatalog } = require('../../../../../config/authorization');
 
 const ValidationChain = [
   body('name').trim().exists(),
@@ -9,7 +9,7 @@ const ValidationChain = [
 ];
 
 module.exports = Router({ mergeParams: true })
-  .post('/v1/query/language/productinstancefunction', ValidationChain, CheckJWT, async (req, res, next) => {
+  .post('/v1/query/language/productinstancefunction', CheckJWT, ScopeWriteCatalog, ValidationChain, async (req, res, next) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {

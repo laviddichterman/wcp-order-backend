@@ -1,7 +1,7 @@
 // creates a new option in the catalog
 const Router = require('express').Router
 const { body, param, validationResult } = require('express-validator');
-const { CheckJWT } = require('../../../../../config/authorization');
+const { CheckJWT, ScopeWriteCatalog } = require('../../../../../config/authorization');
 
 const ValidationChain = [
   param('pid').trim().escape().exists().isMongoId(), 
@@ -39,7 +39,7 @@ const ValidationChain = [
 ];
 
 module.exports = Router({ mergeParams: true })
-  .post('/v1/menu/product/:pid/', ValidationChain, CheckJWT, async (req, res, next) => {
+  .post('/v1/menu/product/:pid/', CheckJWT, ScopeWriteCatalog, ValidationChain, async (req, res, next) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {

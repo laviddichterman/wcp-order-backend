@@ -1,13 +1,13 @@
 const Router = require('express').Router
-const { body, param, validationResult } = require('express-validator');
-const { CheckJWT } = require('../../../../../config/authorization');
+const { body, validationResult } = require('express-validator');
+const { CheckJWT, ScopeWriteOrderConfig } = require('../../../../../config/authorization');
 
 const ValidationChain = [  
   body("*").isInt({min: 0}),
 ];
 
 module.exports = Router({ mergeParams: true })
-  .post('/v1/config/timing/leadtime', ValidationChain, CheckJWT, async (req, res, next) => {
+  .post('/v1/config/timing/leadtime', CheckJWT, ScopeWriteOrderConfig, ValidationChain, async (req, res, next) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {

@@ -1,6 +1,6 @@
 const Router = require('express').Router
 const { body, param, validationResult } = require('express-validator');
-const { CheckJWT } = require('../../../../config/authorization');
+const { CheckJWT, ScopeWriteKVStore } = require('../../../../config/authorization');
 const turf_invariant = require('@turf/invariant');
 
 const ValidationChain = [  
@@ -10,7 +10,7 @@ const ValidationChain = [
 ];
 
 module.exports = Router({ mergeParams: true })
-  .post('/v1/addresses/', ValidationChain, CheckJWT, async (req, res, next) => {
+  .post('/v1/addresses/', CheckJWT, ScopeWriteKVStore, ValidationChain, async (req, res, next) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {

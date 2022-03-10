@@ -1,6 +1,6 @@
 const Router = require('express').Router
 const { param, body, validationResult } = require('express-validator');
-const { CheckJWT } = require('../../../../../config/authorization');
+const { CheckJWT, ScopeWriteCatalog } = require('../../../../../config/authorization');
 
 const ValidationChain = [
   param('mtid').trim().escape().exists().isMongoId(),
@@ -23,7 +23,7 @@ const ValidationChain = [
 ];
 
 module.exports = Router({ mergeParams: true })
-  .patch('/v1/menu/option/:mtid', ValidationChain, CheckJWT, async (req, res, next) => {
+  .patch('/v1/menu/option/:mtid', CheckJWT, ScopeWriteCatalog, ValidationChain, async (req, res, next) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {

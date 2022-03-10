@@ -1,7 +1,7 @@
 // creates a new category in the catalog
 const Router = require('express').Router
 const { body, param, validationResult } = require('express-validator');
-const { CheckJWT } = require('../../../../../config/authorization');
+const { CheckJWT, ScopeWriteOrderConfig } = require('../../../../../config/authorization');
 const wcpshared = require("@wcp/wcpshared");
 
 const ValidationChain = [  
@@ -11,7 +11,7 @@ const ValidationChain = [
 ];
 
 module.exports = Router({ mergeParams: true })
-  .post('/v1/config/timing/blockoff', ValidationChain, CheckJWT, async (req, res, next) => {
+  .post('/v1/config/timing/blockoff', CheckJWT, ScopeWriteOrderConfig, ValidationChain, async (req, res, next) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {

@@ -2,7 +2,7 @@
 
 const Router = require('express').Router
 const { param, body, validationResult } = require('express-validator');
-const { CheckJWT } = require('../../../../../config/authorization');
+const { CheckJWT, ScopeWriteCatalog } = require('../../../../../config/authorization');
 
 const ValidationChain = [
   param('catid').trim().escape().exists(),
@@ -17,7 +17,7 @@ const ValidationChain = [
 ];
 
 module.exports = Router({ mergeParams: true })
-  .patch('/v1/menu/category/:catid', ValidationChain, CheckJWT, async (req, res, next) => {
+  .patch('/v1/menu/category/:catid', CheckJWT, ScopeWriteCatalog, ValidationChain, async (req, res, next) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
