@@ -6,7 +6,7 @@ const wcpshared = require("@wcp/wcpshared");
 
 const { body, validationResult } = require('express-validator');
 const GoogleProvider = require("../../../../../config/google");
-const { CheckJWT } = require('../../../../../config/authorization');
+const { CheckJWT, ScopeEditCredit } = require('../../../../../config/authorization');
 
 const DISPLAY_DATE_FORMAT = "dddd, MMMM DD, Y";
 
@@ -41,7 +41,7 @@ const ValidationChain = [
 ];
 
 module.exports = Router({ mergeParams: true })
-  .post('/v1/payments/storecredit/discount', ValidationChain, CheckJWT, async (req, res, next) => {
+  .post('/v1/payments/storecredit/discount', CheckJWT, ScopeEditCredit, ValidationChain, async (req, res, next) => {
     const EMAIL_ADDRESS = req.db.KeyValueConfig.EMAIL_ADDRESS;
     const STORE_NAME = req.db.KeyValueConfig.STORE_NAME;
     try {

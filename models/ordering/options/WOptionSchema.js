@@ -20,7 +20,7 @@ var WOptionSchema = new Schema({
 
   // option type enumeration
   option_type_id: {
-    type: String,
+    type: Schema.Types.ObjectId,
     required: true
   },
 
@@ -37,7 +37,7 @@ var WOptionSchema = new Schema({
 
   // optional function object that operates on a product instance
   // and returns true if the option should be enabled.
-  enable_function: { type: Schema.Types.ObjectId, ref: 'WProductInstanceFunction' },
+  enable_function: { type: Schema.Types.ObjectId, ref: 'WProductInstanceFunction', autopopulate: true },
 
   display_flags: {
     // supresses listing on the shortname of the end product
@@ -50,14 +50,6 @@ var WOptionSchema = new Schema({
   },
 });
 
-var AutoPopulate = function(next) {
-  this.populate('enable_function');
-  next();
-};
-
-WOptionSchema.
-  pre('findOne', AutoPopulate).
-  pre('find', AutoPopulate);
-
+WOptionSchema.plugin(require('mongoose-autopopulate'));
 
 module.exports = WOptionSchema;

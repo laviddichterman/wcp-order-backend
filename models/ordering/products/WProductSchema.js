@@ -6,7 +6,7 @@ const ProductModifierSchema = new Schema({
   mtid: { type: Schema.Types.ObjectId, ref: 'WOptionTypeSchema' }, 
   // optional function object that operates on a product instance
   // and returns true if the option type should be enabled.
-  enable: { type: Schema.Types.ObjectId, ref: 'WProductInstanceFunction' } 
+  enable: { type: Schema.Types.ObjectId, ref: 'WProductInstanceFunction', autopopulate: true } 
 }, { _id: false });
 
 
@@ -43,14 +43,7 @@ var WProductSchema = new Schema({
   category_ids: [String],
 });
 
-var AutoPopulate = function(next) {
-  this.populate({path: "modifiers", populate: { path: 'enable' } });
-  next();
-};
-
-WProductSchema.
-  pre('findOne', AutoPopulate).
-  pre('find', AutoPopulate);
+WProductSchema.plugin(require('mongoose-autopopulate'));
 
 
 module.exports = WProductSchema;

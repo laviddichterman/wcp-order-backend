@@ -202,7 +202,7 @@ class CatalogProvider {
     logger.debug(`Syncing Modifier Options.`);
     // modifier options
     try {
-      this.#options = await this.#dbconn.WOptionSchema.find().populate("enable_function").exec();
+      this.#options = await this.#dbconn.WOptionSchema.find().exec();
     } catch (err) {
       logger.error(`Failed fetching options with error: ${JSON.stringify(err)}`);
       return false;
@@ -354,8 +354,8 @@ class CatalogProvider {
         }
       }));
       const products_update = await this.#dbconn.WProductSchema.updateMany({}, { $pull: {category_ids: category_id }} );
-      if (products_update.nModified > 0) {
-        logger.debug(`Removed Category ID from ${products_update.nModified} products.`);
+      if (products_update.modifiedCount > 0) {
+        logger.debug(`Removed Category ID from ${products_update.modifiedCount} products.`);
         await this.SyncProducts();
       }
       await this.SyncCategories();
@@ -431,9 +431,9 @@ class CatalogProvider {
         logger.debug(`Removed ${options_delete.deletedCount} Options from the catalog.`);
       }
       const products_update = await this.#dbconn.WProductSchema.updateMany({}, { $pull: {modifiers: mt_id }} );
-      if (products_update.nModified > 0) {
+      if (products_update.modifiedCount > 0) {
         const product_instance_update = await this.#dbconn.WProductInstanceSchema.updateMany({}, {$pull: {modifiers: {modifier_type_id: mt_id}}});
-        logger.debug(`Removed ModifierType ID from ${products_update.nModified} products, ${product_instance_update.nModified} product instances.`);
+        logger.debug(`Removed ModifierType ID from ${products_update.modifiedCount} products, ${product_instance_update.modifiedCount} product instances.`);
         await this.SyncProducts();
         await this.SyncProductInstances();
       }
@@ -584,8 +584,8 @@ class CatalogProvider {
       const product_instance_options_delete = await this.#dbconn.WProductInstanceSchema.updateMany(
         { "modifiers.modifier_type_id": doc.option_type_id },
         { $pull: { "modifiers.$.options": {  option_id: mo_id } } } );
-      if (product_instance_options_delete.nModified > 0) {
-        logger.debug(`Removed ${product_instance_options_delete.nModified} Options from Product Instances.`);
+      if (product_instance_options_delete.modifiedCount > 0) {
+        logger.debug(`Removed ${product_instance_options_delete.modifiedCount} Options from Product Instances.`);
         await this.SyncProductInstances();
       }
       await this.SyncOptions();
@@ -691,7 +691,7 @@ class CatalogProvider {
       if (removed_modifiers.length) {
         await Promise.all(removed_modifiers.map(async (mtid) => { 
           const product_instance_update = await this.#dbconn.WProductInstanceSchema.updateMany({ product_id: pid }, {$pull: {modifiers: {modifier_type_id: mtid}}});
-          logger.debug(`Removed ModifierType ID ${mtid} from ${product_instance_update.nModified} product instances.`);
+          logger.debug(`Removed ModifierType ID ${mtid} from ${product_instance_update.modifiedCount} product instances.`);
         }));
         await this.SyncProductInstances();
       }
@@ -885,18 +885,20 @@ class CatalogProvider {
       }
       const options_update = await this.#dbconn.WOptionSchema.updateMany(
         { enable_function: pif_id }, 
-        { $unset: { "enable_function": ""} });
-      if (options_update.nModified > 0) {
-        logger.debug(`Removed ${doc} from ${options_update.nModified} Modifier Options.`);
+        { $set: { "enable_function": null} });
+      if (options_update.modifiedCount > 0) {
+        logger.debug(`Removed ${doc} from ${options_update.modifiedCount} Modifier Options.`);
         await this.SyncOptions();
       }
       const products_update = await this.#dbconn.WProductSchema.updateMany(
         { "modifiers.enable": pif_id  },
-        { $unset: { "modifiers.$.enable": ""} });
-      if (products_update.nModified > 0) {
-        logger.debug(`Removed ${doc} from ${products_update.nModified} Products.`);
+        { $set: { "modifiers.$.enable": null} });
+      if (products_update.modifiedCount > 0) {
+        logger.debug(`Removed ${doc} from ${products_update.modifiedCount} Products.`);
         await this.SyncProducts();
       }
+
+      
       await this.SyncProductInstanceFunctions();
       if (!suppress_catalog_recomputation) {
         this.RecomputeCatalog();

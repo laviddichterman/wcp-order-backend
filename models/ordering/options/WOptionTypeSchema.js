@@ -65,14 +65,4 @@ const WOptionTypeSchema = new Schema({
 
 });
 
-var AutoPopulate = function(next) {
-  this.populate('enable_function');
-  next();
-};
-
-WOptionTypeSchema.
-  pre('findOne', AutoPopulate).
-  pre('find', AutoPopulate);
-
-
 module.exports = WOptionTypeSchema;
