@@ -46,7 +46,7 @@ const CreateExternalEmailRecipient = async (EMAIL_ADDRESS, STORE_NAME, amount, s
 
 
 const ValidationChain = [
-  body('credit_amount').exists().isFloat({ min: 1, max: 1500 }),
+  body('credit_amount').exists().isFloat({ min: 1, max: 2000 }),
   body('sender_name').trim().exists(),
   body('recipient_name_first').trim().exists(),
   body('recipient_name_last').trim().exists(),
