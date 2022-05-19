@@ -13,12 +13,6 @@ const ValidationChain = [
   body('shortcode').trim().escape().exists(),
   body('revelID').trim().escape(),
   body('squareID').trim().escape(),
-  body('disabled').custom((value) => {
-    if (!value || (typeof value === 'object' && "start" in value && "end" in value && Number.isInteger(value.start) && Number.isInteger(value.end))) {
-      return true;
-    }
-    throw new Error("Disabled value misformed");
-  }),
   body('is_base').toBoolean(true),
   body('display_flags.menu.ordinal').exists().isInt({min: 0}),
   body('display_flags.menu.hide').toBoolean(true),
@@ -53,7 +47,6 @@ module.exports = Router({ mergeParams: true })
         description: req.body.description,
         display_name: req.body.display_name,
         shortcode: req.body.shortcode,
-        disabled: req.body.disabled ? req.body.disabled : null, 
         ordinal: req.body.ordinal,
         externalIDs: {
           revelID: req.body.revelID,

@@ -13,8 +13,8 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
       const options_update = await dbconn.WOptionSchema.updateMany(
         { catalog_item: { $exists: true }}, 
         { $rename: { "catalog_item": "item"} });
-      if (options_update.nModified > 0) {
-        logger.debug(`Updated ${options_update.nModified} Options to new catalog.`);
+      if (options_update.modifiedCount > 0) {
+        logger.debug(`Updated ${options_update.modifiedCount} Options to new catalog.`);
       }
       else {
         logger.warn("Option DB change from catalog_item to item not found");
@@ -31,8 +31,8 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
             "display_flags.use_toggle_if_only_two_options": true
           } 
         });
-      if (mt_update.nModified > 0) {
-        logger.debug(`Updated ${mt_update.nModified} modifiers to having display flags.`);
+      if (mt_update.modifiedCount > 0) {
+        logger.debug(`Updated ${mt_update.modifiedCount} modifiers to having display flags.`);
       }
       else {
         logger.warn("Didn't add any display flags to modifier types");
@@ -47,8 +47,8 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
             "display_flags.skip_customization": false
           } 
         });
-      if (pi_update.nModified > 0) {
-        logger.debug(`Updated ${pi_update.nModified} product instances to having display flags.`);
+      if (pi_update.modifiedCount > 0) {
+        logger.debug(`Updated ${pi_update.modifiedCount} product instances to having display flags.`);
       }
       else {
         logger.warn("Didn't add any display flags to product instances");
@@ -66,8 +66,8 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
             "display_flags.show_name_of_base_product": true
           } 
         });
-      if (p_update.nModified > 0) {
-        logger.debug(`Updated ${p_update.nModified} products to having display flags.`);
+      if (p_update.modifiedCount > 0) {
+        logger.debug(`Updated ${p_update.modifiedCount} products to having display flags.`);
       }
       else {
         logger.warn("Didn't add any display flags to products");
@@ -108,8 +108,8 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
         const product_instance_disable_update = await dbconn.WProductInstanceSchema.updateMany(
           { "product_id": product._id }, 
           { "item.disabled": { start: 1, end: 0 } });
-        if (product_instance_disable_update.nModified > 0) {
-          logger.debug(`Updated from ${product_instance_disable_update.nModified} product instances of ${product._id} to new blanket disable flag.`);
+        if (product_instance_disable_update.modifiedCount > 0) {
+          logger.debug(`Updated from ${product_instance_disable_update.modifiedCount} product instances of ${product._id} to new blanket disable flag.`);
         }
         ++num_products;
       });
@@ -118,20 +118,20 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
       const disabled_products_update = await dbconn.WProductSchema.updateMany(
         { "item.disabled": true }, 
         { "item.disabled": null });
-      if (disabled_products_update.nModified > 0) {
-        logger.debug(`Removed ${disabled_products_update.nModified} disabled flags from products.`);
+      if (disabled_products_update.modifiedCount > 0) {
+        logger.debug(`Removed ${disabled_products_update.modifiedCount} disabled flags from products.`);
       }
       const product_instance_disable_update = await dbconn.WProductInstanceSchema.updateMany(
         { "item.disabled": true }, 
         { "item.disabled": { start: 1, end: 0 } });
-      if (product_instance_disable_update.nModified > 0) {
-        logger.debug(`Updated from ${product_instance_disable_update.nModified} product instances to new blanket disable flag.`);
+      if (product_instance_disable_update.modifiedCount > 0) {
+        logger.debug(`Updated from ${product_instance_disable_update.modifiedCount} product instances to new blanket disable flag.`);
       }
       const option_disable_update = await dbconn.WOptionSchema.updateMany(
         { "item.disabled": true }, 
         { "item.disabled": { start: 1, end: 0 } });
-      if (option_disable_update.nModified > 0) {
-        logger.debug(`Updated ${option_disable_update.nModified} Options to new disable flag.`);
+      if (option_disable_update.modifiedCount > 0) {
+        logger.debug(`Updated ${option_disable_update.modifiedCount} Options to new disable flag.`);
       }
     }
   }],
@@ -146,8 +146,8 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
             "display_flags.call_line_display": "SHORTNAME"
           }
         });
-      if (category_update.nModified > 0) {
-        logger.debug(`Updated ${category_update.nModified} Categories to new catalog.`);
+      if (category_update.modifiedCount > 0) {
+        logger.debug(`Updated ${category_update.modifiedCount} Categories to new catalog.`);
       }
       else {
         logger.warn("No categories had display_flags added");
@@ -163,8 +163,8 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
             "display_flags.omit_from_shortname": false
           }
         });
-      if (option_update.nModified > 0) {
-        logger.debug(`Updated ${option_update.nModified} modifier options to having display flags.`);
+      if (option_update.modifiedCount > 0) {
+        logger.debug(`Updated ${option_update.modifiedCount} modifier options to having display flags.`);
       }
       else {
         logger.warn("Didn't add any display flags to modifier options");
@@ -182,8 +182,8 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
             "display_flags.modifier_class": "ADD"
           }
         });
-      if (mt_update.nModified > 0) {
-        logger.debug(`Updated ${mt_update.nModified} modifiers to this version's display flags.`);
+      if (mt_update.modifiedCount > 0) {
+        logger.debug(`Updated ${mt_update.modifiedCount} modifiers to this version's display flags.`);
       }
       else {
         logger.warn("Didn't add any display flags to modifier types");
@@ -201,8 +201,8 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
             "display_flags.price_display": "ALWAYS",
           }
         });
-      if (pi_update.nModified > 0) {
-        logger.debug(`Updated ${pi_update.nModified} product instances to this version's display flags.`);
+      if (pi_update.modifiedCount > 0) {
+        logger.debug(`Updated ${pi_update.modifiedCount} product instances to this version's display flags.`);
       }
       else {
         logger.warn("Didn't add any display flags to product instances");
@@ -219,8 +219,8 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
             "display_flags.price_display": "VARIES",
           }
         });
-      if (pi_update.nModified > 0) {
-        logger.debug(`Updated ${pi_update.nModified} product instances from price_display NEVER to VARIES`);
+      if (pi_update.modifiedCount > 0) {
+        logger.debug(`Updated ${pi_update.modifiedCount} product instances from price_display NEVER to VARIES`);
       }
       else {
         logger.warn("Didn't add any display flags to product instances");
@@ -235,8 +235,8 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
             "display_flags.price_display": "ALWAYS",
           }
         });
-      if (pi_update.nModified > 0) {
-        logger.debug(`Updated ${pi_update.nModified} product instances from price_display IF_COMPLETE to ALWAYS`);
+      if (pi_update.modifiedCount > 0) {
+        logger.debug(`Updated ${pi_update.modifiedCount} product instances from price_display IF_COMPLETE to ALWAYS`);
       }
       else {
         logger.warn("Didn't add any display flags to product instances");
@@ -288,8 +288,8 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
               "display_flags.suppress_exhaustive_modifier_list": false
             }
           });
-        if (pi_update.nModified > 0) {
-          logger.debug(`Updated ${pi_update.nModified} product instances to specify suppress_exhaustive_modifier_list to false.`);
+        if (pi_update.modifiedCount > 0) {
+          logger.debug(`Updated ${pi_update.modifiedCount} product instances to specify suppress_exhaustive_modifier_list to false.`);
         }
         else {
           logger.warn("Didn't add any display flags to product instances");
@@ -307,8 +307,8 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
               "display_flags.non_empty_group_suffix": "",
             }
           });
-        if (mt_update.nModified > 0) {
-          logger.debug(`Updated ${mt_update.nModified} modifiers to this version's display flags.`);
+        if (mt_update.modifiedCount > 0) {
+          logger.debug(`Updated ${mt_update.modifiedCount} modifiers to this version's display flags.`);
         }
         else {
           logger.warn("Didn't add any display flags to modifier types");
@@ -323,8 +323,8 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
               "display_flags.omit_from_name": true
             }
           });
-        if (mo_update_true.nModified > 0) {
-          logger.debug(`Updated ${mo_update_true.nModified} modifier options with omit_from_shortname set to true to also have omit_from_name set to true.`);
+        if (mo_update_true.modifiedCount > 0) {
+          logger.debug(`Updated ${mo_update_true.modifiedCount} modifier options with omit_from_shortname set to true to also have omit_from_name set to true.`);
         }
         else {
           logger.warn("Didn't add any omit_from_name: true to any modifier options");
@@ -339,8 +339,8 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
               "display_flags.omit_from_name": false
             }
           });
-        if (mo_update_false.nModified > 0) {
-          logger.debug(`Updated ${mo_update_false.nModified} modifier options with omit_from_shortname set to false to also have omit_from_name set to false.`);
+        if (mo_update_false.modifiedCount > 0) {
+          logger.debug(`Updated ${mo_update_false.modifiedCount} modifier options with omit_from_shortname set to false to also have omit_from_name set to false.`);
         }
         else {
           logger.warn("Didn't add any omit_from_name: false to any modifier options");
@@ -356,8 +356,8 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
         const p_update = await dbconn.WProductSchema.updateMany(
           { },
           { $unset: { "modifiers2": "" } });
-        if (p_update.nModified > 0) {
-          logger.debug(`Updated ${p_update.nModified} WProductSchema documents to remove modifiers2 field.`);
+        if (p_update.modifiedCount > 0) {
+          logger.debug(`Updated ${p_update.modifiedCount} WProductSchema documents to remove modifiers2 field.`);
         }
         else {
           logger.warn("Didn't remove modifiers2 from any WProductSchema documents");
@@ -425,8 +425,8 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
               "footnotes": ""
             }
           });
-        if (category_update.nModified > 0) {
-          logger.debug(`Updated ${category_update.nModified} Categories to have empty footnotes.`);
+        if (category_update.modifiedCount > 0) {
+          logger.debug(`Updated ${category_update.modifiedCount} Categories to have empty footnotes.`);
         }
         else {
           logger.warn("No categories had footnotes added");
@@ -468,6 +468,48 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
   }],
   "0.2.17": [{ major: 0, minor: 2, patch: 18 }, async (_dbconn) => {
     { // do nothing
+    }
+  }],
+  "0.2.18": [{ major: 0, minor: 2, patch: 19 }, async (dbconn) => {
+    { 
+      // bubble up disabled from product instances to the parent product
+      {
+        var product_disable_map = {};
+        // time based disable find at the product instance level
+        const time_disabled_pi_find = await dbconn.WProductInstanceSchema.find({ "item.disabled": { start: { $gt : 1 }, end: { $gt : 2 } } });
+        time_disabled_pi_find.forEach(async (pi) => {
+          if (pi.product_id in product_disable_map) {
+            logger.warn(`Found more than one disable value for product ${pi.product_id}, clobbering ${product_disable_map[pi.product_id]} with ${pi.item.disabled}`);
+          }
+          product_disable_map[pi.product_id] = pi.item.disabled;
+        });
+        // blanket disable find at the product instance level        
+        const disabled_pi_find = await dbconn.WProductInstanceSchema.find({ "item.disabled": { start : 1 , end: 0 } });
+        disabled_pi_find.forEach(async (pi) => {
+          if (pi.product_id in product_disable_map) {
+            logger.warn(`Found more than one disable value for product ${pi.product_id}, clobbering ${product_disable_map[pi.product_id]} with ${pi.item.disabled}`);
+          }
+          product_disable_map[pi.product_id] = pi.item.disabled;
+        });
+
+        var promises = [];
+        for (const [pid, disable] of Object.entries(product_disable_map)) {
+          promises.push(dbconn.WProductSchema.findByIdAndUpdate(pid,{ "disabled": disable}).then(function() { 
+            logger.debug(`Updated product ${pid} with disable value ${disable}.`);
+          }).catch(function(err) {
+            logger.error(`Unable to update product ${pid}. Got error: ${JSON.stringify(err)}`);
+          }));
+        }
+
+        // add display flags to WOptionSchema part 1
+        const p_update = await dbconn.WProductInstanceSchema.updateMany(
+          { },
+          { $unset: { "item.disabled": "" }, $set: { "service_disable": [] } });
+        if (p_update.modifiedCount > 0) {
+          logger.debug(`Updated ${p_update.modifiedCount} WProductInstanceSchema documents to remove item.disabled field and set empty service_disable field.`);
+        }
+        await Promise.all(promises);
+      }
     }
   }],
 }

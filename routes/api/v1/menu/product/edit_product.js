@@ -12,6 +12,13 @@ const ValidationChain = [
   body('shortcode').trim().escape(),
   body('revelID').trim().escape(),
   body('squareID').trim().escape(),
+  body('disabled').custom((value) => {
+    if (!value || (typeof value === 'object' && "start" in value && "end" in value && Number.isInteger(value.start) && Number.isInteger(value.end))) {
+      return true;
+    }
+    throw new Error("Disabled value misformed");
+  }),
+  body('service_disable.*').isInteger({min:0}),
   // don't sanitize this to boolean, but validate that it is a boolean
   //body('permanent_disable').isBoolean(true),
   body('display_flags.flavor_max').isFloat({min: 0}),
@@ -37,6 +44,8 @@ module.exports = Router({ mergeParams: true })
         price: req.body.price,
         description: req.body.description,
         display_name: req.body.display_name,
+        disabled: req.body.disabled ? req.body.disabled : null, 
+        service_disable: service_disable || [],
         shortcode: req.body.shortcode,
         externalIDs: {
           revelID: req.body.revelID,

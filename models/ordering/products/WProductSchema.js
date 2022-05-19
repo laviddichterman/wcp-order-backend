@@ -18,8 +18,21 @@ var WProductSchema = new Schema({
     required: true 
   },
 
-  // this can probably go away
-  ordinal: Number, 
+  // flag to temporarily turn off this product and any products that contain this
+  // start and end are epoch times in the local timezone
+  // special values: 
+  //   start > end means generally disabled
+  //   disabled not defined: means enabled
+  disabled: {
+    start: Number,
+    end: Number
+  },
+
+  // list of service numbers (0, 1, 2...) for which this product should be disabled.
+  // The numbers here should match up with service types enumeration.
+  // [2, 1] would mean that this product and all instances should be considered disabled
+  // for orders with service types of 1 or 2.
+  service_disable: [Number],
   
   display_flags: {
     flavor_max: Number,
@@ -44,6 +57,4 @@ var WProductSchema = new Schema({
 });
 
 WProductSchema.plugin(require('mongoose-autopopulate'));
-
-
 module.exports = WProductSchema;

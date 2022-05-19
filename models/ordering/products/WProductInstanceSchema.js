@@ -58,19 +58,6 @@ const WProductInstanceSchema = new Schema({
       // and instead use the templating strings to determine what is/isn't displayed
       suppress_exhaustive_modifier_list: Boolean
     },
-    // deprecated
-    hide_from_menu: Boolean,
-    // deprecated
-    skip_customization: Boolean,
-    // deprecated
-    menu_adornment: String,
-    // deprecated
-    price_display: {    
-      type: String,
-      enum: PRICE_DISPLAY_ENUMS
-    },
-    // deprecated
-    suppress_exhaustive_modifier_list: Boolean
   },
 
   // optional catalog data if this is a catalog item
