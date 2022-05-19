@@ -18,7 +18,7 @@ const ValidationChain = [
     }
     throw new Error("Disabled value misformed");
   }),
-  body('service_disable.*').isInteger({min:0}),
+  body('service_disable.*').isInt({min:0}),
   // don't sanitize this to boolean, but validate that it is a boolean
   //body('permanent_disable').isBoolean(true),
   body('display_flags.flavor_max').isFloat({min: 0}),
