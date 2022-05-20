@@ -45,7 +45,7 @@ module.exports = Router({ mergeParams: true })
         description: req.body.description,
         display_name: req.body.display_name,
         disabled: req.body.disabled ? req.body.disabled : null, 
-        service_disable: service_disable || [],
+        service_disable: req.body.service_disable || [],
         shortcode: req.body.shortcode,
         externalIDs: {
           revelID: req.body.revelID,
