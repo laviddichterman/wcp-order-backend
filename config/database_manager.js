@@ -1,5 +1,6 @@
 const logger = require('../logging');
 const Promise = require('bluebird');
+const mongoose = require('mongoose');
 const PACKAGE_JSON = require('../package.json');
 
 const SetVersion = async (dbconn, new_version) => { 
@@ -509,6 +510,56 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
           logger.debug(`Updated ${p_update.modifiedCount} WProductInstanceSchema documents to remove item.disabled field and set empty service_disable field.`);
         }
         await Promise.all(promises);
+      }
+    }
+  }],
+  "0.2.19": [{ major: 0, minor: 2, patch: 20 }, async (dbconn) => {
+    { 
+      // re-assign each option_type_id in every ModifierOption
+      {
+        var promises = [];
+        const options = await dbconn.WOptionSchema.find();
+        options.forEach(
+          o => promises.push(dbconn.WOptionSchema.findByIdAndUpdate(o._id, {option_type_id: o.option_type_id}).then(() => { 
+            logger.debug(`Updated Option ${o._id} with type safe option type id ${o.option_type_id}.`);
+          }).catch((err) => {
+            logger.error(`Unable to Option ${o._id}. Got error: ${JSON.stringify(err)}`);
+          })));
+        await Promise.all(promises);
+      }
+      // re-assign each category_ids in every WProductSchema
+      {
+        var promises = [];
+        const products = await dbconn.WProductSchema.find();
+        products.forEach(o => {
+          const type_safe_cids = o.category_ids ? o.category_ids.map(cid => new mongoose.Types.ObjectId(cid)) : [];
+          promises.push(dbconn.WProductSchema.findByIdAndUpdate(o._id, {category_ids: type_safe_cids}).then(() => { 
+            logger.debug(`Updated WProductSchema ${o._id} with type safe category ids ${type_safe_cids}.`);
+          }).catch((err) => {
+            logger.error(`Unable to WProductSchema ${o._id}. Got error: ${JSON.stringify(err)}`);
+          }));
+        });
+        await Promise.all(promises);
+      }    
+      // re-assign each parent_id in every WCategorySchema
+      {
+        var promises = [];
+        const cats = await dbconn.WCategorySchema.find();
+        cats.forEach(o => {
+          promises.push(dbconn.WCategorySchema.findByIdAndUpdate(o._id, {parent_id: o.parent_id}).then(() => { 
+            logger.debug(`Updated WCategorySchema ${o._id} with type safe category id ${o.parent_id}.`);
+          }).catch((err) => {
+            logger.error(`Unable to WCategorySchema ${o._id}. Got error: ${JSON.stringify(err)}`);
+          }));
+        });
+        await Promise.all(promises);
+      }      
+      // remove time_step from settings
+      {
+        const settings_update = await dbconn.SettingsSchema.updateMany({}, {$unset: { "time_step": "" }});
+        if (settings_update.modifiedCount > 0) {
+          logger.debug(`Updated ${settings_update.modifiedCount} SettingsSchema documents to remove the time_step field.`);
+        }
       }
     }
   }],

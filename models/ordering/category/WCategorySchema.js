@@ -16,7 +16,7 @@ var WCategorySchema = new Schema({
   },
     
   // parent category ID if any
-  parent_id: String,  
+  parent_id: { type: Schema.Types.ObjectId, ref: 'WCategorySchema'},  
 
   // subheading, optional, HTML allowed
   subheading: String,

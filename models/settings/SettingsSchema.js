@@ -6,10 +6,6 @@ var SettingsSchema = new Schema({
     type: Number,
     default: 5
   },
-  time_step: {
-    type: Number,
-    default: 15
-  },
   time_step2: [{
     type: Number,
     default: 15

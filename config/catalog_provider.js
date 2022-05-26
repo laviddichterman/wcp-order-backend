@@ -2,6 +2,7 @@ const wcpshared = require("@wcp/wcpshared");
 const Promise = require('bluebird');
 const logger = require('../logging');
 
+
 const ReduceArrayToMapByKey = function(xs, key) {
   const iv = {};
   return xs.reduce((obj, item) => {
@@ -22,7 +23,7 @@ const CatalogMapGenerator = (categories, products, product_instances) => {
     category_map[curr._id] = { category: curr, children: [], products: [] };
   });
   for (var i = 0; i < categories.length; ++i) {
-    if (categories[i].parent_id.length > 0) {
+    if (categories[i].parent_id) {
       category_map[categories[i].parent_id].children.push(categories[i]._id);
     }
   }
@@ -47,7 +48,12 @@ const ModifierTypeMapGenerator = (modifier_types, options) => {
     modifier_types_map[mt._id] = { options: [], modifier_type: mt } ;
   });
   options.forEach(o => {
-    modifier_types_map[o.option_type_id].options.push(o);
+    if (Object.hasOwn(modifier_types_map, o.option_type_id)) {
+      modifier_types_map[o.option_type_id].options.push(o);
+    }
+    else {
+      logger.error(`Modifier Type ID ${o.option_type_id} referenced by ModifierOption ${o._id} not found!`);
+    }
   });
   return modifier_types_map;
 };
@@ -421,9 +427,13 @@ class CatalogProvider {
     try {
       const doc = await this.#dbconn.WOptionTypeSchema.findByIdAndDelete(mt_id);
       if (!doc) {
+        logger.warn("Unable to delete the ModifierType from the database.");
         return null;
       }
-      const options_delete = await this.#dbconn.WOptionSchema.deleteMany({ option_type_id: mt_id});
+      const options_delete = await this.#dbconn.WOptionSchema.deleteMany({ option_type_id: mt_id });
+      if (this.#catalog.modifiers[mt_id].options.length !== options_delete.deletedCount) {
+        logger.error(`Mismatch between number of modifier options deleted and the number the catalog sees as child of this modifier type.`);
+      }
       if (options_delete.deletedCount > 0) {
         logger.debug(`Removed ${options_delete.deletedCount} Options from the catalog.`);
       }

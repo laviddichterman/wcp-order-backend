@@ -19,10 +19,7 @@ var WOptionSchema = new Schema({
   },
 
   // option type enumeration
-  option_type_id: {
-    type: Schema.Types.ObjectId,
-    required: true
-  },
+  option_type_id: { type: Schema.Types.ObjectId, ref: 'WOptionTypeSchema', required: true }, 
 
   metadata: {
     // how much this contributes to the flavor

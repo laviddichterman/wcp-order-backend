@@ -53,7 +53,7 @@ var WProductSchema = new Schema({
   modifiers: [ProductModifierSchema],
   
   // Corresponding to a WCategorySchema
-  category_ids: [String],
+  category_ids: [{ type: Schema.Types.ObjectId, ref: 'WCategorySchema'}],
 });
 
 WProductSchema.plugin(require('mongoose-autopopulate'));
