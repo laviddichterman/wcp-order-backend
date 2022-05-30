@@ -90,7 +90,7 @@ module.exports = Router({ mergeParams: true })
           is_base: true
         });
         if (!pi) {
-          req.logger.info(`Error while creating product instance for  ${newproduct._id}.`);
+          req.logger.info(`Error while creating product instance for ${newproduct._id}.`);
           return res.status(500).send(`Error while creating product instance for  ${newproduct._id}.`);
         }
         const location = `${req.base}${req.originalUrl}/${newproduct._id}/${pi._id}`;

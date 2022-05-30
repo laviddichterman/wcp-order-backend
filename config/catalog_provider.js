@@ -634,7 +634,6 @@ class CatalogProvider {
 
     const doc = new this.#dbconn.WProductSchema({
       item: {
-        price: price,
         description: description,
         display_name: display_name,
         shortcode: shortcode,
@@ -645,10 +644,11 @@ class CatalogProvider {
         }
       },
       disable: disabled,
-      service_disable: service_disable,
+      price,
+      service_disable,
       display_flags,
-      modifiers: modifiers,
-      category_ids: category_ids
+      modifiers,
+      category_ids
     });    
     await doc.save();
     await this.SyncProducts();
@@ -680,7 +680,6 @@ class CatalogProvider {
         pid, 
         {
           item: {
-            price: price,
             description: description,
             display_name: display_name,
             shortcode: shortcode,
@@ -690,6 +689,7 @@ class CatalogProvider {
             }
           },
           disabled,
+          price,
           service_disable,
           display_flags,
           modifiers: modifiers,

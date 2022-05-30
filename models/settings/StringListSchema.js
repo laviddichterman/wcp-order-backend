@@ -2,6 +2,6 @@ const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
 
 // StringList works for ServicesList
-var StringListSchema = new Schema({ services: [String] });
+const StringListSchema = new Schema({ services: [String] }, { _id: false });
 
 module.exports = StringListSchema;

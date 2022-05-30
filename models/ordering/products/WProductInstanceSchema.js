@@ -7,7 +7,7 @@ const PRICE_DISPLAY_ENUMS = ['FROM_X', 'VARIES', 'ALWAYS', 'MIN_TO_MAX', 'LIST']
 
 const WProductInstanceSchema = new Schema({
   // reference to the WProductSchema ID for this class of item
-  product_id: String,
+  product_id: { type: Schema.Types.ObjectId, ref: 'WProductSchema'},
 
   // ordinal for product matching
   ordinal: Number,

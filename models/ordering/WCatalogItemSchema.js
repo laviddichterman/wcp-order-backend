@@ -4,13 +4,10 @@ const ExternalIDsSchema = require("./ExternalIDsSchema");
 const WMoney = require("./WMoney");
 
 // NOTE: this is a mix-in and probably won't be instantiated directly
-var WCatalogItemSchema = new Schema({
+const WCatalogItemSchema = new Schema({
   // Nice name of the product
   // eg: House Sausage
-  display_name: {
-    type: String,
-    required: true 
-  },
+  display_name: String,
 
   // Nice, long description of the product
   // eg: House-ground spicy pork sausage
@@ -19,22 +16,13 @@ var WCatalogItemSchema = new Schema({
   description: String,
 
   // abbreviation used in store
-  shortcode: {
-    type: String,
-    required: true 
-  },
+  shortcode: String,
 
   // Moneys in base currency unit (300 is $3)
-  price: { 
-    type: WMoney,
-    required: true
-  },
+  price: WMoney,
 
   // external ids
-  externalIDs: {
-    type: ExternalIDsSchema,
-    required: true
-  },
+  externalIDs: ExternalIDsSchema,
 
   // flag to temporarily turn off this product and any products that contain this
   // start and end are epoch times in the local timezone

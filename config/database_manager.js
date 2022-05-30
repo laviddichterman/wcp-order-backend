@@ -563,6 +563,46 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
       }
     }
   }],
+  "0.2.20": [{ major: 0, minor: 2, patch: 21 }, async (dbconn) => {
+    { 
+      // copy time_step2 to time_step in settings
+      {
+        const settings = await dbconn.SettingsSchema.findOne();
+        settings.time_step = settings.time_step2;
+        await settings.save().then(function() { 
+          logger.debug(`Updated settings time_step.`);
+        }).catch(function(err) {
+          logger.error(`Unable to update settings. Got error: ${JSON.stringify(err)}`);
+        });
+      }        
+      // re-assign each product_id in every WProductInstanceSchema
+      // migrate the price from the base product instance to the product class
+      // we're going to find the base product instance for each product class and assign its price to the WProductSchema.price field
+      {
+        var promises = [];
+        const products = Object.fromEntries((await dbconn.WProductSchema.find()).map(x => [x._id, {P: x, price: 0}]));
+        const pis = await dbconn.WProductInstanceSchema.find();
+        pis.forEach(pi => {
+          products[pi.product_id].price = Math.max(products[pi.product_id].price, pi.item.price.amount);
+          promises.push(dbconn.WProductInstanceSchema.findByIdAndUpdate(pi._id, {product_id: pi.product_id}).then(() => { 
+            logger.debug(`Updated ProductInstance ${pi._id} with type safe ProductId ${pi.product_id}.`);
+          }).catch((err) => {
+            logger.error(`Unable to ProductInstance ${pi._id}. Got error: ${JSON.stringify(err)}`);
+          }));
+        });
+        Object.values(products).forEach(val=> {
+          val.P.price = { amount: val.price, currency: "USD" };
+          val.P.item.price = null;
+          promises.push(val.P.save().then(function() { 
+            logger.debug(`Updated WProduct with ID ${val.P._id} to have price \$${val.price/100}`);
+          }).catch(function(err) {
+            logger.error(`Unable to update WProduct with ID ${val.P._id}. Got error: ${JSON.stringify(err)}`);
+          }))
+        });
+        await Promise.all(promises);
+      }       
+    }
+  }],
 }
 
 class DatabaseManager {

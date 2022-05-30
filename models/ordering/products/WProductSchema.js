@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
 const WCatalogItemSchema = require("../WCatalogItemSchema");
+const WMoney = require("../WMoney");
 
 const ProductModifierSchema = new Schema({ 
   mtid: { type: Schema.Types.ObjectId, ref: 'WOptionTypeSchema' }, 
@@ -11,11 +12,15 @@ const ProductModifierSchema = new Schema({
 
 
 // represents a class of products that can be made and inserted into the catalog
-var WProductSchema = new Schema({
+const WProductSchema = new Schema({
 
-  item: { 
-    type: WCatalogItemSchema,
-    required: true 
+  // in process of deprecation
+  item: WCatalogItemSchema,
+
+  // Moneys in base currency unit (300 is $3)
+  price: { 
+    type: WMoney,
+    required: true
   },
 
   // flag to temporarily turn off this product and any products that contain this

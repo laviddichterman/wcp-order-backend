@@ -24,8 +24,6 @@ const io = socketIo(server,
   });
 const socket_ro = io.of("/nsRO");
 
-//const jwtAuthz = require('express-jwt-authz');
-
 const DatabaseConnection = require('./create_database')({ logger })
 const DatabaseManager = require("./config/database_manager")({ dbconn: DatabaseConnection });
 const DataProvider = require("./config/dataprovider")({ dbconn: DatabaseConnection });

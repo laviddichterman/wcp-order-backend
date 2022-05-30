@@ -46,6 +46,5 @@
     ]
   ],
   "additional_pizza_lead_time": 5,
-  "time_step": 15,
-  "time_step2": [15, 15, 15]
+  "time_step": [15, 15, 15]
 }

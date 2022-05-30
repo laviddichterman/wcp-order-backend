@@ -2,10 +2,10 @@ const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
 
 // generic bucket for authentication credentials
-var KeyValueSchema = new Schema({ 
+const KeyValueSchema = new Schema({ 
   settings: [{ 
     key: String, 
     value: String 
-  }] });
+  }] }, { _id: false });
 
 module.exports = KeyValueSchema;
