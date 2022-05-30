@@ -22,7 +22,7 @@
     "@googlemaps/google-maps-services-js": "^3.3.14",
     "@turf/invariant": "^6.5.0",
     "@turf/turf": "^6.5.0",
-    "@wcp/wcpshared": "^2.2.8",
+    "@wcp/wcpshared": "^2.2.9",
     "bluebird": "^3.7.2",
     "body-parser": "^1.20.0",
     "cors": "^2.8.5",
