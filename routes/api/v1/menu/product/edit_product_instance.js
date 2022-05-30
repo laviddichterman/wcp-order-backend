@@ -27,8 +27,6 @@ const ValidationChain = [
   body('display_flags.order.adornment').trim(),
   body('display_flags.order.suppress_exhaustive_modifier_list').toBoolean(true),
   body('ordinal').exists().isInt({min: 0}),
-  body('price.amount').exists().isInt({ min: 0 }),
-  body('price.currency').exists().isLength({ min: 3, max: 3 }).isIn(['USD']),
   body('modifiers.*.modifier_type_id').trim().escape().exists().isMongoId(),
   body('modifiers.*.options.*.option_id').trim().escape().exists().isMongoId(),
   body('modifiers.*.options.*.placement').exists().isIn(['NONE', 'LEFT', 'RIGHT', 'WHOLE']),
@@ -43,7 +41,6 @@ module.exports = Router({ mergeParams: true })
         return res.status(422).json({ errors: errors.array() });
       }
       const doc = await req.catalog.UpdateProductInstance(req.params.pid, req.params.piid, {
-        price: req.body.price,
         description: req.body.description,
         display_name: req.body.display_name,
         shortcode: req.body.shortcode,

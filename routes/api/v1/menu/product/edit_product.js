@@ -42,11 +42,8 @@ module.exports = Router({ mergeParams: true })
       }
       const doc = await req.catalog.UpdateProduct(req.params.pid, {
         price: req.body.price,
-        description: req.body.description,
-        display_name: req.body.display_name,
         disabled: req.body.disabled ? req.body.disabled : null, 
         service_disable: req.body.service_disable || [],
-        shortcode: req.body.shortcode,
         externalIDs: {
           revelID: req.body.revelID,
           squareID: req.body.squareID

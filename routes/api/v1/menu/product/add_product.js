@@ -29,7 +29,8 @@ const ValidationChain = [
   body('modifiers.*.mtid').trim().escape().exists().isMongoId(),
   body('modifiers.*.enable').optional({nullable: true}).isMongoId(),
   body('category_ids.*').trim().escape().exists().isMongoId(),
-  body('create_product_instance').toBoolean(true)
+  body('create_product_instance').toBoolean(true),
+  body('suppress_catalog_recomputation').toBoolean(true)
 ];
 
 module.exports = Router({ mergeParams: true })
@@ -41,11 +42,8 @@ module.exports = Router({ mergeParams: true })
       }
       const newproduct = await req.catalog.CreateProduct({
         price: req.body.price,
-        description: req.body.description,
-        display_name: req.body.display_name,
         disabled: req.body.disabled ? req.body.disabled : null, 
         service_disable: req.body.service_disable || [],
-        shortcode: req.body.shortcode,
         externalIDs: {
           revelID: req.body.revelID,
           squareID: req.body.squareID
@@ -53,6 +51,7 @@ module.exports = Router({ mergeParams: true })
         modifiers: req.body.modifiers,
         category_ids: req.body.category_ids,
         display_flags: req.body.display_flags,
+        suppress_catalog_recomputation: req.body.create_product_instance || req.body.suppress_catalog_recomputation
       });
       if (!newproduct) {
         req.logger.info(`Unable to find Modifiers or Categories to create Product`);
@@ -60,7 +59,6 @@ module.exports = Router({ mergeParams: true })
       }
       if (req.body.create_product_instance) {
         const pi = await req.catalog.CreateProductInstance(newproduct._id, {
-          price: req.body.price,
           description: req.body.description,
           display_name: req.body.display_name,
           shortcode: req.body.shortcode,

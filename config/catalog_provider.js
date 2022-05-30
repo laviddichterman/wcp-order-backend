@@ -616,17 +616,15 @@ class CatalogProvider {
 
 
   CreateProduct = async ({
-    display_name, 
-    description, 
     price, 
-    shortcode, 
     disabled,
     service_disable,
     display_flags,
     revelID, 
     squareID, 
     modifiers,
-    category_ids
+    category_ids,
+    suppress_catalog_recomputation = false
   }) => {
     if (!ValidateProductModifiersFunctionsCategories(modifiers, category_ids, this)) {
       return null;
@@ -634,10 +632,6 @@ class CatalogProvider {
 
     const doc = new this.#dbconn.WProductSchema({
       item: {
-        description: description,
-        display_name: display_name,
-        shortcode: shortcode,
-        permanent_disable: false,
         externalIDs: {
           revelID: revelID,
           squareID: squareID
@@ -652,16 +646,15 @@ class CatalogProvider {
     });    
     await doc.save();
     await this.SyncProducts();
-    this.RecomputeCatalog();
-    this.EmitCatalog(this.#socketRO);
+    if (!suppress_catalog_recomputation) {
+      this.RecomputeCatalog();
+      this.EmitCatalog(this.#socketRO);
+    }
     return doc;
   };
 
   UpdateProduct = async ( pid, {
-    display_name, 
-    description, 
     price, 
-    shortcode, 
     disabled,
     service_disable,
     display_flags,
@@ -680,9 +673,6 @@ class CatalogProvider {
         pid, 
         {
           item: {
-            description: description,
-            display_name: display_name,
-            shortcode: shortcode,
             externalIDs: {
               revelID: revelID,
               squareID: squareID
@@ -740,7 +730,6 @@ class CatalogProvider {
   }
   
   CreateProductInstance = async (parent_product_id, {
-    price, 
     description, 
     display_name,
     shortcode, 
@@ -754,12 +743,9 @@ class CatalogProvider {
     const doc = new this.#dbconn.WProductInstanceSchema({
       product_id: parent_product_id,
       item: {
-        price: price,
         description: description,
         display_name: display_name,
         shortcode: shortcode,
-        disabled: null,
-        permanent_disable: false,
         externalIDs: {
           revelID: revelID,
           squareID: squareID
@@ -780,7 +766,6 @@ class CatalogProvider {
   UpdateProductInstance = async ( pid, piid, {
     display_name, 
     description, 
-    price, 
     shortcode, 
     ordinal, 
     revelID, 
@@ -795,12 +780,9 @@ class CatalogProvider {
         {
           product_id: pid,
           item: {
-            price: price,
             description: description,
             display_name: display_name,
             shortcode: shortcode,
-            disabled: null,
-            permanent_disable: false,
             externalIDs: {
               revelID: revelID,
               squareID: squareID
