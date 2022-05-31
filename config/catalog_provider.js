@@ -637,7 +637,7 @@ class CatalogProvider {
           squareID: squareID
         }
       },
-      disable: disabled,
+      disabled,
       price,
       service_disable,
       display_flags,
