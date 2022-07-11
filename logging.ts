@@ -1,6 +1,5 @@
-const winston = require('winston');
-const pjson = require('./package.json');
-
+import winston from 'winston';
+import PACKAGE from './package.json';
 
 const logger = winston.createLogger({
   level: 'info',
@@ -12,7 +11,7 @@ const logger = winston.createLogger({
     winston.format.splat(),
     winston.format.json()
   ),
-  defaultMeta: { service: pjson.name },
+  defaultMeta: { service: PACKAGE.name },
   transports: [
     //
     // - Write to all logs with level `info` and below to `quick-start-combined.log`.
@@ -30,4 +29,4 @@ const logger = winston.createLogger({
   ]
 });
 
-module.exports = logger;
+export = logger;

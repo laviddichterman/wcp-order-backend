@@ -1,7 +1,7 @@
 // some thing relating to payments
 const Router = require('express').Router
-const moment = require('moment');
-const wcpshared = require("@wcp/wcpshared");
+const { formatRFC3339, startOfDay, parse, addDays } = require('date-fns');
+const { WDateUtils } = require("@wcp/wcpshared");
 const GoogleProvider = require("../../../../config/google");
 //const { validate, Joi } = require('express-validation')
 
@@ -10,9 +10,9 @@ module.exports = Router({ mergeParams: true })
   .get('/v1/payments/tips', async (req, res, next) => {
     try {
 
-      const tips_date = moment(req.query.date, wcpshared.DATE_STRING_INTERNAL_FORMAT);
-      const min_date = tips_date.format(GoogleProvider.GOOGLE_EVENTS_DATETIME_FORMAT);
-      const max_date = tips_date.add(1, "day").format(GoogleProvider.GOOGLE_EVENTS_DATETIME_FORMAT);
+      const tips_date = startOfDay(parse(req.query.date, WDateUtils.DATE_STRING_INTERNAL_FORMAT, new Date()));
+      const min_date = formatRFC3339(tips_date);
+      const max_date = formatRFC3339(addDays(tips_date, 1));
       const events = await GoogleProvider.GetEventsForDate(min_date, max_date, "America/Los_Angeles");
       var tips_array = [];
       events.map((event, i) => {

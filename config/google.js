@@ -7,7 +7,7 @@ const OAuth2 = google.auth.OAuth2;
 
 class GoogleProvider {
   static get GOOGLE_EVENTS_DATETIME_FORMAT() {
-    return "YYYY-MM-DDTHH:mm:ss";
+    return "yyyy-MM-ddTHH:mm:ss";
   }
 
   #accessToken;

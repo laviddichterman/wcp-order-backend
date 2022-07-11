@@ -36,8 +36,10 @@ module.exports = Router({ mergeParams: true })
         ordinal: req.body.ordinal,
         min_selected: req.body.min_selected,
         max_selected: req.body.max_selected,
-        revelID: req.body.revelID,
-        squareID: req.body.squareID,
+        externalIDs: {
+          revelID: req.body.revelID,
+          squareID: req.body.squareID
+        },
         display_flags: req.body.display_flags,
       });
       const location = `${req.base}${req.originalUrl}/${doc.id}`;

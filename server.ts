@@ -1,18 +1,21 @@
 require('dotenv').config();
-const express = require('express');
-const http = require("http");
-const socketIo = require("socket.io");
-const bodyParser = require('body-parser');
-const moment = require('moment');
-const cors = require('cors');
-const logger = require("./logging");
+
+
+import express from 'express';
+import http from "http";
+import socketIo from "socket.io";
+import bodyParser from 'body-parser';
+import cors from 'cors';
+import idempotency from 'express-idempotency';
+import expressWinston from 'express-winston';
+import { intervalToDuration, formatDuration } from 'date-fns';
+import logger from "./logging";
+
 const app = express();
-const idempotency = require('express-idempotency');
-const expressWinston = require('express-winston')
 const router = require('./routes/')()
 const PORT = process.env.PORT || 4001;
 const server = http.createServer(app);
-const io = socketIo(server, 
+const io = new socketIo.Server(server, 
   {
     transports: ["websocket", "polling"], 
     allowEIO3: true,
@@ -31,6 +34,7 @@ const CatalogProvider = require("./config/catalog_provider")({socketRO: socket_r
 const GoogleProvider = require("./config/google");
 const SquareProvider = require("./config/square");
 const StoreCreditProvider = require("./config/store_credit_provider");
+
 
 // needs to run first
 DatabaseManager.Bootstrap(async () => {
@@ -63,7 +67,7 @@ app.use((req, res, next) => {
 app.use('/api', router);
 
 socket_ro.on('connect',(socket) => { 
-  const connect_time = new moment();
+  const connect_time = new Date();
   socket.client.request.headers["x-real-ip"] ? 
     logger.info(`CONNECTION: Client at IP: ${socket.client.request.headers["x-real-ip"]}, UA: ${socket.client.request.headers['user-agent']}.`) : 
     logger.info(`CONNECTION: Client info: ${JSON.stringify(socket.client.request.headers)}.`);
@@ -75,12 +79,12 @@ socket_ro.on('connect',(socket) => {
   socket.emit('WCP_SETTINGS', DataProvider.Settings);
   socket.emit('WCP_DELIVERY_AREA', DataProvider.DeliveryArea);
   CatalogProvider.EmitCatalog(socket);
-  socket.on('disconnect', (reason) => {
-    const disconnect_time = new moment();
-    const duration = moment.duration(disconnect_time.diff(connect_time));
+  socket.on('disconnect', (reason : string) => {
+    const formattedDuration = formatDuration(intervalToDuration({ start: connect_time, end: new Date()}));
+    
     socket.client.request.headers["x-real-ip"] ? 
-      logger.info(`DISCONNECT: ${reason} after ${Number(duration.as("minutes")).toFixed(2)} minutes. IP: ${socket.client.request.headers["x-real-ip"]}`) : 
-      logger.info(`DISCONNECT: ${reason} after ${Number(duration.as("minutes")).toFixed(2)} minutes.\nClient: ${JSON.stringify(socket.client.request.headers)}`);
+      logger.info(`DISCONNECT: ${reason} after ${formattedDuration}. IP: ${socket.client.request.headers["x-real-ip"]}`) : 
+      logger.info(`DISCONNECT: ${reason} after ${formattedDuration}.\nClient: ${JSON.stringify(socket.client.request.headers)}`);
     logger.info(`Num Connected: ${io.engine.clientsCount}`);
   });
 });

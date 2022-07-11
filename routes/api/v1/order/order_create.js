@@ -1,24 +1,29 @@
 // submit an order
 const Router = require('express').Router
-const moment = require('moment');
+const { formatRFC3339, format, parse, addDays, subMinutes, addMinutes, startOfDay, isSameMinute, isSameDay } = require('date-fns');
 const { body, validationResult } = require('express-validator');
 const Promise = require('bluebird');
 const GoogleProvider = require("../../../../config/google");
 const SquareProvider = require("../../../../config/square");
 const StoreCreditProvider = require("../../../../config/store_credit_provider");
-const wcpshared = require("@wcp/wcpshared");
+const {CreateProductWithMetadataFromJsFeDto, WDateUtils, PRODUCT_LOCATION} = require("@wcp/wcpshared");
 const WCP = "Windy City Pie";
 const DELIVERY_INTERVAL_TIME = 30;
 
-const GOOGLE_EVENTS_DATETIME_FORMAT = "YYYY-MM-DDTHH:mm:ss";
-const DISPLAY_TIME_FORMAT = "h:mmA";
-const DISPLAY_DATE_FORMAT = "dddd, MMMM DD, Y";
+const DISPLAY_TIME_FORMAT = "h:mma";
+const DISPLAY_DATE_FORMAT = "EEEE, MMMM dd, y";
 
 const IL_AREA_CODES = ["217", "309", "312", "630", "331", "618", "708", "773", "815", "779", "847", "224", "872"];
 const MI_AREA_CODES = ["231", "248", "269", "313", "517", "586", "616", "734", "810", "906", "947", "989", "679"];
 
 const BTP_AREA_CODES = IL_AREA_CODES.concat(MI_AREA_CODES);
 const WCP_AREA_CODES = IL_AREA_CODES;
+
+const GenerateShortCode = function(metadata) {
+  return metadata.is_split && string(metadata.pi[OptionPlacement.LEFT]._id) !== string(metadata.pi[OptionPlacement.RIGHT]._id) ? 
+    `${metadata.pi[PRODUCT_LOCATION.LEFT].shortcode}|${metadata.pi[PRODUCT_LOCATION.RIGHT].shortcode}` : 
+    metadata.pi[PRODUCT_LOCATION.LEFT].shortcode;
+}
 
 const BigIntStringify = (str) => (
   JSON.stringify(str, (key, value) =>
@@ -36,17 +41,17 @@ const IsNativeAreaCode = function (phone, area_codes) {
 
 const DateTimeIntervalBuilder = (date, time, service_type) => {
   // hack for date computation on DST transition days since we're currently not open during the time jump
-  var date_lower = moment(date).add(1, "days").subtract(1440-time, "minutes");
-  var date_upper = moment(date_lower);
+  var date_lower = subMinutes(addDays(date, 1), 1440-time);
+  var date_upper = new Date(date_lower);
   // TODO NEED DELIVERY constant
   if (service_type === 2) {
-    date_upper = date_upper.add(DELIVERY_INTERVAL_TIME, "minutes")
+    date_upper = addMinutes(date_upper, DELIVERY_INTERVAL_TIME);
   }
   return [date_lower, date_upper];
 };
 
 const DateTimeIntervalToDisplayServiceInterval = (interval) => {
-  return interval[0].isSame(interval[1], "minute") ? interval[0].format(DISPLAY_TIME_FORMAT) : `${interval[0].format(DISPLAY_TIME_FORMAT)} - ${interval[1].format(DISPLAY_TIME_FORMAT)}`;
+  return isSameMinute(interval[0], interval[1]) ? format(interval[0], DISPLAY_TIME_FORMAT) : `${format(interval[0], DISPLAY_TIME_FORMAT)} - ${format(interval[1], DISPLAY_TIME_FORMAT)}`;
 }
 
 const GenerateAutoResponseBodyEscaped = function(
@@ -129,12 +134,12 @@ const EventTitleStringBuilder = (CATALOG, service, customer, number_guests, cart
         var product_shortcodes = [];
         category_cart.items.forEach(item => {
           total += item.quantity;
-          product_shortcodes = product_shortcodes.concat(Array(item.quantity).fill(item.product.shortcode));
+          product_shortcodes = product_shortcodes.concat(Array(item.quantity).fill(GenerateShortCode(item.metadata)));
         });    
         titles.push(`${total.toString(10)}x ${call_line_category_name_with_space}${product_shortcodes.join(" ")}`);
         break; 
       default: //SHORTNAME
-        var product_shortcodes = category_cart.items.map(item => `${item.quantity}x${item.product.shortcode}`);
+        var product_shortcodes = category_cart.items.map(item => `${item.quantity}x${GenerateShortCode(item.metadata)}`);
         titles.push(`${call_line_category_name_with_space}${product_shortcodes.join(" ")}`);
         break; 
     }
@@ -144,14 +149,14 @@ const EventTitleStringBuilder = (CATALOG, service, customer, number_guests, cart
 
 const ServiceTitleBuilder = (service_option_display_string, customer_name, number_guests, service_date, service_time_interval) => {
   const display_service_time_interval = DateTimeIntervalToDisplayServiceInterval(service_time_interval);
-  return `${service_option_display_string} for ${customer_name}${number_guests > 1 ? `+${number_guests-1}` : ""} on ${service_date.format(DISPLAY_DATE_FORMAT)} at ${display_service_time_interval}`;
+  return `${service_option_display_string} for ${customer_name}${number_guests > 1 ? `+${number_guests-1}` : ""} on ${format(service_date, DISPLAY_DATE_FORMAT)} at ${display_service_time_interval}`;
 }
 
 const GenerateDisplayCartStringListFromProducts = (cart) => {
   const display_cart_string_list = [];
   cart.forEach((category_cart) => {
     category_cart.items.forEach((item) => {
-      display_cart_string_list.push(`${item.quantity}x: ${item.product.processed_name}`)
+      display_cart_string_list.push(`${item.quantity}x: ${item.metadata.name}`)
     });
   });
   return display_cart_string_list;
@@ -166,23 +171,23 @@ const GenerateShortCartFromFullCart = (cart, catalog, sliced) => {
     }
     if (category_cart.items.length > 0) {
       const category_name = catalog.categories[category_cart.category].category.name;
-      const category_shortcart = { category_name: category_name, products: category_cart.items.map(x => `${x.quantity}x: ${x.product.shortname}${sliced && category_name === "Pizza" ? " SLICED" : ""}`) };
+      const category_shortcart = { category_name: category_name, products: category_cart.items.map(x => `${x.quantity}x: ${x.metadata.shortname}${sliced && category_name === "Pizza" ? " SLICED" : ""}`) };
       short_cart.push(category_shortcart);
     }
   })
   return short_cart;
 }
 
-const RebuildOrderFromDTO = (menu, cart) => {
+const RebuildOrderFromDTO = (menu, cart, service_time) => {
   const newcart = [];
   for (var cid in cart) {
     //[<quantity, {pid, modifiers: {MID: <placement, OID>} } >]
     const items = [];
     cart[cid].forEach((entry) => {
       const [quantity, product_dto] = entry;
-      const product = wcpshared.WCPProductFromDTO(product_dto, menu);
-      product.Initialize(menu);
-      items.push({ quantity, product });
+      //[<quantity, {pid, modifiers: {MID: [<placement, OID>]}}]}
+      const { product, metadata } = CreateProductWithMetadataFromJsFeDto(product_dto, menu, service_time);
+      items.push({ quantity, product, metadata });
     });
     newcart.push({category: cid, items: items });
   }
@@ -201,7 +206,7 @@ const CreateInternalEmail = async (
   service_title,
   customer_name,
   number_guests,
-  service_date, // moment
+  service_date, // Date
   date_time_interval,
   phonenum,
   user_email,
@@ -225,7 +230,7 @@ const CreateInternalEmail = async (
 <p>${shortcart.map(x=> `<strong>${x.category_name}:</strong><br />${x.products.join("<br />")}`).join("<br />")}
 ${special_instructions_section}<br />
 Phone: ${phonenum}</p>
-${moment().isSame(service_date, "day") ? "" : '<strong style="color: red;">DOUBLE CHECK THIS IS FOR TODAY BEFORE SENDING THE TICKET</strong> <br />'}
+${isSameDay(new Date(), service_date) ? "" : '<strong style="color: red;">DOUBLE CHECK THIS IS FOR TODAY BEFORE SENDING THE TICKET</strong> <br />'}
 Auto-respond: <a href="mailto:${user_email}?subject=${confirmation_subject_escaped}&body=${confirmation_body_escaped}">Confirmation link</a><br />
     
 <p>Referral Information: ${referral}</p>
@@ -326,10 +331,10 @@ const CreateOrderEvent = async (
   return await GoogleProvider.CreateCalendarEvent(calendar_event_title,
     delivery_info.validated_delivery_address ? delivery_info.validated_delivery_address : "",
     calendar_details,
-    { dateTime: service_time_interval[0].format(GOOGLE_EVENTS_DATETIME_FORMAT),
+    { dateTime: formatRFC3339(service_time_interval[0]),
       timeZone: "America/Los_Angeles"
      },
-    { dateTime: service_time_interval[1].format(GOOGLE_EVENTS_DATETIME_FORMAT),
+    { dateTime: formatRFC3339(service_time_interval[1]),
       timeZone: "America/Los_Angeles"
      });
 }
@@ -407,7 +412,7 @@ module.exports = Router({ mergeParams: true })
     const service_option_display_string = req.db.Services[service_option_enum];
     const customer_name = req.body.customer_name;
     const number_guests = req.body.number_guests || 1;
-    const service_date = moment(req.body.service_date, wcpshared.WDateUtils.DATE_STRING_INTERNAL_FORMAT);
+    const service_date = startOfDay(parse(req.body.service_date, WDateUtils.DATE_STRING_INTERNAL_FORMAT, Date.now()));
     const service_time = req.body.service_time; //minutes offset from beginning of day
     const date_time_interval = DateTimeIntervalBuilder(service_date, service_time, service_option_enum);
     const service_title = ServiceTitleBuilder(service_option_display_string, customer_name, number_guests, service_date, date_time_interval);
@@ -424,7 +429,7 @@ module.exports = Router({ mergeParams: true })
     };
     const totals = req.body.totals;
     const store_credit = req.body.store_credit;
-    const cart = RebuildOrderFromDTO(req.catalog.Menu, req.body.products);
+    const cart = RebuildOrderFromDTO(req.catalog.Menu, req.body.products, date_time_interval[0]);
     const sliced = req.body.sliced || false;
     const special_instructions = req.body.special_instructions;
     let isPaid = false;

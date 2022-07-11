@@ -1,8 +1,8 @@
-const moment = require('moment');
 const voucher_codes = require('voucher-code-generator');
+const { format, parse, startOfDay, isValid, isBefore } = require('date-fns');
 const qrcode = require('qrcode');
 const Stream = require('stream');
-const wcpshared = require("@wcp/wcpshared");
+const { WDateUtils } = require("@wcp/wcpshared");
 const GoogleProvider = require("./google");
 const aes256gcm = require('./crypto-aes-256-gcm');
 
@@ -63,7 +63,7 @@ BootstrapProvider = async (db) => {
    * @returns ??
    */
   CreateCreditFromCreditCode = async (recipient, amount, credit_type, credit_code, expiration, generated_by, reason) => {
-    const date_added = moment().format(wcpshared.WDateUtils.DATE_STRING_INTERNAL_FORMAT);
+    const date_added = format(new Date(), WDateUtils.DATE_STRING_INTERNAL_FORMAT);
     const fields = [recipient, amount, credit_type, amount, date_added, generated_by, date_added, credit_code, expiration, reason, "", "", ""];
     return GoogleProvider.AppendToSheet(this.#db.KeyValueConfig.STORE_CREDIT_SHEET, `${ACTIVE_SHEET}!A1:M1`, fields);
   }
@@ -75,6 +75,7 @@ BootstrapProvider = async (db) => {
    * @returns {{lock: {enc, iv, auth}, valid: Boolean, balance: Number, type: String}}
    */
   ValidateAndLockCode = async (credit_code) => { 
+    const beginningOfToday = startOfDay(new Date());
     const values_promise = GoogleProvider.GetValuesFromSheet(this.#db.KeyValueConfig.STORE_CREDIT_SHEET, ACTIVE_RANGE);
     // TODO: remove dashes from credit code
     const [enc, iv, auth] = aes256gcm.encrypt(credit_code);
@@ -84,19 +85,20 @@ BootstrapProvider = async (db) => {
       return {valid: false, type: "MONEY", lock: {}, balance: 0};
     }
     const entry = values.values[i];
-    const date_modified = moment().format(wcpshared.WDateUtils.DATE_STRING_INTERNAL_FORMAT);
+    const date_modified = format(new Date(), WDateUtils.DATE_STRING_INTERNAL_FORMAT);
     const new_entry = [entry[0], entry[1], entry[2], entry[3], entry[4], entry[5], date_modified, entry[7], entry[8], entry[9], enc, iv.toString('hex'), auth.toString('hex')];
     const new_range = `${ACTIVE_SHEET}!${2 + i}:${2 + i}`;
     const update_promise = GoogleProvider.UpdateValuesInSheet(this.#db.KeyValueConfig.STORE_CREDIT_SHEET, new_range, new_entry);
-    const expiration = entry[8] ? moment(entry[8], wcpshared.WDateUtils.DATE_STRING_INTERNAL_FORMAT) : null;
+    const expiration = entry[8] ? startOfDay(parse(entry[8], WDateUtils.DATE_STRING_INTERNAL_FORMAT, new Date())) : null;
     await update_promise;
-    return { valid: expiration === null || !expiration.isValid() || expiration.isSameOrAfter(moment(), "day"),
+    return { valid: expiration === null || !isValid(expiration) || !isBefore(expiration, beginningOfToday),
       type: entry[2],
       lock: {enc, iv, auth},
       balance: parseFloat(Number(entry[3]).toFixed(2)) };
   }
 
   ValidateLockAndSpend = async (credit_code, lock, amount, updated_by) => {
+    const beginningOfToday = startOfDay(new Date());
     const values = await GoogleProvider.GetValuesFromSheet(this.#db.KeyValueConfig.STORE_CREDIT_SHEET, ACTIVE_RANGE);
     for (let i = 0; i < values.values.length; ++i) {
       const entry = values.values[i];
@@ -112,12 +114,15 @@ BootstrapProvider = async (db) => {
           logger.error(`WE HAVE A CHEATER FOLKS, store credit key ${entry[7]}, expecting encoded: ${JSON.stringify(lock)}.`);
           return { success:false, entry: [], index: 0 };
         }
-        if (entry[8] && moment(entry[8], wcpshared.WDateUtils.DATE_STRING_INTERNAL_FORMAT).isBefore(moment(), "day")) {
-          logger.error(`We have a cheater folks, store credit key ${entry[7]}, attempted to use after expiration of ${entry[8]}.`);
-          return { success:false, entry: [], index: 0 };
+        if (entry[8]) {
+          const expiration = startOfDay(parse(entry[8], WDateUtils.DATE_STRING_INTERNAL_FORMAT, beginningOfToday));
+          if (isBefore(expiration, beginningOfToday)) {
+            logger.error(`We have a cheater folks, store credit key ${entry[7]}, attempted to use after expiration of ${entry[8]}.`);
+            return { success:false, entry: [], index: 0 };
+          }
         }
         // no shenanagains confirmed
-        const date_modified = moment().format(wcpshared.WDateUtils.DATE_STRING_INTERNAL_FORMAT);
+        const date_modified = format(beginningOfToday, WDateUtils.DATE_STRING_INTERNAL_FORMAT);
         const new_balance = credit_balance - amount;
         const new_entry = [entry[0], entry[1], entry[2], new_balance, entry[4], updated_by, date_modified, entry[7], entry[8], entry[9], entry[10], entry[11], entry[12]];
         const new_range = `${ACTIVE_SHEET}!${2 + i}:${2 + i}`;

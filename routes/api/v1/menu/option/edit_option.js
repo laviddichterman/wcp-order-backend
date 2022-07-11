@@ -46,8 +46,10 @@ module.exports = Router({ mergeParams: true })
         price: req.body.price, 
         shortcode: req.body.shortcode, 
         disabled: req.body.disabled ? req.body.disabled : null, 
-        revelID: req.body.revelID, 
-        squareID: req.body.squareID, 
+        externalIDs: {
+          revelID: req.body.revelID,
+          squareID: req.body.squareID
+        },
         ordinal: req.body.ordinal, 
         flavor_factor: req.body.flavor_factor, 
         bake_factor: req.body.bake_factor, 

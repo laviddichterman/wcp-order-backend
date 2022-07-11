@@ -4,9 +4,9 @@ const { CheckJWT, ScopeWriteKVStore } = require('../../../../config/authorizatio
 
 const ValidationChain = [  
   body("operating_hours.*.*.*").isInt({min: 0, max: 1440}),
-  body("time_step2.*").isInt({min: 0}),
+  body("time_step.*").isInt({min: 1}),
+  // deprecate additional_pizza_lead_time
   body("additional_pizza_lead_time").isInt({min: 0}),
-  
 ];
 
 module.exports = Router({ mergeParams: true })

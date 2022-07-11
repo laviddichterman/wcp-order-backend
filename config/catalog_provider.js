@@ -1,4 +1,4 @@
-const wcpshared = require("@wcp/wcpshared");
+const {GenerateMenu} = require("@wcp/wcpshared");
 const Promise = require('bluebird');
 const logger = require('../logging');
 
@@ -257,7 +257,7 @@ class CatalogProvider {
 
   RecomputeCatalog = () => {
     this.#catalog = CatalogGenerator(this.#categories, this.#modifier_types, this.#options, this.#products, this.#product_instances, this.#product_instance_functions, this.#apiver);
-    this.#menu = new wcpshared.WMenu(this.#catalog);
+    this.#menu = GenerateMenu(this.#catalog, new Date());
   }
 
   Bootstrap = async (cb) => {
@@ -372,17 +372,14 @@ class CatalogProvider {
     }
   }
 
-  CreateModifierType = async ({name, display_name, ordinal, min_selected, max_selected, revelID, squareID, display_flags}) => {
+  CreateModifierType = async ({name, display_name, ordinal, min_selected, max_selected, externalIDs, display_flags}) => {
     const doc = new this.#dbconn.WOptionTypeSchema({
-      name: name,
-      display_name: display_name,
-      ordinal: ordinal,
-      min_selected: min_selected, 
-      max_selected: max_selected, 
-      externalIDs: {
-        revelID: revelID,
-        squareID: squareID
-      },
+      name,
+      display_name,
+      ordinal,
+      min_selected, 
+      max_selected, 
+      externalIDs,
       display_flags
     });
     await doc.save();
@@ -392,20 +389,17 @@ class CatalogProvider {
     return doc;
   };
 
-  UpdateModifierType = async ( mt_id, {name, display_name, ordinal, min_selected, max_selected, revelID, squareID, display_flags}) => {
+  UpdateModifierType = async ( mt_id, {name, display_name, ordinal, min_selected, max_selected, externalIDs, display_flags}) => {
     try {
       const updated = await this.#dbconn.WOptionTypeSchema.findByIdAndUpdate(
         mt_id, 
         {
-          name: name,
-          display_name: display_name,
-          ordinal: ordinal,
-          min_selected: min_selected, 
-          max_selected: max_selected, 
-          externalIDs: {
-            revelID: revelID,
-            squareID: squareID
-          },
+          name,
+          display_name,
+          ordinal,
+          min_selected, 
+          max_selected, 
+          externalIDs,
           display_flags
         },
         { new: true }
@@ -473,8 +467,7 @@ class CatalogProvider {
     price, 
     shortcode, 
     disabled, 
-    revelID, 
-    squareID, 
+    externalIDs, 
     ordinal, 
     flavor_factor, 
     bake_factor, 
@@ -499,10 +492,7 @@ class CatalogProvider {
         shortcode: shortcode,
         disabled: disabled,
         permanent_disable: false,
-        externalIDs: {
-          revelID: revelID,
-          squareID: squareID
-        }
+        externalIDs
       },
       option_type_id: option_type_id,
       ordinal: ordinal,
@@ -528,8 +518,7 @@ class CatalogProvider {
     price, 
     shortcode, 
     disabled, 
-    revelID, 
-    squareID, 
+    externalIDs,
     ordinal, 
     flavor_factor, 
     bake_factor, 
@@ -552,10 +541,7 @@ class CatalogProvider {
             shortcode: shortcode,
             disabled: disabled,
             permanent_disable: false,
-            externalIDs: {
-              revelID: revelID,
-              squareID: squareID
-            }
+            externalIDs
           },
           ordinal: ordinal,
           metadata: {
@@ -620,8 +606,7 @@ class CatalogProvider {
     disabled,
     service_disable,
     display_flags,
-    revelID, 
-    squareID, 
+    externalIDs,
     modifiers,
     category_ids,
     suppress_catalog_recomputation = false
@@ -632,10 +617,7 @@ class CatalogProvider {
 
     const doc = new this.#dbconn.WProductSchema({
       item: {
-        externalIDs: {
-          revelID: revelID,
-          squareID: squareID
-        }
+        externalIDs
       },
       disabled,
       price,
@@ -658,8 +640,7 @@ class CatalogProvider {
     disabled,
     service_disable,
     display_flags,
-    revelID, 
-    squareID, 
+    externalIDs,
     modifiers,
     category_ids}) => {
     try {
@@ -673,10 +654,7 @@ class CatalogProvider {
         pid, 
         {
           item: {
-            externalIDs: {
-              revelID: revelID,
-              squareID: squareID
-            }
+            externalIDs
           },
           disabled,
           price,
@@ -734,8 +712,7 @@ class CatalogProvider {
     display_name,
     shortcode, 
     ordinal, 
-    revelID, 
-    squareID, 
+    externalIDs, 
     modifiers,
     is_base,
     display_flags
@@ -743,16 +720,13 @@ class CatalogProvider {
     const doc = new this.#dbconn.WProductInstanceSchema({
       product_id: parent_product_id,
       item: {
-        description: description,
-        display_name: display_name,
-        shortcode: shortcode,
-        externalIDs: {
-          revelID: revelID,
-          squareID: squareID
-        }
+        description,
+        display_name,
+        shortcode,
+        externalIDs,
       },
-      ordinal: ordinal,
-      modifiers: modifiers,
+      ordinal,
+      modifiers,
       is_base,
       display_flags
     });    
@@ -768,8 +742,7 @@ class CatalogProvider {
     description, 
     shortcode, 
     ordinal, 
-    revelID, 
-    squareID, 
+    externalIDs, 
     modifiers,
     is_base,
     display_flags
@@ -780,16 +753,13 @@ class CatalogProvider {
         {
           product_id: pid,
           item: {
-            description: description,
-            display_name: display_name,
-            shortcode: shortcode,
-            externalIDs: {
-              revelID: revelID,
-              squareID: squareID
-            }
+            description,
+            display_name,
+            shortcode,
+            externalIDs
           },
-          ordinal: ordinal,
-          modifiers: modifiers,
+          ordinal,
+          modifiers,
           is_base,
           display_flags
         },
