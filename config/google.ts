@@ -1,9 +1,10 @@
 import nodemailer from "nodemailer";
-import { OAuth2Client } from 'google-auth-library';
-import { google } from "googleapis";
+import { GoogleAuth } from 'google-auth-library';
+import { google, calendar_v3 } from "googleapis";
 import { ExponentialBackoff } from '../utils';
 import logger from '../logging';
 import OAUTH2_KEYS from "../authentication/auth.json";
+import SMTPTransport from "nodemailer/lib/smtp-transport";
 const OAuth2 = google.auth.OAuth2;
 
 class GoogleProvider {
@@ -11,8 +12,8 @@ class GoogleProvider {
     return "yyyy-MM-ddTHH:mm:ss";
   }
 
-  #accessToken : OAuth2Client.GetAccessTokenResponse | null;
-  #smtpTransport;
+  #accessToken : GetAccessTokenResponse | null;
+  #smtpTransport : nodemailer.Transporter<SMTPTransport.SentMessageInfo>;
   #calendarAPI;
   #sheetsAPI;
   #oauth2Client;
@@ -108,7 +109,14 @@ class GoogleProvider {
     return await ExponentialBackoff(call_fxn, () => true, retry, max_retry);
   };
 
-  CreateCalendarEvent = async (summary, location, description, start, end, retry=0, max_retry=5) => {
+  CreateCalendarEvent = async (
+    summary : string, 
+    location : string, 
+    description : string, 
+    start : calendar_v3.Schema$EventDateTime, 
+    end : calendar_v3.Schema$EventDateTime, 
+    retry=0, 
+    max_retry=5) => {
     const eventjson = {
       summary: summary,
       location: location,
@@ -121,7 +129,7 @@ class GoogleProvider {
         const event = await this.#calendarAPI.events.insert({
           auth: this.#oauth2Client,
           calendarId: 'primary',
-          resource: eventjson
+          requestBody: eventjson
         });
         logger.debug("Created event: %o", event);
         return event;
@@ -135,7 +143,7 @@ class GoogleProvider {
     return await ExponentialBackoff(call_fxn, () => true, retry, max_retry);
   };
 
-  GetEventsForDate = async (min_date, max_date, tz) => {
+  GetEventsForDate = async (min_date : string, max_date : string, tz : string) => {
     const res = await this.#calendarAPI.events.list({
       auth: this.#oauth2Client,
       calendarId: 'primary',
@@ -147,22 +155,22 @@ class GoogleProvider {
     return(res.data.items);
   }
 
-  AppendToSheet = async (sheetId, range, fields) => {
+  AppendToSheet = async (sheetId : string, range : string, fields: any[]) => {
     const res = await this.#sheetsAPI.spreadsheets.values.append({
       auth: this.#oauth2Client,
       spreadsheetId: sheetId,
       range: range,
       valueInputOption: "USER_ENTERED",
       insertDataOption: "INSERT_ROWS",
-      resource: {
+      requestBody: {
         majorDimension: "ROWS",
         values: [fields]
       }
-    }).data;
-    return(res);
+    });
+    return(res.data);
   }
 
-  GetValuesFromSheet = async (sheetId, range) => {
+  GetValuesFromSheet = async (sheetId : string, range : string) => {
     const res = await this.#sheetsAPI.spreadsheets.values.get({
       auth: this.#oauth2Client,
       spreadsheetId: sheetId,
@@ -174,13 +182,13 @@ class GoogleProvider {
     return(res.data);
   };
 
-  UpdateValuesInSheet = async (sheetId, range, fields) => {
+  UpdateValuesInSheet = async (sheetId : string, range : string, fields : any[]) => {
     const res = await this.#sheetsAPI.spreadsheets.values.update({
       auth: this.#oauth2Client,
       spreadsheetId: sheetId,
       range: range,
       valueInputOption: "USER_ENTERED",
-      resource: {
+      requestBody: {
         majorDimension: "ROWS",
         values: [fields]
       }

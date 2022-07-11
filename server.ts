@@ -1,6 +1,5 @@
 require('dotenv').config();
 
-
 import express from 'express';
 import http from "http";
 import socketIo from "socket.io";
@@ -15,12 +14,13 @@ const app = express();
 const router = require('./routes/')()
 const PORT = process.env.PORT || 4001;
 const server = http.createServer(app);
+const ORIGINS = [/https:\/\/.*\.windycitypie\.com$/, /https:\/\/.*\.breezytownpizza\.com$/, `http://localhost:${PORT}`];
 const io = new socketIo.Server(server, 
   {
     transports: ["websocket", "polling"], 
     allowEIO3: true,
     cors: {
-      origin: [/https:\/\/.*\.windycitypie\.com$/, /https:\/\/.*\.breezytownpizza\.com$/, `http://localhost:${PORT}`],
+      origin: ORIGINS,
       methods: ["GET", "POST"],
       credentials: true
     }
@@ -47,7 +47,7 @@ DatabaseManager.Bootstrap(async () => {
 });
 
 app.use(idempotency.idempotency());
-app.use(cors());
+app.use(cors({origin: ORIGINS}));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(expressWinston.logger({

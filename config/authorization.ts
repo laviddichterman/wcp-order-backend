@@ -1,11 +1,11 @@
 import { auth, requiredScopes } from 'express-oauth2-jwt-bearer';
 import logger from '../logging';
 
-if (!process.env.AUTH_DOMAIN) { 
+if (!process.env.AUTH_DOMAIN) {
   logger.error("Missing config for AUTH_DOMAIN ");
   process.exit(1);
 }
-if (!process.env.AUTH_AUDIENCE) { 
+if (!process.env.AUTH_AUDIENCE) {
   logger.error("Missing config for AUTH_AUDIENCE");
   process.exit(1);
 }
@@ -29,32 +29,32 @@ export const ScopeWriteOrderConfig = requiredScopes("write:order_config");
 /**
  * Allows reading the main service settings key-value store.
  */
- export const ScopeReadKVStore = requiredScopes("read:settings");
+export const ScopeReadKVStore = requiredScopes("read:settings");
 /**
  * Allows writing the main service settings key-value store.
  */
- export const ScopeWriteKVStore = requiredScopes("write:settings");
+export const ScopeWriteKVStore = requiredScopes("write:settings");
 /**
  * Allows writing the product catalog and related information.
  * Does not allow deleting data.
  */
- export const ScopeWriteCatalog = requiredScopes("write:catalog");
+export const ScopeWriteCatalog = requiredScopes("write:catalog");
 /**
  * Allows writing the product catalog and related information but with the
  * advanced features editable as well.
  * Does not allow deleting data.
  */
- export const ScopeAdvancedCatalog = requiredScopes("advanced:catalog");
+export const ScopeAdvancedCatalog = requiredScopes("advanced:catalog");
 /**
  * Allows deleting the product catalog and related information.
  * It is assumed that being granted this scope includes ScopeWriteCatalog
  */
- export const ScopeDeleteCatalog = requiredScopes("delete:catalog");
+export const ScopeDeleteCatalog = requiredScopes("delete:catalog");
 /**
  * Allows editing (issuing and refunding) store credit
  */
- export const ScopeEditCredit = requiredScopes("edit:store_credit");
- /**
- * Allows advanced editing store credit
- */
-  export const ScopeAdvancedCredit = requiredScopes("advanced:store_credit");
+export const ScopeEditCredit = requiredScopes("edit:store_credit");
+/**
+* Allows advanced editing store credit
+*/
+export const ScopeAdvancedCredit = requiredScopes("advanced:store_credit");

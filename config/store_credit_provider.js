@@ -1,12 +1,12 @@
-const voucher_codes = require('voucher-code-generator');
-const { format, parse, startOfDay, isValid, isBefore } = require('date-fns');
-const qrcode = require('qrcode');
-const Stream = require('stream');
-const { WDateUtils } = require("@wcp/wcpshared");
-const GoogleProvider = require("./google");
-const aes256gcm = require('./crypto-aes-256-gcm');
+import voucher_codes from 'voucher-code-generator';
+import { format, parse, startOfDay, isValid, isBefore } from 'date-fns';
+import qrcode from 'qrcode';
+import Stream from 'stream';
+import { WDateUtils } from "@wcp/wcpshared";
+import GoogleProvider from "./google";
+import aes256gcm from './crypto-aes-256-gcm';
 
-const logger = require('../logging');
+import logger from '../logging';
 
 const ACTIVE_SHEET = "CurrentWARIO"
 const ACTIVE_RANGE = `${ACTIVE_SHEET}!A2:M`;
@@ -147,6 +147,6 @@ BootstrapProvider = async (db) => {
 
 };
 
-const STORE_CREDIT_PROVIDER = new StoreCreditProvider();
+export const STORE_CREDIT_PROVIDER = new StoreCreditProvider();
 
 module.exports = STORE_CREDIT_PROVIDER;

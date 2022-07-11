@@ -1,4 +1,4 @@
-import {GenerateMenu} from "@wcp/wcpshared";
+import {GenerateMenu, ICatalog, ICatalogCategories, ICategory, IMenu, IOption, IOptionType, IProduct, IProductInstance, IProductInstanceFunction} from "@wcp/wcpshared";
 import Promise from 'bluebird';
 import logger from '../logging';
 
@@ -17,8 +17,8 @@ const ReduceArrayToMapByKey = function(xs, key) {
 // category_map entries are mapping of catagory_id to { category, children (id list), product (id list) }
 // product_map is mapping from product_id to { product, instances (list of instance objects)}
 // orphan_products is list of orphan product ids
-const CatalogMapGenerator = (categories, products, product_instances) => {
-  const category_map = {};
+const CatalogMapGenerator = (categories : ICategory[], products, product_instances) => {
+  const category_map : ICatalogCategories = {};
   categories.forEach((curr) => {
     category_map[curr._id] = { category: curr, children: [], products: [] };
   });
@@ -58,7 +58,14 @@ const ModifierTypeMapGenerator = (modifier_types, options) => {
   return modifier_types_map;
 };
 
-const CatalogGenerator = (categories, modifier_types, options, products, product_instances, product_instance_functions, apiver) => {
+const CatalogGenerator = (
+  categories : ICatalogCategories, 
+  modifier_types, 
+  options, 
+  products, 
+  product_instances, 
+  product_instance_functions, 
+  api) => {
   const modifier_types_map = ModifierTypeMapGenerator(modifier_types, options);
   const [category_map, product_map] = CatalogMapGenerator(categories, products, product_instances);
   return { 
@@ -68,7 +75,7 @@ const CatalogGenerator = (categories, modifier_types, options, products, product
     version: Date.now().toString(36).toUpperCase(),
     product_instance_functions: product_instance_functions,
     api: apiver,
-  };
+  } as ICatalog;
 }
 
 //TODO this should exist in the WAbstractExpression class file but I had trouble getting it to work since the type itself is recursive
@@ -126,14 +133,14 @@ const ValidateProductModifiersFunctionsCategories = function(modifiers, category
 class CatalogProvider {
   #dbconn;
   #socketRO;
-  #categories;
-  #modifier_types;
-  #options;
-  #products;
-  #product_instances;
-  #product_instance_functions;
-  #catalog;
-  #menu;
+  #categories : ICategory[];
+  #modifier_types: IOptionType[];
+  #options : IOption[];
+  #products : IProduct[];
+  #product_instances: IProductInstance[];
+  #product_instance_functions : IProductInstanceFunction[];
+  #catalog : ICatalog;
+  #menu : IMenu;
   #apiver;
   constructor(dbconn, socketRO) {
     this.#dbconn = dbconn;

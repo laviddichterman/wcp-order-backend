@@ -1,7 +1,7 @@
 import mongoose, { Schema } from 'mongoose';
 import { ICategory, CALL_LINE_DISPLAY } from '@wcp/wcpshared';
 
-export const WCategorySchema = new Schema({
+export const WCategorySchema = new Schema<ICategory>({
   _id: { type: String, required: true },
 
   // brief name of the category
@@ -35,4 +35,4 @@ export const WCategorySchema = new Schema({
     }
   }
 });
-export default mongoose.model("WCategorySchema", WCategorySchema);
+export default WCategorySchema;

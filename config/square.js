@@ -1,8 +1,7 @@
-const {  ApiError, Client, Environment } = require('square')
+import {  ApiError, Client, Environment } from 'square';
 
-const crypto = require('crypto');
-const logger = require('../logging');
-const { http } = require('../logging');
+import crypto from 'crypto';
+import logger from'../logging';
 
 class SquareProvider {
   #client;
