@@ -1,12 +1,12 @@
 // validates an address inside a delivery area
-
-const Router = require('express').Router
-const Client = require("@googlemaps/google-maps-services-js").Client;
+import { Router } from 'express';
+import { Client } from "@googlemaps/google-maps-services-js";
+import turf from '@turf/turf';
 const client = new Client({});
-const turf = require('@turf/turf');
+
 
 // uses the google maps services geocode api: https://developers.google.com/maps/documentation/javascript/geocoding#GeocodingAddressTypes
-module.exports = Router({ mergeParams: true })
+export const route = Router({ mergeParams: true })
   .get('/v1/addresses/validate', async (req, res, next) => {
     try {
       const address_line = req.query.address;
@@ -44,3 +44,5 @@ module.exports = Router({ mergeParams: true })
       next(error)
     }
   })
+
+  module.exports = route;

@@ -1,9 +1,9 @@
 // some thing relating to payments
-const Router = require('express').Router
-const { formatRFC3339, startOfDay, parse, addDays } = require('date-fns');
-const { WDateUtils } = require("@wcp/wcpshared");
-const GoogleProvider = require("../../../../config/google");
-//const { validate, Joi } = require('express-validation')
+import { Router } from 'express';
+import { formatRFC3339, startOfDay, parse, addDays } from 'date-fns';
+import { WDateUtils } from "@wcp/wcpshared";
+import GoogleProvider from "../../../../config/google";
+//import { validate, Joi } from 'express-validation'
 
 const tipsregex = /Tip Amount: \$([0-9]+(?:\.[0-9]{1,2})?)/;
 module.exports = Router({ mergeParams: true })

@@ -1,12 +1,11 @@
 // some thing relating to payments
-const {WDateUtils} = require("@wcp/wcpshared");
-const { parse, format } = require('date-fns'); 
-const { body, validationResult } = require('express-validator');
-const Router = require('express').Router
-const StoreCreditProvider = require("../../../../../config/store_credit_provider");
-
-const GoogleProvider = require("../../../../../config/google");
-const { CheckJWT, ScopeEditCredit } = require('../../../../../config/authorization');
+import {WDateUtils} from "@wcp/wcpshared";
+import { parse, format } from 'date-fns'; 
+import { body, validationResult } from 'express-validator';
+import { Router } from 'express';
+import StoreCreditProvider from "../../../../../config/store_credit_provider";
+import GoogleProvider from "../../../../../config/google";
+import { CheckJWT, ScopeEditCredit } from '../../../../../config/authorization';
 
 const DISPLAY_DATE_FORMAT = "EEEE, MMMM dd, y";
 

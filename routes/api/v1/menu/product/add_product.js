@@ -1,7 +1,7 @@
-// creates a new option in the catalog
-const Router = require('express').Router
-const { body, validationResult } = require('express-validator');
-const { CheckJWT, ScopeWriteCatalog } = require('../../../../../config/authorization');
+// creates a new product class in the catalog
+import { Router } from 'express';
+import { body, validationResult } from 'express-validator';
+import { CheckJWT, ScopeWriteCatalog } from '../../../../../config/authorization';
 
 const ValidationChain = [
   body('display_name').trim().exists(),

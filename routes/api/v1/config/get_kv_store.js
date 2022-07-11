@@ -1,5 +1,5 @@
-const Router = require('express').Router
-const { CheckJWT, ScopeReadKVStore } = require('../../../../config/authorization');
+import { Router } from 'express';
+import { CheckJWT, ScopeReadKVStore } from '../../../../config/authorization';
 
 module.exports = Router({ mergeParams: true })
   .get('/v1/config/kvstore', CheckJWT, ScopeReadKVStore, async (req, res, next) => {

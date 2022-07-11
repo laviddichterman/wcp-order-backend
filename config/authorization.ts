@@ -1,5 +1,5 @@
-const { auth, requiredScopes } = require('express-oauth2-jwt-bearer');
-const logger = require('../logging');
+import { auth, requiredScopes } from 'express-oauth2-jwt-bearer';
+import logger from '../logging';
 
 if (!process.env.AUTH_DOMAIN) { 
   logger.error("Missing config for AUTH_DOMAIN ");
@@ -14,7 +14,7 @@ const authConfig = {
   domain: process.env.AUTH_DOMAIN,
   audience: process.env.AUTH_AUDIENCE
 };
-const CheckJWT = auth({
+export const CheckJWT = auth({
   audience: authConfig.audience,
   issuerBaseURL: `https://${authConfig.domain}/`,
 });
@@ -25,36 +25,36 @@ exports.CheckJWT = CheckJWT;
 /**
  * Allows writing to the timing-related order settings
  */
-exports.ScopeWriteOrderConfig = requiredScopes("write:order_config");
+export const ScopeWriteOrderConfig = requiredScopes("write:order_config");
 /**
  * Allows reading the main service settings key-value store.
  */
-exports.ScopeReadKVStore = requiredScopes("read:settings");
+ export const ScopeReadKVStore = requiredScopes("read:settings");
 /**
  * Allows writing the main service settings key-value store.
  */
-exports.ScopeWriteKVStore = requiredScopes("write:settings");
+ export const ScopeWriteKVStore = requiredScopes("write:settings");
 /**
  * Allows writing the product catalog and related information.
  * Does not allow deleting data.
  */
-exports.ScopeWriteCatalog = requiredScopes("write:catalog");
+ export const ScopeWriteCatalog = requiredScopes("write:catalog");
 /**
  * Allows writing the product catalog and related information but with the
  * advanced features editable as well.
  * Does not allow deleting data.
  */
- exports.ScopeAdvancedCatalog = requiredScopes("advanced:catalog");
+ export const ScopeAdvancedCatalog = requiredScopes("advanced:catalog");
 /**
  * Allows deleting the product catalog and related information.
  * It is assumed that being granted this scope includes ScopeWriteCatalog
  */
- exports.ScopeDeleteCatalog = requiredScopes("delete:catalog");
+ export const ScopeDeleteCatalog = requiredScopes("delete:catalog");
 /**
  * Allows editing (issuing and refunding) store credit
  */
- exports.ScopeEditCredit = requiredScopes("edit:store_credit");
+ export const ScopeEditCredit = requiredScopes("edit:store_credit");
  /**
  * Allows advanced editing store credit
  */
-  exports.ScopeAdvancedCredit = requiredScopes("advanced:store_credit");
+  export const ScopeAdvancedCredit = requiredScopes("advanced:store_credit");

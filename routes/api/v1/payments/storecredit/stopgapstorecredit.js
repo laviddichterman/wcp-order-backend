@@ -1,10 +1,10 @@
 // some thing relating to payments
-const Router = require('express').Router
-const Stream = require('stream');
-const { body, validationResult } = require('express-validator');
-const SquareProvider = require("../../../../../config/square");
-const GoogleProvider = require("../../../../../config/google");
-const StoreCreditProvider = require("../../../../../config/store_credit_provider");
+import { Router } from 'express';
+import { Stream } from 'stream';
+import { body, validationResult } from 'express-validator';
+import SquareProvider from "../../../../../config/square";
+import GoogleProvider from "../../../../../config/google";
+import StoreCreditProvider from "../../../../../config/store_credit_provider";
 
 const CreateExternalEmailSender = async (EMAIL_ADDRESS, STORE_NAME, amount, sender_email, recipient_name_first, recipient_name_last, credit_code, qr_code_fs) => {
   const emailbody = `<h2>Thanks for thinking of Windy City Pie and Breezy Town Pizza for someone close to you!</h2>

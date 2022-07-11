@@ -1,8 +1,7 @@
 // deletes specified function
-
-const Router = require('express').Router
-const { param, validationResult } = require('express-validator');
-const { CheckJWT, ScopeDeleteCatalog} = require('../../../../../config/authorization');
+import { Router } from 'express';
+import { param, validationResult } from 'express-validator';
+import { CheckJWT, ScopeDeleteCatalog } from '../../../../../config/authorization';
 
 const ValidationChain = [  
   param('fxnid').trim().escape().exists().isMongoId(),

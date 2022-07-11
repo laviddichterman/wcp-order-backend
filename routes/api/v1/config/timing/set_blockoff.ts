@@ -1,11 +1,11 @@
 // creates a new category in the catalog
-const Router = require('express').Router
-const { body, param, validationResult } = require('express-validator');
-const { CheckJWT, ScopeWriteOrderConfig } = require('../../../../../config/authorization');
-const wcpshared = require("@wcp/wcpshared");
+import { Router } from 'express';
+import { body, validationResult } from 'express-validator';
+import { CheckJWT, ScopeWriteOrderConfig } from '../../../../../config/authorization';
+import {WDateUtils} from '@wcp/wcpshared';
 
 const ValidationChain = [  
-  body('*.*.0').matches(wcpshared.WDateUtils.DATE_STRING_INTERNAL_FORMAT_REGEX),
+  //body('*.*.0').matches(WDateUtils.DATE_STRING_INTERNAL_FORMAT_REGEX),
   body('*.*.1.*.0').trim().exists().isInt({min: 0, max: 1440}),
   body('*.*.1.*.1').trim().exists().isInt({min: 0, max: 1440}),
 ];

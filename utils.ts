@@ -1,7 +1,7 @@
-var Promise = require('bluebird');
-const logger = require("./logging");
+import Promise from 'bluebird';
+import logger from "./logging";
 
-const ExponentialBackoff = async (fxn, retry_checker, retry, max_retry) => {
+export const ExponentialBackoff = async (fxn : any, retry_checker : (err : Error) => boolean, retry : number, max_retry : number) => {
   try {
     const response = await fxn();
     return response;

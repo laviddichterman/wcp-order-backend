@@ -1,12 +1,12 @@
-const buffer = require('buffer');
-const crypto = require('crypto');
+import buffer from 'buffer';
+import crypto from 'crypto';
 
 // Demo implementation of using `aes-256-gcm` with node.js's `crypto` lib.
-const aes256gcm = (key) => {
-  const ALGO = 'aes-256-gcm';
+const aes256gcm = (key : crypto.CipherKey) => {
+  const ALGO : crypto.CipherGCMTypes = 'aes-256-gcm';
 
   // encrypt returns base64-encoded ciphertext
-  const encrypt = (str) => {
+  const encrypt = (str : string) => {
     // Hint: the `iv` should be unique (but not necessarily random).
     // `randomBytes` here are (relatively) slow but convenient for
     // demonstration.
@@ -20,7 +20,7 @@ const aes256gcm = (key) => {
   };
 
   // decrypt decodes base64-encoded ciphertext into a utf8-encoded string
-  const decrypt = (enc, iv, authTag) => {
+  const decrypt = (enc, iv, authTag : buffer.Buffer) => {
     const decipher = crypto.createDecipheriv(ALGO, key, iv);
     decipher.setAuthTag(authTag);
     let str = decipher.update(enc, 'base64', 'utf8');

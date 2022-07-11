@@ -1,8 +1,8 @@
 // some thing relating to payments
-const Router = require('express').Router
-const { body, validationResult } = require('express-validator');
-const StoreCreditProvider = require("../../../../../config/store_credit_provider");
-const GoogleProvider = require("../../../../../config/google");
+import { Router } from 'express';
+import { body, validationResult }  from 'express-validator';
+import StoreCreditProvider from "../../../../../config/store_credit_provider";
+import GoogleProvider from "../../../../../config/google";
 
 const ValidationChain = [
   body('code').exists().isLength({min: 19, max: 19}),

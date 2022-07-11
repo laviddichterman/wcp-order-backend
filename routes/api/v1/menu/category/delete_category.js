@@ -2,9 +2,9 @@
 // TODO: need to null out any references to this category in children
 // TODO: figure out if you can delete a category with any children (either products or other categories)
 
-const Router = require('express').Router
-const { param, validationResult } = require('express-validator');
-const { CheckJWT, ScopeDeleteCatalog } = require('../../../../../config/authorization');
+import { Router } from 'express';
+import { param, validationResult } from 'express-validator';
+import { CheckJWT, ScopeDeleteCatalog } from '../../../../../config/authorization';
 
 const ValidationChain = [  
   param('catid').trim().escape().exists()

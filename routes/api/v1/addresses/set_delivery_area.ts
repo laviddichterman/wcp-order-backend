@@ -1,7 +1,7 @@
-const Router = require('express').Router
-const { body, param, validationResult } = require('express-validator');
-const { CheckJWT, ScopeWriteKVStore } = require('../../../../config/authorization');
-const turf_invariant = require('@turf/invariant');
+import { Router } from 'express';
+import { body, param, validationResult } from 'express-validator';
+import { CheckJWT, ScopeWriteKVStore } from '../../../../config/authorization';
+import turf_invariant from '@turf/invariant';
 
 const ValidationChain = [  
   body('type').equals("Polygon"),

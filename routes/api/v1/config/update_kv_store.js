@@ -1,6 +1,6 @@
-const Router = require('express').Router
-const { body, param, validationResult } = require('express-validator');
-const { CheckJWT, ScopeWriteKVStore } = require('../../../../config/authorization');
+import { Router } from 'express';
+import { body, param, validationResult } from 'express-validator';
+import { CheckJWT, ScopeWriteKVStore } from '../../../../config/authorization';
 
 const ValidationChain = [  
   body().custom((value) => {

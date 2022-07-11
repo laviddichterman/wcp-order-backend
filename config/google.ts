@@ -1,8 +1,9 @@
-const nodemailer = require("nodemailer");
-const { google } = require("googleapis");
-const OAUTH2_KEYS = require("../authentication/auth");
-const { ExponentialBackoff } = require('../utils');
-const logger = require('../logging');
+import nodemailer from "nodemailer";
+import { OAuth2Client } from 'google-auth-library';
+import { google } from "googleapis";
+import { ExponentialBackoff } from '../utils';
+import logger from '../logging';
+import OAUTH2_KEYS from "../authentication/auth.json";
 const OAuth2 = google.auth.OAuth2;
 
 class GoogleProvider {
@@ -10,7 +11,7 @@ class GoogleProvider {
     return "yyyy-MM-ddTHH:mm:ss";
   }
 
-  #accessToken;
+  #accessToken : OAuth2Client.GetAccessTokenResponse | null;
   #smtpTransport;
   #calendarAPI;
   #sheetsAPI;

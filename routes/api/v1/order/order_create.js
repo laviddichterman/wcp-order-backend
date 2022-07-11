@@ -1,12 +1,12 @@
 // submit an order
-const Router = require('express').Router
-const { formatRFC3339, format, parse, addDays, subMinutes, addMinutes, startOfDay, isSameMinute, isSameDay } = require('date-fns');
-const { body, validationResult } = require('express-validator');
-const Promise = require('bluebird');
-const GoogleProvider = require("../../../../config/google");
-const SquareProvider = require("../../../../config/square");
-const StoreCreditProvider = require("../../../../config/store_credit_provider");
-const {CreateProductWithMetadataFromJsFeDto, WDateUtils, PRODUCT_LOCATION} = require("@wcp/wcpshared");
+import { Router } from 'express';
+import { formatRFC3339, format, parse, addDays, subMinutes, addMinutes, startOfDay, isSameMinute, isSameDay } from 'date-fns';
+import { body, validationResult } from 'express-validator';
+import Promise from 'bluebird';
+import GoogleProvider from "../../../../config/google";
+import SquareProvider from "../../../../config/square";
+import StoreCreditProvider from "../../../../config/store_credit_provider";
+import {CreateProductWithMetadataFromJsFeDto, WDateUtils, PRODUCT_LOCATION} from "@wcp/wcpshared";
 const WCP = "Windy City Pie";
 const DELIVERY_INTERVAL_TIME = 30;
 

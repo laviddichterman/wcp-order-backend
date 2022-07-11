@@ -1,6 +1,6 @@
-const Router = require('express').Router
-const { param, body, validationResult } = require('express-validator');
-const { CheckJWT, ScopeWriteCatalog } = require('../../../../../config/authorization');
+import { Router } from 'express';
+import { param, body, validationResult } from 'express-validator';
+import { CheckJWT, ScopeWriteCatalog } from '../../../../../config/authorization';
 
 const ValidationChain = [
   param('mtid').trim().escape().exists().isMongoId(),

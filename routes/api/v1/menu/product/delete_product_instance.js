@@ -1,10 +1,9 @@
 // deletes specified product
 // TODO: how do we handle when we have old orders with this product?
 // maybe just disable?
-
-const Router = require('express').Router
-const { param, validationResult } = require('express-validator');
-const { CheckJWT, ScopeDeleteCatalog } = require('../../../../../config/authorization');
+import { Router } from 'express';
+import { param, validationResult } from 'express-validator';
+import { CheckJWT, ScopeDeleteCatalog } from '../../../../../config/authorization';
 
 const ValidationChain = [  
   param('p_id').trim().escape().exists().isMongoId(),

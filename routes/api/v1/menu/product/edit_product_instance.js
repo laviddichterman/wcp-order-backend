@@ -1,9 +1,9 @@
 // edits a product in the catalog
 // TODO: double check that fields not passed aren't removed. 
 // make it so fields that aren't present in the body are handled properly
-const Router = require('express').Router
-const { body, param, validationResult } = require('express-validator');
-const { CheckJWT, ScopeWriteCatalog } = require('../../../../../config/authorization');
+import { Router } from 'express';
+import { param, body, validationResult } from 'express-validator';
+import { CheckJWT, ScopeWriteCatalog } from '../../../../../config/authorization';
 
 const ValidationChain = [  
   param('pid').trim().escape().exists().isMongoId(), 

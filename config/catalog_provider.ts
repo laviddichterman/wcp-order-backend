@@ -1,6 +1,6 @@
-const {GenerateMenu} = require("@wcp/wcpshared");
-const Promise = require('bluebird');
-const logger = require('../logging');
+import {GenerateMenu} from "@wcp/wcpshared";
+import Promise from 'bluebird';
+import logger from '../logging';
 
 
 const ReduceArrayToMapByKey = function(xs, key) {

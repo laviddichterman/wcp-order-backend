@@ -1,5 +1,5 @@
 // modify an order
-const Router = require('express').Router
+import { Router } from 'express';
 
 module.exports = Router({ mergeParams: true })
   .patch('/v1/order/{id}', async (req, res, next) => {

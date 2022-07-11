@@ -3,9 +3,9 @@
 // TODO: figure out if you can delete an option type with any children
 // maybe just disable?
 
-const Router = require('express').Router
-const { param, validationResult } = require('express-validator');
-const { CheckJWT, ScopeDeleteCatalog } = require('../../../../../config/authorization');
+import { Router } from 'express';
+import { param, validationResult } from 'express-validator';
+import { CheckJWT, ScopeDeleteCatalog } from '../../../../../config/authorization';
 
 const ValidationChain = [  
   param('otid').trim().escape().exists().isMongoId(),

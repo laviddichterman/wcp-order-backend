@@ -1,6 +1,6 @@
-const Router = require('express').Router
-const { body, validationResult } = require('express-validator');
-const { CheckJWT, ScopeWriteOrderConfig } = require('../../../../../config/authorization');
+import { Router } from 'express';
+import { body, validationResult } from 'express-validator';
+import { CheckJWT, ScopeWriteOrderConfig } from '../../../../../config/authorization';
 
 const ValidationChain = [  
   body("*").isInt({min: 0}),
