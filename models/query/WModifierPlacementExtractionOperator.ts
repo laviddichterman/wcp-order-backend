@@ -1,8 +1,10 @@
-import { Schema } from "mongoose";
+import { IModifierPlacementExpression } from "@wcp/wcpshared";
+import mongoose, { Schema } from "mongoose";
+import path from 'path';
 
-export const WModifierPlacementExtractionOperator = new Schema({
+export const WModifierPlacementExtractionOperator = new Schema<IModifierPlacementExpression>({
   mtid: String,
   moid: String,
 });
 
-module.exports = WModifierPlacementExtractionOperator;
+export default mongoose.model<IModifierPlacementExpression>(path.basename(__filename).replace(path.extname(__filename), ''), WModifierPlacementExtractionOperator);

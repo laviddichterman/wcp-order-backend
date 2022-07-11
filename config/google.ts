@@ -7,7 +7,7 @@ import OAUTH2_KEYS from "../authentication/auth.json";
 import SMTPTransport from "nodemailer/lib/smtp-transport";
 const OAuth2 = google.auth.OAuth2;
 
-class GoogleProvider {
+export default class GoogleProvider {
   static get GOOGLE_EVENTS_DATETIME_FORMAT() {
     return "yyyy-MM-ddTHH:mm:ss";
   }
@@ -84,7 +84,7 @@ class GoogleProvider {
     return this.#accessToken;
   };
 
-  SendEmail = async (from, to, subject, replyto, htmlbody, attachments=[], retry=0, max_retry=5) => {    
+  SendEmail = async (from : string, to : string, subject : string, replyto : string, htmlbody : string, attachments=[], retry=0, max_retry=5) => {    
     const mailOptions = {
       from: from,
       to: to,
@@ -198,6 +198,4 @@ class GoogleProvider {
 
 };
 
-const GOOGLE_PROVIDER = new GoogleProvider();
-
-module.exports = GOOGLE_PROVIDER;
+module.exports = GoogleProvider;

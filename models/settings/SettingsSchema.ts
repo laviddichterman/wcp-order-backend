@@ -1,4 +1,6 @@
-import { Schema } from "mongoose";
+import { IWSettings } from "@wcp/wcpshared";
+import mongoose, { Schema } from "mongoose";
+import path from 'path';
 
 const PipelineStageSchema = new Schema({ slots: Number, time: Number }, {_id: false});
 const PipelineSchema = new Schema({
@@ -6,7 +8,7 @@ const PipelineSchema = new Schema({
   transfer_padding: Number
 }, {_id: false});
 
-export const SettingsSchema = new Schema({
+export const SettingsSchema = new Schema<IWSettings>({
   additional_pizza_lead_time: {
     type: Number,
     default: 5
@@ -15,11 +17,8 @@ export const SettingsSchema = new Schema({
     type: Number,
     default: 15
   }],
-  time_step2: [{
-    type: Number,
-    default: 15
-  }],
   pipeline_info: PipelineSchema,
   operating_hours: [[[[Number]]]]
 });
-module.exports = SettingsSchema;
+
+export default mongoose.model<IWSettings>(path.basename(__filename).replace(path.extname(__filename), ''), SettingsSchema);

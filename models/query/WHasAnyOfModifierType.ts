@@ -1,7 +1,10 @@
-import { Schema } from "mongoose";
+import { IHasAnyOfModifierExpression } from "@wcp/wcpshared";
+import mongoose, { Schema } from "mongoose";
+import path from 'path';
 
-export const WHasAnyOfModifierType = new Schema({
+export const WHasAnyOfModifierType = new Schema<IHasAnyOfModifierExpression>({
   mtid: String
 });
 
-module.exports = WHasAnyOfModifierType;
+export default mongoose.model<IHasAnyOfModifierExpression>(path.basename(__filename).replace(path.extname(__filename), ''), WHasAnyOfModifierType);
+

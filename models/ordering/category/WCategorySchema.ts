@@ -1,5 +1,6 @@
 import mongoose, { Schema } from 'mongoose';
 import { ICategory, CALL_LINE_DISPLAY } from '@wcp/wcpshared';
+import path from 'path';
 
 export const WCategorySchema = new Schema<ICategory>({
   _id: { type: String, required: true },
@@ -35,4 +36,5 @@ export const WCategorySchema = new Schema<ICategory>({
     }
   }
 });
-export default WCategorySchema;
+
+export default mongoose.model<ICategory>(path.basename(__filename).replace(path.extname(__filename), ''), WCategorySchema);

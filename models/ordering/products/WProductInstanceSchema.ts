@@ -1,12 +1,13 @@
-import {Schema} from "mongoose";
+import { IProductInstance, PriceDisplay } from "@wcp/wcpshared";
+import mongoose, {Schema} from "mongoose";
+import path from "path";
 import { WOptionInstanceSchema } from "../options/WOptionInstanceSchema";
 import { WCatalogItemSchema } from "../WCatalogItemSchema";
 //const WPriceDisplayEnumSchema = require("../WPriceDisplayEnumSchema");
-const PRICE_DISPLAY_ENUMS = ['FROM_X', 'VARIES', 'ALWAYS', 'MIN_TO_MAX', 'LIST'];
 
-export const WProductInstanceSchema = new Schema({
+export const WProductInstanceSchema = new Schema<IProductInstance>({
   // reference to the WProductSchema ID for this class of item
-  product_id: { type: Schema.Types.ObjectId, ref: 'WProductSchema'},
+  product_id: { type: Schema.Types.String, ref: 'WProductSchema'},
 
   // ordinal for product matching
   ordinal: Number,
@@ -28,8 +29,8 @@ export const WProductInstanceSchema = new Schema({
       hide: Boolean,
       // governs how prices get displayed in the menu page according to the enum      
       price_display: {    
-          type: String,
-          enum: PRICE_DISPLAY_ENUMS
+          type: PriceDisplay,
+          enum: PriceDisplay
       },
       // HTML-friendly message wrapping the display of this PI in the menu page
       adornment: String,
@@ -48,9 +49,9 @@ export const WProductInstanceSchema = new Schema({
       skip_customization: Boolean,
       // governs how prices get displayed in the order page according to the enum
       price_display: {    
-        type: String,
-        enum: PRICE_DISPLAY_ENUMS
-      },
+        type: PriceDisplay,
+        enum: PriceDisplay
+    },
       // HTML-friendly message wrapping the display of this PI in the order page
       adornment: String,
       // suppress the default pizza functionality where the full modifier list is surfaced on the product display
@@ -64,4 +65,4 @@ export const WProductInstanceSchema = new Schema({
   item: WCatalogItemSchema
 });
 
-module.exports = WProductInstanceSchema;
+export default mongoose.model<IProductInstance>(path.basename(__filename).replace(path.extname(__filename), ''), WProductInstanceSchema);

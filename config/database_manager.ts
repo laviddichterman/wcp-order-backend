@@ -2,16 +2,19 @@ import logger from '../logging';
 import {Promise} from 'bluebird';
 import mongoose from 'mongoose';
 import PACKAGE_JSON from '../package.json';
+import { SEMVER } from '@wcp/wcpshared';
+import { DBVersionModel } from '../models/DBVersionSchema';
+import { WOptionModel } from '../models/ordering/options/WOptionSchema';
 
-const SetVersion = async (dbconn, new_version) => { 
-  return await dbconn.DBVersionSchema.findOneAndUpdate({}, new_version, {new: true, upsert: true});
+const SetVersion = async (new_version : SEMVER) => { 
+  return await DBVersionModel.findOneAndUpdate({}, new_version, {new: true, upsert: true});
 }
 
 const UPGRADE_MIGRATION_FUNCTIONS = {
-  "0.0.0": [{ major: 0, minor: 2, patch: 2 }, async (dbconn) => { 
+  "0.0.0": [{ major: 0, minor: 2, patch: 2 }, async () => { 
     {
       // move catalog_item to item in WOptionSchema
-      const options_update = await dbconn.WOptionSchema.updateMany(
+      const options_update = await WOptionSchema.updateMany(
         { catalog_item: { $exists: true }}, 
         { $rename: { "catalog_item": "item"} });
       if (options_update.modifiedCount > 0) {
@@ -24,7 +27,7 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
 
     {
       // add display flags to WOptionTypeSchema
-      const mt_update = await dbconn.WOptionTypeSchema.updateMany(
+      const mt_update = await WOptionTypeSchema.updateMany(
         { display_flags: null }, 
         { $set: { 
             "display_flags.omit_section_if_no_available_options": true,
@@ -42,7 +45,7 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
 
     {
       // add display flags to WProductInstanceSchema
-      const pi_update = await dbconn.WProductInstanceSchema.updateMany(
+      const pi_update = await WProductInstanceSchema.updateMany(
         { display_flags: null }, 
         { $set: { 
             "display_flags.skip_customization": false
@@ -58,7 +61,7 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
 
     {
       // add display flags to WProductSchema
-      const p_update = await dbconn.WProductSchema.updateMany(
+      const p_update = await WProductSchema.updateMany(
         { display_flags: null }, 
         { $set: { 
             "display_flags.flavor_max": 10,
@@ -78,18 +81,18 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
     {
       // add is_base flag to one WProductInstance
       var num_products = 0;
-      const all_products = await dbconn.WProductSchema.find();
+      const all_products = await WProductSchema.find();
       all_products.forEach(async (product) => {
-        const find_base = await dbconn.WProductInstanceSchema.find({ 
+        const find_base = await WProductInstanceSchema.find({ 
           "product_id": product._id,
           "is_base": true
         });
         if (find_base.length === 0) {
-          const find_base = dbconn.WProductInstanceSchema.findOne({ 
+          const find_base = WProductInstanceSchema.findOne({ 
             "product_id": product._id
           }).sort({ "ordinal": "desc" });
           const base = await find_base;
-          const update_base = await dbconn.WProductInstanceSchema.findByIdAndUpdate(base._id, {"is_base": true}, {new: true});
+          const update_base = await WProductInstanceSchema.findByIdAndUpdate(base._id, {"is_base": true}, {new: true});
           if (update_base.is_base) {
             ++num_products;
             logger.debug(`Updated is_base for ${product._id}.`);
@@ -103,10 +106,10 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
     // remove product class disables, moving them to the related instances
     {
       // disabling at the product level is depreciated, so we disable the instances
-      const disabled_products_find = await dbconn.WProductSchema.find({ "item.disabled": true });
+      const disabled_products_find = await WProductSchema.find({ "item.disabled": true });
       var num_products = 0;
       disabled_products_find.forEach(async (product) => {
-        const product_instance_disable_update = await dbconn.WProductInstanceSchema.updateMany(
+        const product_instance_disable_update = await WProductInstanceSchema.updateMany(
           { "product_id": product._id }, 
           { "item.disabled": { start: 1, end: 0 } });
         if (product_instance_disable_update.modifiedCount > 0) {
@@ -116,19 +119,19 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
       });
       logger.debug(`Updated total of ${num_products} product classes to having disabled product instances.`);
 
-      const disabled_products_update = await dbconn.WProductSchema.updateMany(
+      const disabled_products_update = await WProductSchema.updateMany(
         { "item.disabled": true }, 
         { "item.disabled": null });
       if (disabled_products_update.modifiedCount > 0) {
         logger.debug(`Removed ${disabled_products_update.modifiedCount} disabled flags from products.`);
       }
-      const product_instance_disable_update = await dbconn.WProductInstanceSchema.updateMany(
+      const product_instance_disable_update = await WProductInstanceSchema.updateMany(
         { "item.disabled": true }, 
         { "item.disabled": { start: 1, end: 0 } });
       if (product_instance_disable_update.modifiedCount > 0) {
         logger.debug(`Updated from ${product_instance_disable_update.modifiedCount} product instances to new blanket disable flag.`);
       }
-      const option_disable_update = await dbconn.WOptionSchema.updateMany(
+      const option_disable_update = await WOptionSchema.updateMany(
         { "item.disabled": true }, 
         { "item.disabled": { start: 1, end: 0 } });
       if (option_disable_update.modifiedCount > 0) {
@@ -139,7 +142,7 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
   "0.2.2": [{ major: 0, minor: 2, patch: 5 }, async (dbconn) => {
     {
       // add display flags to Category
-      const category_update = await dbconn.WCategorySchema.updateMany(
+      const category_update = await WCategorySchema.updateMany(
         { display_flags: null },
         {
           $set: {
@@ -157,7 +160,7 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
 
     {
       // add display flags to WOptionSchema
-      const option_update = await dbconn.WOptionSchema.updateMany(
+      const option_update = await WOptionSchema.updateMany(
         { display_flags: null },
         {
           $set: {
@@ -174,7 +177,7 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
 
     {
       // add display flags to WOptionTypeSchema
-      const mt_update = await dbconn.WOptionTypeSchema.updateMany(
+      const mt_update = await WOptionTypeSchema.updateMany(
         {},
         {
           $set: {
@@ -193,7 +196,7 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
 
     {
       // add display flags to WProductInstanceSchema
-      const pi_update = await dbconn.WProductInstanceSchema.updateMany(
+      const pi_update = await WProductInstanceSchema.updateMany(
         {},
         {
           $set: {
@@ -213,7 +216,7 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
   "0.2.5": [{ major: 0, minor: 2, patch: 6 }, async (dbconn) => {
     {
       // update price_display flag
-      const pi_update = await dbconn.WProductInstanceSchema.updateMany(
+      const pi_update = await WProductInstanceSchema.updateMany(
         { "display_flags.price_display": "NEVER" },
         {
           $set: {
@@ -229,7 +232,7 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
     }
     {
       // update price_display flag
-      const pi_update = await dbconn.WProductInstanceSchema.updateMany(
+      const pi_update = await WProductInstanceSchema.updateMany(
         { "display_flags.price_display": "IF_COMPLETE" },
         {
           $set: {
@@ -250,7 +253,7 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
     {
       // change each WProduct's modifiers list to the modifiers2 list with an empty enable function (aka always enable)
       var promises = [];
-      const products = await dbconn.WProductSchema.find({ "modifiers.0": { "$exists": true } });
+      const products = await WProductSchema.find({ "modifiers.0": { "$exists": true } });
       products.forEach(async function(product) {
         product.modifiers2 = product.modifiers.map(function(mtid) { return {mtid: mtid, enable: null}; } );
         promises.push(
@@ -268,7 +271,7 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
       // copy modifiers2 to modifiers
       {
         var promises = [];
-        const products = await dbconn.WProductSchema.find({ "modifiers2.0": { "$exists": true } });
+        const products = await WProductSchema.find({ "modifiers2.0": { "$exists": true } });
         products.forEach(async function(product) {
           product.modifiers = product.modifiers2;
           promises.push(
@@ -282,7 +285,7 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
       }
       {
         // add display flag to WProductInstance
-        const pi_update = await dbconn.WProductInstanceSchema.updateMany(
+        const pi_update = await WProductInstanceSchema.updateMany(
           {},
           {
             $set: {
@@ -298,7 +301,7 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
       }
       {
         // add display flags to WOptionTypeSchema
-        const mt_update = await dbconn.WOptionTypeSchema.updateMany(
+        const mt_update = await WOptionTypeSchema.updateMany(
           {},
           {
             $set: {
@@ -317,7 +320,7 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
       }
       {
         // add display flags to WOptionSchema part 1
-        const mo_update_true = await dbconn.WOptionSchema.updateMany(
+        const mo_update_true = await WOptionSchema.updateMany(
           { "display_flags.omit_from_shortname": true }, 
           {
             $set: {
@@ -333,7 +336,7 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
       }
       {
         // add display flags to WOptionSchema part 1
-        const mo_update_false = await dbconn.WOptionSchema.updateMany(
+        const mo_update_false = await WOptionSchema.updateMany(
           { "display_flags.omit_from_shortname": false }, 
           {
             $set: {
@@ -354,7 +357,7 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
       // remove modifiers2
       {
         // add display flags to WOptionSchema part 1
-        const p_update = await dbconn.WProductSchema.updateMany(
+        const p_update = await WProductSchema.updateMany(
           { },
           { $unset: { "modifiers2": "" } });
         if (p_update.modifiedCount > 0) {
@@ -386,7 +389,7 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
         // display_flags.order.price_display
         // display_flags.order.adornment
         // display_flags.order.suppress_exhaustive_modifier_list
-        const product_instances = await dbconn.WProductInstanceSchema.find();
+        const product_instances = await WProductInstanceSchema.find();
         product_instances.forEach(async function(pi) {
           pi.modifiers = pi.modifiers.map((x) => { 
             return { 
@@ -419,7 +422,7 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
       }
       {
         // add footnotes field
-        const category_update = await dbconn.WCategorySchema.updateMany(
+        const category_update = await WCategorySchema.updateMany(
           { },
           {
             $set: {
@@ -435,8 +438,8 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
       }
       {
         // create time_step2 field in SettingsSchema
-        const found_services = await dbconn.StringListSchema.findOne();
-        const found_settings = await dbconn.SettingsSchema.findOne();
+        const found_services = await StringListSchema.findOne();
+        const found_settings = await SettingsSchema.findOne();
         found_settings.time_step2 = found_services.services.map(()=> found_settings.time_step);
         promises.push(found_settings.save().then(function() { 
           logger.debug(`Added time_step2 settings.`);
@@ -477,7 +480,7 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
       {
         var product_disable_map = {};
         // time based disable find at the product instance level
-        const time_disabled_pi_find = await dbconn.WProductInstanceSchema.find({ "item.disabled": { start: { $gt : 1 }, end: { $gt : 2 } } });
+        const time_disabled_pi_find = await WProductInstanceSchema.find({ "item.disabled": { start: { $gt : 1 }, end: { $gt : 2 } } });
         time_disabled_pi_find.forEach(async (pi) => {
           if (pi.product_id in product_disable_map) {
             logger.warn(`Found more than one disable value for product ${pi.product_id}, clobbering ${product_disable_map[pi.product_id]} with ${pi.item.disabled}`);
@@ -485,7 +488,7 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
           product_disable_map[pi.product_id] = pi.item.disabled;
         });
         // blanket disable find at the product instance level        
-        const disabled_pi_find = await dbconn.WProductInstanceSchema.find({ "item.disabled": { start : 1 , end: 0 } });
+        const disabled_pi_find = await WProductInstanceSchema.find({ "item.disabled": { start : 1 , end: 0 } });
         disabled_pi_find.forEach(async (pi) => {
           if (pi.product_id in product_disable_map) {
             logger.warn(`Found more than one disable value for product ${pi.product_id}, clobbering ${product_disable_map[pi.product_id]} with ${pi.item.disabled}`);
@@ -495,7 +498,7 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
 
         var promises = [];
         for (const [pid, disable] of Object.entries(product_disable_map)) {
-          promises.push(dbconn.WProductSchema.findByIdAndUpdate(pid,{ "disabled": disable}).then(function() { 
+          promises.push(WProductSchema.findByIdAndUpdate(pid,{ "disabled": disable}).then(function() { 
             logger.debug(`Updated product ${pid} with disable value ${disable}.`);
           }).catch(function(err) {
             logger.error(`Unable to update product ${pid}. Got error: ${JSON.stringify(err)}`);
@@ -503,7 +506,7 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
         }
 
         // add display flags to WOptionSchema part 1
-        const p_update = await dbconn.WProductInstanceSchema.updateMany(
+        const p_update = await WProductInstanceSchema.updateMany(
           { },
           { $unset: { "item.disabled": "" }, $set: { "service_disable": [] } });
         if (p_update.modifiedCount > 0) {
@@ -518,9 +521,9 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
       // re-assign each option_type_id in every ModifierOption
       {
         var promises = [];
-        const options = await dbconn.WOptionSchema.find();
+        const options = await WOptionSchema.find();
         options.forEach(
-          o => promises.push(dbconn.WOptionSchema.findByIdAndUpdate(o._id, {option_type_id: o.option_type_id}).then(() => { 
+          o => promises.push(WOptionSchema.findByIdAndUpdate(o._id, {option_type_id: o.option_type_id}).then(() => { 
             logger.debug(`Updated Option ${o._id} with type safe option type id ${o.option_type_id}.`);
           }).catch((err) => {
             logger.error(`Unable to Option ${o._id}. Got error: ${JSON.stringify(err)}`);
@@ -530,10 +533,10 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
       // re-assign each category_ids in every WProductSchema
       {
         var promises = [];
-        const products = await dbconn.WProductSchema.find();
+        const products = await WProductSchema.find();
         products.forEach(o => {
           const type_safe_cids = o.category_ids ? o.category_ids.map(cid => new mongoose.Types.ObjectId(cid)) : [];
-          promises.push(dbconn.WProductSchema.findByIdAndUpdate(o._id, {category_ids: type_safe_cids}).then(() => { 
+          promises.push(WProductSchema.findByIdAndUpdate(o._id, {category_ids: type_safe_cids}).then(() => { 
             logger.debug(`Updated WProductSchema ${o._id} with type safe category ids ${type_safe_cids}.`);
           }).catch((err) => {
             logger.error(`Unable to WProductSchema ${o._id}. Got error: ${JSON.stringify(err)}`);
@@ -544,9 +547,9 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
       // re-assign each parent_id in every WCategorySchema
       {
         var promises = [];
-        const cats = await dbconn.WCategorySchema.find();
+        const cats = await WCategorySchema.find();
         cats.forEach(o => {
-          promises.push(dbconn.WCategorySchema.findByIdAndUpdate(o._id, {parent_id: o.parent_id}).then(() => { 
+          promises.push(WCategorySchema.findByIdAndUpdate(o._id, {parent_id: o.parent_id}).then(() => { 
             logger.debug(`Updated WCategorySchema ${o._id} with type safe category id ${o.parent_id}.`);
           }).catch((err) => {
             logger.error(`Unable to WCategorySchema ${o._id}. Got error: ${JSON.stringify(err)}`);
@@ -556,7 +559,7 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
       }      
       // remove time_step from settings
       {
-        const settings_update = await dbconn.SettingsSchema.updateMany({}, {$unset: { "time_step": "" }});
+        const settings_update = await SettingsSchema.updateMany({}, {$unset: { "time_step": "" }});
         if (settings_update.modifiedCount > 0) {
           logger.debug(`Updated ${settings_update.modifiedCount} SettingsSchema documents to remove the time_step field.`);
         }
@@ -567,7 +570,7 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
     { 
       // copy time_step2 to time_step in settings
       {
-        const settings = await dbconn.SettingsSchema.findOne();
+        const settings = await SettingsSchema.findOne();
         settings.time_step = settings.time_step2;
         await settings.save().then(function() { 
           logger.debug(`Updated settings time_step.`);
@@ -580,11 +583,11 @@ const UPGRADE_MIGRATION_FUNCTIONS = {
       // we're going to find the base product instance for each product class and assign its price to the WProductSchema.price field
       {
         var promises = [];
-        const products = Object.fromEntries((await dbconn.WProductSchema.find()).map(x => [x._id, {P: x, price: 0}]));
-        const pis = await dbconn.WProductInstanceSchema.find();
+        const products = Object.fromEntries((await WProductSchema.find()).map(x => [x._id, {P: x, price: 0}]));
+        const pis = await WProductInstanceSchema.find();
         pis.forEach(pi => {
           products[pi.product_id].price = Math.max(products[pi.product_id].price, pi.item.price.amount);
-          promises.push(dbconn.WProductInstanceSchema.findByIdAndUpdate(pi._id, {product_id: pi.product_id}).then(() => { 
+          promises.push(WProductInstanceSchema.findByIdAndUpdate(pi._id, {product_id: pi.product_id}).then(() => { 
             logger.debug(`Updated ProductInstance ${pi._id} with type safe ProductId ${pi.product_id}.`);
           }).catch((err) => {
             logger.error(`Unable to ProductInstance ${pi._id}. Got error: ${JSON.stringify(err)}`);
@@ -620,10 +623,10 @@ class DatabaseManager {
 
     var current_db_version = "0.0.0";
 
-    const db_version = await this.#dbconn.DBVersionSchema.find({});
+    const db_version = await this.#DBVersionSchema.find({});
     if (db_version.length > 1) {
       logger.error(`Found more than one DB version entry: ${JSON.stringify(db_version)}, deleting all.`);
-      await this.#dbconn.DBVersionSchema.deleteMany({});
+      await this.#DBVersionSchema.deleteMany({});
     }
     else if (db_version.length === 1) {
       current_db_version = `${db_version[0].major}.${db_version[0].minor}.${db_version[0].patch}`;

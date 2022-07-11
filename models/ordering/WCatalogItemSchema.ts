@@ -1,9 +1,11 @@
-import {Schema} from "mongoose";
+import { ICatalogItem } from "@wcp/wcpshared";
+import mongoose, {Schema} from "mongoose";
+import path from 'path';
 import { ExternalIDsSchema } from"./ExternalIDsSchema";
 import { WMoney } from "./WMoney";
 
 // NOTE: this is a mix-in and probably won't be instantiated directly
-export const WCatalogItemSchema = new Schema({
+export const WCatalogItemSchema = new Schema<ICatalogItem>({
   // Nice name of the product
   // eg: House Sausage
   display_name: String,
@@ -38,4 +40,4 @@ export const WCatalogItemSchema = new Schema({
   permanent_disable: Boolean
 }, { _id: false});
 
-module.exports = WCatalogItemSchema;
+export default mongoose.model<ICatalogItem>(path.basename(__filename).replace(path.extname(__filename), ''), WCatalogItemSchema);

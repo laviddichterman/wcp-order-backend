@@ -1,8 +1,9 @@
-import mongoose from "mongoose";
+import mongoose, {Schema} from "mongoose";
 import { ExternalIDsSchema } from "../ExternalIDsSchema";
-const Schema = mongoose.Schema;
+import path from "path";
+import { IOptionType, DISPLAY_AS, MODIFIER_CLASS } from "@wcp/wcpshared";
 
-export const WOptionTypeSchema = new Schema({
+export const WOptionTypeSchema = new Schema<IOptionType>({
   // Human readable name
   name: { type: String, required: true },
 
@@ -38,13 +39,13 @@ export const WOptionTypeSchema = new Schema({
     // to this modifier type by saying nothing, your choice of {display_name}, or if max_selected===1 listing the choices
     // if the enable_function returns false, then no text is displayed
     empty_display_as: {
-      type: String,
-      enum: ['OMIT', 'YOUR_CHOICE_OF', 'LIST_CHOICES'],
+      type: DISPLAY_AS,
+      enum: DISPLAY_AS,
       required: true
     },
     modifier_class: {
-      type: String,
-      enum: ['SIZE', 'ADD', 'SUB', 'REMOVAL', 'NOTE', 'PROMPT'],
+      type: MODIFIER_CLASS,
+      enum: MODIFIER_CLASS,
       required: true
     },
     // string to match in the product description template, not including the brackets
@@ -65,4 +66,4 @@ export const WOptionTypeSchema = new Schema({
 
 });
 
-module.exports = WOptionTypeSchema;
+export default mongoose.model<IOptionType>(path.basename(__filename).replace(path.extname(__filename), ''), WOptionTypeSchema);

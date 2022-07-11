@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+import mongoose, { Mongoose } from 'mongoose';
 import glob from 'glob';
 import path from 'path';
 import winston from 'winston';
@@ -9,7 +9,7 @@ const DBUSER = process.env.DBUSER || null;
 const DBPASS = process.env.DBPASS || null;
 const DBENDPOINT = process.env.DBENDPOINT || 'mongodb://127.0.0.1:27017';
 
-module.exports = ({ logger } : { logger: winston.Logger }) => {
+export const CreateDatabaseWithLogger = ({ logger } : { logger: winston.Logger }) => {
   const url = `${DBENDPOINT}/${DBTABLE}`;
   mongoose.connect(url, { user: DBUSER, pass: DBPASS });
   new Promise((resolve, reject) => {
@@ -51,5 +51,9 @@ module.exports = ({ logger } : { logger: winston.Logger }) => {
       throw error
     })
     .once('open', () => logger.info(`MongoDB connected at ${url}`));
-  return db;
+  return db as { [modelName:string]: mongoose.Model<any, any, any, any, any>};
 }
+
+export default CreateDatabaseWithLogger;
+
+module.exports = CreateDatabaseWithLogger;

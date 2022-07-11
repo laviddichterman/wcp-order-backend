@@ -1,9 +1,9 @@
-import {GenerateMenu, ICatalog, ICatalogCategories, ICategory, IMenu, IOption, IOptionType, IProduct, IProductInstance, IProductInstanceFunction} from "@wcp/wcpshared";
+import { GenerateMenu, ICatalog, SEMVER, ICatalogCategories, ICatalogModifiers, ICategory, IMenu, IOption, IOptionType, IProduct, IProductInstance, IProductInstanceFunction, IAbstractExpression, ICatalogProducts } from "@wcp/wcpshared";
 import Promise from 'bluebird';
 import logger from '../logging';
 
 
-const ReduceArrayToMapByKey = function(xs, key) {
+const ReduceArrayToMapByKey = function (xs, key) {
   const iv = {};
   return xs.reduce((obj, item) => {
     return {
@@ -17,8 +17,8 @@ const ReduceArrayToMapByKey = function(xs, key) {
 // category_map entries are mapping of catagory_id to { category, children (id list), product (id list) }
 // product_map is mapping from product_id to { product, instances (list of instance objects)}
 // orphan_products is list of orphan product ids
-const CatalogMapGenerator = (categories : ICategory[], products, product_instances) => {
-  const category_map : ICatalogCategories = {};
+const CatalogMapGenerator = (categories: ICategory[], products : IProduct[], product_instances : IProductInstance[]) => {
+  const category_map: ICatalogCategories = {};
   categories.forEach((curr) => {
     category_map[curr._id] = { category: curr, children: [], products: [] };
   });
@@ -27,7 +27,7 @@ const CatalogMapGenerator = (categories : ICategory[], products, product_instanc
       category_map[categories[i].parent_id].children.push(categories[i]._id);
     }
   }
-  const product_map = {};
+  const product_map : ICatalogProducts = {};
   products.forEach((curr) => {
     product_map[curr._id] = { product: curr, instances: [] };
     if (curr.category_ids.length !== 0) {
@@ -42,10 +42,10 @@ const CatalogMapGenerator = (categories : ICategory[], products, product_instanc
   return [category_map, product_map];
 };
 
-const ModifierTypeMapGenerator = (modifier_types, options) => {
-  var modifier_types_map = {};
+const ModifierTypeMapGenerator = (modifier_types: IOptionType[], options: IOption[]) => {
+  var modifier_types_map: ICatalogModifiers = {};
   modifier_types.forEach(mt => {
-    modifier_types_map[mt._id] = { options: [], modifier_type: mt } ;
+    modifier_types_map[mt._id] = { options: [], modifier_type: mt };
   });
   options.forEach(o => {
     if (Object.hasOwn(modifier_types_map, o.option_type_id)) {
@@ -59,28 +59,28 @@ const ModifierTypeMapGenerator = (modifier_types, options) => {
 };
 
 const CatalogGenerator = (
-  categories : ICatalogCategories, 
-  modifier_types, 
-  options, 
-  products, 
-  product_instances, 
-  product_instance_functions, 
-  api) => {
+  categories: ICategory[],
+  modifier_types: IOptionType[],
+  options: IOption[],
+  products: IProduct[],
+  product_instances: IProductInstance[],
+  product_instance_functions: IProductInstanceFunction[],
+  api: SEMVER) => {
   const modifier_types_map = ModifierTypeMapGenerator(modifier_types, options);
   const [category_map, product_map] = CatalogMapGenerator(categories, products, product_instances);
-  return { 
+  return {
     modifiers: modifier_types_map,
     categories: category_map,
     products: product_map,
     version: Date.now().toString(36).toUpperCase(),
     product_instance_functions: product_instance_functions,
-    api: apiver,
+    api,
   } as ICatalog;
 }
 
 //TODO this should exist in the WAbstractExpression class file but I had trouble getting it to work since the type itself is recursive
-const FindModifierPlacementExpressionsForMTID = function(expr, mtid) {
-  switch(expr.discriminator) { 
+const FindModifierPlacementExpressionsForMTID: (expr: IAbstractExpression, mtid: string) => IAbstractExpression[] = function (expr, mtid) {
+  switch (expr.discriminator) {
     case "IfElse":
       return FindModifierPlacementExpressionsForMTID(expr.if_else.true_branch, mtid).concat(
         FindModifierPlacementExpressionsForMTID(expr.if_else.false_branch, mtid)).concat(
@@ -91,18 +91,16 @@ const FindModifierPlacementExpressionsForMTID = function(expr, mtid) {
       return operandA_expressions.concat(operandB_expressions);
     case "ModifierPlacement":
       return expr.modifier_placement.mtid === mtid ? [expr] : [];
-    case "HasAnyOfModifierType":      
+    case "HasAnyOfModifierType":
     case "ConstLiteral":
     default:
       return [];
   }
-  // should throw an error or something here?
-  return [];
 }
 
 //TODO this should exist in the WAbstractExpression class file
-const FindHasAnyModifierExpressionsForMTID = function(expr, mtid) {
-  switch(expr.discriminator) { 
+const FindHasAnyModifierExpressionsForMTID: (expr: IAbstractExpression, mtid: string) => IAbstractExpression[] = function (expr, mtid) {
+  switch (expr.discriminator) {
     case "IfElse":
       return FindHasAnyModifierExpressionsForMTID(expr.if_else.true_branch, mtid).concat(
         FindHasAnyModifierExpressionsForMTID(expr.if_else.false_branch, mtid)).concat(
@@ -118,32 +116,28 @@ const FindHasAnyModifierExpressionsForMTID = function(expr, mtid) {
     default:
       return [];
   }
-  // should throw an error or something here?
-  return [];
 }
 
-const ValidateProductModifiersFunctionsCategories = function(modifiers, category_ids, catalog) {
-  const found_all_modifiers = modifiers.map(entry => 
-    catalog.ModifierTypes.some(x => x._id.toString() === entry.mtid) && 
+const ValidateProductModifiersFunctionsCategories = function (modifiers : , category_ids : string[], catalog: CatalogProvider) {
+  const found_all_modifiers = modifiers.map(entry =>
+    catalog.ModifierTypes.some(x => x._id.toString() === entry.mtid) &&
     (entry.enable === null || catalog.ProductInstanceFunctions.some(x => x._id.toString() === entry.enable))).every(x => x === true);
   const found_all_categories = category_ids.map(cid => catalog.Categories.some(x => x._id.toString() === cid)).every(x => x === true);
-  return found_all_modifiers && found_all_modifiers;
+  return found_all_categories && found_all_modifiers;
 }
 
 class CatalogProvider {
-  #dbconn;
   #socketRO;
-  #categories : ICategory[];
+  #categories: ICategory[];
   #modifier_types: IOptionType[];
-  #options : IOption[];
-  #products : IProduct[];
+  #options: IOption[];
+  #products: IProduct[];
   #product_instances: IProductInstance[];
-  #product_instance_functions : IProductInstanceFunction[];
-  #catalog : ICatalog;
-  #menu : IMenu;
+  #product_instance_functions: IProductInstanceFunction[];
+  #catalog: ICatalog;
+  #menu: IMenu;
   #apiver;
-  constructor(dbconn, socketRO) {
-    this.#dbconn = dbconn;
+  constructor(socketRO) {
     this.#socketRO = socketRO;
     this.#categories = [];
     this.#modifier_types = [];
@@ -151,8 +145,8 @@ class CatalogProvider {
     this.#products = [];
     this.#product_instances = [];
     this.#product_instance_functions = [];
-    this.#apiver = { major: 0, minor: 0, patch: 0};
-    this.#catalog = CatalogGenerator([], [], [], [], []);
+    this.#apiver = { major: 0, minor: 0, patch: 0 };
+    this.#catalog = CatalogGenerator([], [], [], [], [], [], {major: 0, minor: 0, patch: 0});
   }
 
   get Categories() {
@@ -219,7 +213,7 @@ class CatalogProvider {
     } catch (err) {
       logger.error(`Failed fetching options with error: ${JSON.stringify(err)}`);
       return false;
-    }    
+    }
     return true;
   }
 
@@ -231,7 +225,7 @@ class CatalogProvider {
     } catch (err) {
       logger.error(`Failed fetching products with error: ${JSON.stringify(err)}`);
       return false;
-    }    
+    }
     return true;
   }
 
@@ -243,7 +237,7 @@ class CatalogProvider {
     } catch (err) {
       logger.error(`Failed fetching product instances with error: ${JSON.stringify(err)}`);
       return false;
-    }    
+    }
     return true;
   }
 
@@ -254,7 +248,7 @@ class CatalogProvider {
     } catch (err) {
       logger.error(`Failed fetching product instance functions with error: ${JSON.stringify(err)}`);
       return false;
-    }    
+    }
     return true;
   }
 
@@ -276,13 +270,13 @@ class CatalogProvider {
     await this.SyncCategories();
 
     await this.SyncModifierTypes();
-    
+
     await this.SyncOptions();
-    
+
     await this.SyncProducts();
 
     await this.SyncProductInstances();
-    
+
     await this.SyncProductInstanceFunctions();
 
     this.RecomputeCatalog();
@@ -292,7 +286,7 @@ class CatalogProvider {
     }
   };
 
-  CreateCategory = async ({description, name, ordinal, parent_id, subheading, footnotes, display_flags}) => {
+  CreateCategory = async ({ description, name, ordinal, parent_id, subheading, footnotes, display_flags }) => {
     const doc = new this.#dbconn.WCategorySchema({
       description: description,
       name: name,
@@ -309,7 +303,7 @@ class CatalogProvider {
     return doc;
   };
 
-  UpdateCategory = async ( category_id, {name, description, ordinal, subheading, footnotes, parent_id, display_flags}) => {
+  UpdateCategory = async (category_id, { name, description, ordinal, subheading, footnotes, parent_id, display_flags }) => {
     try {
       const category_id_map = ReduceArrayToMapByKey(this.#categories, "_id");
       if (!category_id_map[category_id]) {
@@ -320,8 +314,7 @@ class CatalogProvider {
       if (category_id_map[category_id].parent_id !== parent_id && parent_id) {
         // need to check for potential cycle
         var cur = parent_id;
-        while (cur && category_id_map[cur].parent_id != category_id)
-        {
+        while (cur && category_id_map[cur].parent_id != category_id) {
           cur = category_id_map[cur].parent_id;
         }
         // if the cursor is not empty/null/blank then we stopped because we found the cycle
@@ -352,7 +345,7 @@ class CatalogProvider {
     }
   };
 
-  DeleteCategory = async ( category_id ) => {
+  DeleteCategory = async (category_id) => {
     logger.debug(`Removing ${category_id}`);
     try {
       const doc = await this.#dbconn.WCategorySchema.findByIdAndDelete(category_id);
@@ -365,7 +358,7 @@ class CatalogProvider {
           await cat.save();
         }
       }));
-      const products_update = await this.#dbconn.WProductSchema.updateMany({}, { $pull: {category_ids: category_id }} );
+      const products_update = await this.#dbconn.WProductSchema.updateMany({}, { $pull: { category_ids: category_id } });
       if (products_update.modifiedCount > 0) {
         logger.debug(`Removed Category ID from ${products_update.modifiedCount} products.`);
         await this.SyncProducts();
@@ -379,13 +372,13 @@ class CatalogProvider {
     }
   }
 
-  CreateModifierType = async ({name, display_name, ordinal, min_selected, max_selected, externalIDs, display_flags}) => {
+  CreateModifierType = async ({ name, display_name, ordinal, min_selected, max_selected, externalIDs, display_flags }) => {
     const doc = new this.#dbconn.WOptionTypeSchema({
       name,
       display_name,
       ordinal,
-      min_selected, 
-      max_selected, 
+      min_selected,
+      max_selected,
       externalIDs,
       display_flags
     });
@@ -396,16 +389,16 @@ class CatalogProvider {
     return doc;
   };
 
-  UpdateModifierType = async ( mt_id, {name, display_name, ordinal, min_selected, max_selected, externalIDs, display_flags}) => {
+  UpdateModifierType = async (mt_id, { name, display_name, ordinal, min_selected, max_selected, externalIDs, display_flags }) => {
     try {
       const updated = await this.#dbconn.WOptionTypeSchema.findByIdAndUpdate(
-        mt_id, 
+        mt_id,
         {
           name,
           display_name,
           ordinal,
-          min_selected, 
-          max_selected, 
+          min_selected,
+          max_selected,
           externalIDs,
           display_flags
         },
@@ -423,7 +416,7 @@ class CatalogProvider {
     }
   };
 
-  DeleteModifierType = async ( mt_id ) => {
+  DeleteModifierType = async (mt_id) => {
     logger.debug(`Removing Modifier Type: ${mt_id}`);
     try {
       const doc = await this.#dbconn.WOptionTypeSchema.findByIdAndDelete(mt_id);
@@ -438,9 +431,9 @@ class CatalogProvider {
       if (options_delete.deletedCount > 0) {
         logger.debug(`Removed ${options_delete.deletedCount} Options from the catalog.`);
       }
-      const products_update = await this.#dbconn.WProductSchema.updateMany({}, { $pull: {modifiers: mt_id }} );
+      const products_update = await this.#dbconn.WProductSchema.updateMany({}, { $pull: { modifiers: mt_id } });
       if (products_update.modifiedCount > 0) {
-        const product_instance_update = await this.#dbconn.WProductInstanceSchema.updateMany({}, {$pull: {modifiers: {modifier_type_id: mt_id}}});
+        const product_instance_update = await this.#dbconn.WProductInstanceSchema.updateMany({}, { $pull: { modifiers: { modifier_type_id: mt_id } } });
         logger.debug(`Removed ModifierType ID from ${products_update.modifiedCount} products, ${product_instance_update.modifiedCount} product instances.`);
         await this.SyncProducts();
         await this.SyncProductInstances();
@@ -468,17 +461,17 @@ class CatalogProvider {
   }
 
   CreateOption = async ({
-    option_type_id, 
-    display_name, 
-    description, 
-    price, 
-    shortcode, 
-    disabled, 
-    externalIDs, 
-    ordinal, 
-    flavor_factor, 
-    bake_factor, 
-    can_split, 
+    option_type_id,
+    display_name,
+    description,
+    price,
+    shortcode,
+    disabled,
+    externalIDs,
+    ordinal,
+    flavor_factor,
+    bake_factor,
+    can_split,
     enable_function,
     display_flags
   }) => {
@@ -510,7 +503,7 @@ class CatalogProvider {
       },
       enable_function: enable_function,
       display_flags: display_flags
-    });    
+    });
     await doc.save();
     await this.SyncOptions();
     this.RecomputeCatalog();
@@ -518,25 +511,25 @@ class CatalogProvider {
     return doc;
   };
 
-  UpdateModifierOption = async ( mo_id, {
+  UpdateModifierOption = async (mo_id, {
     //mt_id, 
-    display_name, 
-    description, 
-    price, 
-    shortcode, 
-    disabled, 
+    display_name,
+    description,
+    price,
+    shortcode,
+    disabled,
     externalIDs,
-    ordinal, 
-    flavor_factor, 
-    bake_factor, 
-    can_split, 
+    ordinal,
+    flavor_factor,
+    bake_factor,
+    can_split,
     enable_function,
-    display_flags}) => {
+    display_flags }) => {
     try {
-       //TODO: post update: rebuild all products with the said modifier option since the ordinal might have changed
-       // 
+      //TODO: post update: rebuild all products with the said modifier option since the ordinal might have changed
+      // 
       const updated = await this.#dbconn.WOptionSchema.findByIdAndUpdate(
-        mo_id, 
+        mo_id,
         {
           item: {
             price: {
@@ -573,7 +566,7 @@ class CatalogProvider {
     }
   };
 
-  DeleteModifierOption = async ( mo_id ) => {
+  DeleteModifierOption = async (mo_id) => {
     logger.debug(`Removing Modifier Option ${mo_id}`);
     try {
       const doc = await this.#dbconn.WOptionSchema.findByIdAndDelete(mo_id);
@@ -582,7 +575,7 @@ class CatalogProvider {
       }
       const product_instance_options_delete = await this.#dbconn.WProductInstanceSchema.updateMany(
         { "modifiers.modifier_type_id": doc.option_type_id },
-        { $pull: { "modifiers.$.options": {  option_id: mo_id } } } );
+        { $pull: { "modifiers.$.options": { option_id: mo_id } } });
       if (product_instance_options_delete.modifiedCount > 0) {
         logger.debug(`Removed ${product_instance_options_delete.modifiedCount} Options from Product Instances.`);
         await this.SyncProductInstances();
@@ -609,7 +602,7 @@ class CatalogProvider {
 
 
   CreateProduct = async ({
-    price, 
+    price,
     disabled,
     service_disable,
     display_flags,
@@ -632,7 +625,7 @@ class CatalogProvider {
       display_flags,
       modifiers,
       category_ids
-    });    
+    });
     await doc.save();
     await this.SyncProducts();
     if (!suppress_catalog_recomputation) {
@@ -642,23 +635,23 @@ class CatalogProvider {
     return doc;
   };
 
-  UpdateProduct = async ( pid, {
-    price, 
+  UpdateProduct = async (pid, {
+    price,
     disabled,
     service_disable,
     display_flags,
     externalIDs,
     modifiers,
-    category_ids}) => {
+    category_ids }) => {
     try {
       if (!ValidateProductModifiersFunctionsCategories(modifiers, category_ids, this)) {
         return null;
-      }  
+      }
       const old_modifiers = this.#catalog.products[pid].product.modifiers.map(x => x.mtid.toString());
       const new_modifiers_mtids = modifiers.map(x => String(x.mtid));
       const removed_modifiers = old_modifiers.filter(x => !new_modifiers_mtids.includes(x));
       const updated = await this.#dbconn.WProductSchema.findByIdAndUpdate(
-        pid, 
+        pid,
         {
           item: {
             externalIDs
@@ -675,10 +668,10 @@ class CatalogProvider {
       if (!updated) {
         return null;
       }
-      
+
       if (removed_modifiers.length) {
-        await Promise.all(removed_modifiers.map(async (mtid) => { 
-          const product_instance_update = await this.#dbconn.WProductInstanceSchema.updateMany({ product_id: pid }, {$pull: {modifiers: {modifier_type_id: mtid}}});
+        await Promise.all(removed_modifiers.map(async (mtid) => {
+          const product_instance_update = await this.#dbconn.WProductInstanceSchema.updateMany({ product_id: pid }, { $pull: { modifiers: { modifier_type_id: mtid } } });
           logger.debug(`Removed ModifierType ID ${mtid} from ${product_instance_update.modifiedCount} product instances.`);
         }));
         await this.SyncProductInstances();
@@ -693,14 +686,14 @@ class CatalogProvider {
     }
   };
 
-  DeleteProduct = async ( p_id ) => {
+  DeleteProduct = async (p_id) => {
     logger.debug(`Removing Product ${p_id}`);
     try {
       const doc = await this.#dbconn.WProductSchema.findByIdAndDelete(p_id);
       if (!doc) {
         return null;
       }
-      const product_instance_delete = await this.#dbconn.WProductInstanceSchema.deleteMany({ product_id: p_id});
+      const product_instance_delete = await this.#dbconn.WProductInstanceSchema.deleteMany({ product_id: p_id });
       if (product_instance_delete.deletedCount > 0) {
         logger.debug(`Removed ${product_instance_delete.deletedCount} Product Instances.`);
         await this.SyncProductInstances();
@@ -713,13 +706,13 @@ class CatalogProvider {
       throw err;
     }
   }
-  
+
   CreateProductInstance = async (parent_product_id, {
-    description, 
+    description,
     display_name,
-    shortcode, 
-    ordinal, 
-    externalIDs, 
+    shortcode,
+    ordinal,
+    externalIDs,
     modifiers,
     is_base,
     display_flags
@@ -736,7 +729,7 @@ class CatalogProvider {
       modifiers,
       is_base,
       display_flags
-    });    
+    });
     await doc.save();
     await this.SyncProductInstances();
     this.RecomputeCatalog();
@@ -744,19 +737,19 @@ class CatalogProvider {
     return doc;
   };
 
-  UpdateProductInstance = async ( pid, piid, {
-    display_name, 
-    description, 
-    shortcode, 
-    ordinal, 
-    externalIDs, 
+  UpdateProductInstance = async (pid, piid, {
+    display_name,
+    description,
+    shortcode,
+    ordinal,
+    externalIDs,
     modifiers,
     is_base,
     display_flags
   }) => {
     try {
       const updated = await this.#dbconn.WProductInstanceSchema.findByIdAndUpdate(
-        piid, 
+        piid,
         {
           product_id: pid,
           item: {
@@ -775,7 +768,7 @@ class CatalogProvider {
       if (!updated) {
         return null;
       }
-  
+
       await this.SyncProductInstances();
       this.RecomputeCatalog();
       this.EmitCatalog(this.#socketRO);
@@ -785,7 +778,7 @@ class CatalogProvider {
     }
   };
 
-  DeleteProductInstance = async ( pi_id ) => {
+  DeleteProductInstance = async (pi_id) => {
     logger.debug(`Removing Product Instance: ${pi_id}`);
     try {
       const doc = await this.#dbconn.WProductInstanceSchema.findByIdAndDelete(pi_id);
@@ -802,7 +795,7 @@ class CatalogProvider {
   }
 
   CreateProductInstanceFunction = async ({
-    name, 
+    name,
     expression
   }) => {
 
@@ -810,7 +803,7 @@ class CatalogProvider {
     const doc = new this.#dbconn.WProductInstanceFunction({
       name: name,
       expression: expression//await GenerateAbstractExpression(this.#dbconn, expression)
-    });    
+    });
     await doc.save();
     await this.SyncProductInstanceFunctions();
     this.RecomputeCatalog();
@@ -818,13 +811,13 @@ class CatalogProvider {
     return doc;
   };
 
-  UpdateProductInstanceFunction = async ( pif_id, {
-    name, 
+  UpdateProductInstanceFunction = async (pif_id, {
+    name,
     expression
   }) => {
     try {
       const updated = await this.#dbconn.WProductInstanceFunction.findByIdAndUpdate(
-        pif_id, 
+        pif_id,
         {
           name: name,
           expression: expression
@@ -846,7 +839,7 @@ class CatalogProvider {
     }
   };
 
-  DeleteProductInstanceFunction = async ( pif_id, suppress_catalog_recomputation = false ) => {
+  DeleteProductInstanceFunction = async (pif_id, suppress_catalog_recomputation = false) => {
     logger.debug(`Removing Product Instance Function: ${pif_id}`);
     try {
       const doc = await this.#dbconn.WProductInstanceFunction.findByIdAndDelete(pif_id);
@@ -854,21 +847,21 @@ class CatalogProvider {
         return null;
       }
       const options_update = await this.#dbconn.WOptionSchema.updateMany(
-        { enable_function: pif_id }, 
-        { $set: { "enable_function": null} });
+        { enable_function: pif_id },
+        { $set: { "enable_function": null } });
       if (options_update.modifiedCount > 0) {
         logger.debug(`Removed ${doc} from ${options_update.modifiedCount} Modifier Options.`);
         await this.SyncOptions();
       }
       const products_update = await this.#dbconn.WProductSchema.updateMany(
-        { "modifiers.enable": pif_id  },
-        { $set: { "modifiers.$.enable": null} });
+        { "modifiers.enable": pif_id },
+        { $set: { "modifiers.$.enable": null } });
       if (products_update.modifiedCount > 0) {
         logger.debug(`Removed ${doc} from ${products_update.modifiedCount} Products.`);
         await this.SyncProducts();
       }
 
-      
+
       await this.SyncProductInstanceFunctions();
       if (!suppress_catalog_recomputation) {
         this.RecomputeCatalog();

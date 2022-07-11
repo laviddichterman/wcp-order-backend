@@ -1,5 +1,6 @@
 import mongoose, {Schema} from "mongoose";
 import { IWOptionInstance, OptionPlacement, OptionQualifier } from "@wcp/wcpshared";
+import path from "path";
 
 export const WOptionInstanceSchema = new Schema<IWOptionInstance>({
   option_id: {
@@ -20,5 +21,4 @@ export const WOptionInstanceSchema = new Schema<IWOptionInstance>({
   }
 }, { _id: false});
 
-const model = mongoose.model("WCategorySchema", WOptionInstanceSchema);
-export default model;//{ schema: WOptionInstanceSchema, model, iFace: typeof IWOptionInstance };
+export default mongoose.model<IWOptionInstance>(path.basename(__filename).replace(path.extname(__filename), ''), WOptionInstanceSchema);

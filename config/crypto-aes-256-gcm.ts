@@ -35,5 +35,4 @@ const aes256gcm = (key : crypto.CipherKey) => {
 };
 
 const KEY = Buffer.from(crypto.randomBytes(32)).toString('utf8');
-
-module.exports = aes256gcm(KEY);
+export default aes256gcm(KEY);

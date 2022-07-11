@@ -3,7 +3,7 @@ import {  ApiError, Client, Environment } from 'square';
 import crypto from 'crypto';
 import logger from'../logging';
 
-class SquareProvider {
+export default class SquareProvider {
   #client;
   #location_id;
   constructor() {
@@ -112,6 +112,4 @@ class SquareProvider {
   }
 };
 
-const SQUARE_PROVIDER = new SquareProvider();
-
-module.exports = SQUARE_PROVIDER;
+module.exports = SquareProvider;

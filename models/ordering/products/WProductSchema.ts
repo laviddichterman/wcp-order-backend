@@ -1,17 +1,19 @@
-import {Schema} from "mongoose";
+import { IProduct } from "@wcp/wcpshared";
+import mongoose, {Schema} from "mongoose";
 import { WCatalogItemSchema } from "../WCatalogItemSchema";
 import { WMoney } from "../WMoney";
+import path from 'path';
 
 export const ProductModifierSchema = new Schema({ 
-  mtid: { type: Schema.Types.ObjectId, ref: 'WOptionTypeSchema' }, 
+  mtid: { type: Schema.Types.String, ref: 'WOptionTypeSchema' }, 
   // optional function object that operates on a product instance
   // and returns true if the option type should be enabled.
-  enable: { type: Schema.Types.ObjectId, ref: 'WProductInstanceFunction', autopopulate: true } 
+  enable: { type: Schema.Types.String, ref: 'WProductInstanceFunction' } 
 }, { _id: false });
 
 
 // represents a class of products that can be made and inserted into the catalog
-const WProductSchema = new Schema({
+const WProductSchema = new Schema<IProduct>({
 
   // in process of deprecation
   item: WCatalogItemSchema,
@@ -60,5 +62,4 @@ const WProductSchema = new Schema({
   category_ids: [{ type: Schema.Types.ObjectId, ref: 'WCategorySchema'}],
 });
 
-WProductSchema.plugin(require('mongoose-autopopulate'));
-module.exports = WProductSchema;
+export default mongoose.model<IProduct>(path.basename(__filename).replace(path.extname(__filename), ''), WProductSchema);

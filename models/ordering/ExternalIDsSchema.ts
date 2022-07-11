@@ -1,4 +1,4 @@
-import mongoose, {Schema, Types} from "mongoose";
+import mongoose, {Schema} from "mongoose";
 import path from 'path';
 import { IExternalIDs } from "@wcp/wcpshared";
 
@@ -9,5 +9,4 @@ export const ExternalIDsSchema = new Schema<IExternalIDs>({
   squareID: String
 }, { _id: false});
 
-// export default mongoose.model<IExternalIDs>(path.basename(__filename).replace(path.extname(__filename), ""), ExternalIDsSchema);
-module.exports = ExternalIDsSchema;
+export default mongoose.model<IExternalIDs>(path.basename(__filename).replace(path.extname(__filename), ""), ExternalIDsSchema);

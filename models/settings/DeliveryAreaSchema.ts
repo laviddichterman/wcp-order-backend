@@ -1,4 +1,5 @@
 import mongoose, {Schema} from "mongoose";
+import path from 'path';
 
 export const DeliveryAreaSchema = new Schema<GeoJSON.Polygon>({
   type: {
@@ -10,4 +11,4 @@ export const DeliveryAreaSchema = new Schema<GeoJSON.Polygon>({
   }
 });
 
-module.exports = DeliveryAreaSchema;
+export default mongoose.model<GeoJSON.Polygon>(path.basename(__filename).replace(path.extname(__filename), ''), DeliveryAreaSchema);

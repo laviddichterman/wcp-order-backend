@@ -1,6 +1,8 @@
-import { Schema } from "mongoose";
+import { IAbstractExpression, ProductInstanceFunctionType } from "@wcp/wcpshared";
+import mongoose, { Schema } from "mongoose";
+import path from 'path';
 
-export const WAbstractExpression = new Schema({
+export const WAbstractExpression = new Schema<IAbstractExpression>({
   const_literal: Schema.Types.Mixed,//{ type: Schema.Types.ObjectId, ref: 'WConstLiteral' },
   if_else: Schema.Types.Mixed,//{ type: Schema.Types.ObjectId, ref: 'WIfElse' },
   logical: Schema.Types.Mixed,//{ type: Schema.Types.ObjectId, ref: 'WLogicalOperator' },
@@ -15,4 +17,5 @@ export const WAbstractExpression = new Schema({
   }
 });
 
-module.exports = WAbstractExpression;
+
+export default mongoose.model<IAbstractExpression>(path.basename(__filename).replace(path.extname(__filename), ''), WAbstractExpression);

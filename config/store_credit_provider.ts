@@ -10,13 +10,15 @@ import logger from '../logging';
 
 const ACTIVE_SHEET = "CurrentWARIO"
 const ACTIVE_RANGE = `${ACTIVE_SHEET}!A2:M`;
-class StoreCreditProvider {
+export default class StoreCreditProvider {
   #db;
+  #google: GoogleProvider;
   constructor() {  
   }
 
-BootstrapProvider = async (db) => {
+BootstrapProvider = async (db, google : GoogleProvider) => {
     this.#db = db;
+    this.#google = google;
   }
 
   /**
@@ -35,7 +37,7 @@ BootstrapProvider = async (db) => {
    * @param {String} code 
    * @returns {Stream.PassThrough} file stream for the generated QR code
    */
-  GenerateQRCodeFS = async (code) => {
+  GenerateQRCodeFS = async (code : string) => {
     const qr_code_fs = new Stream.PassThrough();
     await qrcode.toFileStream(qr_code_fs, code, {
       errorCorrectionLevel: "H",
@@ -62,10 +64,18 @@ BootstrapProvider = async (db) => {
    * @param {*} reason 
    * @returns ??
    */
-  CreateCreditFromCreditCode = async (recipient, amount, credit_type, credit_code, expiration, generated_by, reason) => {
+  CreateCreditFromCreditCode = async (
+    recipient: string, 
+    amount : number, 
+    credit_type : 'MONEY' | 'DISCOUNT', 
+    credit_code : string, 
+    expiration : string, 
+    generated_by : string, 
+    reason : string
+    ) => {
     const date_added = format(new Date(), WDateUtils.DATE_STRING_INTERNAL_FORMAT);
     const fields = [recipient, amount, credit_type, amount, date_added, generated_by, date_added, credit_code, expiration, reason, "", "", ""];
-    return GoogleProvider.AppendToSheet(this.#db.KeyValueConfig.STORE_CREDIT_SHEET, `${ACTIVE_SHEET}!A1:M1`, fields);
+    return this.#google.AppendToSheet(this.#db.KeyValueConfig.STORE_CREDIT_SHEET, `${ACTIVE_SHEET}!A1:M1`, fields);
   }
 
   /**
@@ -74,9 +84,9 @@ BootstrapProvider = async (db) => {
    * @param {String} credit_code 
    * @returns {{lock: {enc, iv, auth}, valid: Boolean, balance: Number, type: String}}
    */
-  ValidateAndLockCode = async (credit_code) => { 
+  ValidateAndLockCode = async (credit_code : string) => { 
     const beginningOfToday = startOfDay(new Date());
-    const values_promise = GoogleProvider.GetValuesFromSheet(this.#db.KeyValueConfig.STORE_CREDIT_SHEET, ACTIVE_RANGE);
+    const values_promise = this.#google.GetValuesFromSheet(this.#db.KeyValueConfig.STORE_CREDIT_SHEET, ACTIVE_RANGE);
     // TODO: remove dashes from credit code
     const [enc, iv, auth] = aes256gcm.encrypt(credit_code);
     const values = await values_promise;
@@ -88,7 +98,7 @@ BootstrapProvider = async (db) => {
     const date_modified = format(new Date(), WDateUtils.DATE_STRING_INTERNAL_FORMAT);
     const new_entry = [entry[0], entry[1], entry[2], entry[3], entry[4], entry[5], date_modified, entry[7], entry[8], entry[9], enc, iv.toString('hex'), auth.toString('hex')];
     const new_range = `${ACTIVE_SHEET}!${2 + i}:${2 + i}`;
-    const update_promise = GoogleProvider.UpdateValuesInSheet(this.#db.KeyValueConfig.STORE_CREDIT_SHEET, new_range, new_entry);
+    const update_promise = this.#google.UpdateValuesInSheet(this.#db.KeyValueConfig.STORE_CREDIT_SHEET, new_range, new_entry);
     const expiration = entry[8] ? startOfDay(parse(entry[8], WDateUtils.DATE_STRING_INTERNAL_FORMAT, new Date())) : null;
     await update_promise;
     return { valid: expiration === null || !isValid(expiration) || !isBefore(expiration, beginningOfToday),
@@ -99,7 +109,7 @@ BootstrapProvider = async (db) => {
 
   ValidateLockAndSpend = async (credit_code, lock, amount, updated_by) => {
     const beginningOfToday = startOfDay(new Date());
-    const values = await GoogleProvider.GetValuesFromSheet(this.#db.KeyValueConfig.STORE_CREDIT_SHEET, ACTIVE_RANGE);
+    const values = await this.#google.GetValuesFromSheet(this.#db.KeyValueConfig.STORE_CREDIT_SHEET, ACTIVE_RANGE);
     for (let i = 0; i < values.values.length; ++i) {
       const entry = values.values[i];
       if (entry[7] == credit_code) {
@@ -127,7 +137,7 @@ BootstrapProvider = async (db) => {
         const new_entry = [entry[0], entry[1], entry[2], new_balance, entry[4], updated_by, date_modified, entry[7], entry[8], entry[9], entry[10], entry[11], entry[12]];
         const new_range = `${ACTIVE_SHEET}!${2 + i}:${2 + i}`;
         // TODO switch to volatile-esq update API call
-        await GoogleProvider.UpdateValuesInSheet(this.#db.KeyValueConfig.STORE_CREDIT_SHEET, new_range, new_entry);
+        await this.#google.UpdateValuesInSheet(this.#db.KeyValueConfig.STORE_CREDIT_SHEET, new_range, new_entry);
         logger.info(`Debited ${amount} from code ${credit_code} yielding balance of ${new_balance}.`);
         return { success: true, entry: entry, index: i };
       }
@@ -141,12 +151,10 @@ BootstrapProvider = async (db) => {
     // TODO: throw an exception or figure out how to communicate this error
     const new_range = `${ACTIVE_SHEET}!${2 + index}:${2 + index}`;
     // TODO switch to volatile-esq update API call
-    await GoogleProvider.UpdateValuesInSheet(this.#db.KeyValueConfig.STORE_CREDIT_SHEET, new_range, old_entry);
+    await this.#google.UpdateValuesInSheet(this.#db.KeyValueConfig.STORE_CREDIT_SHEET, new_range, old_entry);
     return true;
   }
 
 };
 
-export const STORE_CREDIT_PROVIDER = new StoreCreditProvider();
-
-module.exports = STORE_CREDIT_PROVIDER;
+module.exports = StoreCreditProvider;

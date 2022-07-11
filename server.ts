@@ -9,12 +9,22 @@ import idempotency from 'express-idempotency';
 import expressWinston from 'express-winston';
 import { intervalToDuration, formatDuration } from 'date-fns';
 import logger from "./logging";
+import { GenerateRouter } from './routes';
+import GoogleProvider from "./config/google";
+import SquareProvider from "./config/square";
+import StoreCreditProvider from "./config/store_credit_provider";
+import DatabaseConnectionConstructor from './create_database';
+import DatabaseManagerConstructor from "./config/database_manager";
+import DataProviderConstructor from "./config/dataprovider";
+import CatalogProviderConstructor from "./config/catalog_provider";
 
-const app = express();
-const router = require('./routes/')()
-const PORT = process.env.PORT || 4001;
-const server = http.createServer(app);
+
+const router = GenerateRouter();
+
 const ORIGINS = [/https:\/\/.*\.windycitypie\.com$/, /https:\/\/.*\.breezytownpizza\.com$/, `http://localhost:${PORT}`];
+const PORT = process.env.PORT || 4001;
+const app = express();
+const server = http.createServer(app);
 const io = new socketIo.Server(server, 
   {
     transports: ["websocket", "polling"], 
@@ -27,20 +37,19 @@ const io = new socketIo.Server(server,
   });
 const socket_ro = io.of("/nsRO");
 
-const DatabaseConnection = require('./create_database')({ logger })
-const DatabaseManager = require("./config/database_manager")({ dbconn: DatabaseConnection });
-const DataProvider = require("./config/dataprovider")({ dbconn: DatabaseConnection });
-const CatalogProvider = require("./config/catalog_provider")({socketRO: socket_ro, dbconn: DatabaseConnection});
-const GoogleProvider = require("./config/google");
-const SquareProvider = require("./config/square");
-const StoreCreditProvider = require("./config/store_credit_provider");
+const DatabaseConnection = DatabaseConnectionConstructor({ logger });
+const DatabaseManager = DatabaseManagerConstructor({ dbconn: DatabaseConnection });
+const DataProvider = DataProviderConstructor({ dbconn: DatabaseConnection });
+const CatalogProvider = CatalogProviderConstructor({socketRO: socket_ro, dbconn: DatabaseConnection});
+const GoogleProviderInstance = new GoogleProvider();
+const SquareProviderInstance = new SquareProvider();
 
 
 // needs to run first
 DatabaseManager.Bootstrap(async () => {
   DataProvider.Bootstrap(async () => {
-    await GoogleProvider.BootstrapProvider(DataProvider);
-    SquareProvider.BootstrapProvider(DataProvider);
+    await GoogleProviderInstance.BootstrapProvider(DataProvider);
+    SquareProviderInstance.BootstrapProvider(DataProvider);
     StoreCreditProvider.BootstrapProvider(DataProvider);
   });
   await CatalogProvider.Bootstrap();  
