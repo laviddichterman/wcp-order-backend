@@ -7,16 +7,17 @@ import GoogleProvider from "./google";
 import aes256gcm from './crypto-aes-256-gcm';
 
 import logger from '../logging';
+import DataProvider from './dataprovider';
 
 const ACTIVE_SHEET = "CurrentWARIO"
 const ACTIVE_RANGE = `${ACTIVE_SHEET}!A2:M`;
 export default class StoreCreditProvider {
-  #db;
+  #db : DataProvider;
   #google: GoogleProvider;
   constructor() {  
   }
 
-BootstrapProvider = async (db, google : GoogleProvider) => {
+BootstrapProvider = async (db : DataProvider, google : GoogleProvider) => {
     this.#db = db;
     this.#google = google;
   }
@@ -107,7 +108,7 @@ BootstrapProvider = async (db, google : GoogleProvider) => {
       balance: parseFloat(Number(entry[3]).toFixed(2)) };
   }
 
-  ValidateLockAndSpend = async (credit_code, lock, amount, updated_by) => {
+  ValidateLockAndSpend = async (credit_code : string, lock : { enc: string, iv: string, auth: string }, amount : number, updated_by : string) => {
     const beginningOfToday = startOfDay(new Date());
     const values = await this.#google.GetValuesFromSheet(this.#db.KeyValueConfig.STORE_CREDIT_SHEET, ACTIVE_RANGE);
     for (let i = 0; i < values.values.length; ++i) {
@@ -146,7 +147,7 @@ BootstrapProvider = async (db, google : GoogleProvider) => {
     return { success: false, entry: [], index: 0 };
   }
 
-  CheckAndRefundStoreCredit = async (old_entry, index) => {
+  CheckAndRefundStoreCredit = async (old_entry : any[], index : number) => {
     // TODO: we're re-validating the encryption key to ensure there's not a race condition or a bug
     // TODO: throw an exception or figure out how to communicate this error
     const new_range = `${ACTIVE_SHEET}!${2 + index}:${2 + index}`;

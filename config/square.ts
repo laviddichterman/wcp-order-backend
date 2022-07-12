@@ -1,15 +1,16 @@
-import {  ApiError, Client, Environment } from 'square';
+import {  ApiError, Client, CreateOrderRequest, CreatePaymentRequest, Environment, UpdateOrderRequest } from 'square';
 
 import crypto from 'crypto';
 import logger from'../logging';
+import DataProvider from './dataprovider';
 
 export default class SquareProvider {
-  #client;
-  #location_id;
+  #client : Client;
+  #location_id : string;
   constructor() {
   }
 
-  BootstrapProvider = (db) => {
+  BootstrapProvider = (db : DataProvider) => {
     const cfg = db.KeyValueConfig;
     if (cfg.SQUARE_TOKEN && cfg.SQUARE_LOCATION) {
       this.#client = new Client({
@@ -23,10 +24,10 @@ export default class SquareProvider {
     }
   }
 
-  CreateOrderStoreCredit = async (reference_id, amount_money, note) => {
+  CreateOrderStoreCredit = async (reference_id : string, amount_money : bigint, note : string) => {
     const idempotency_key = crypto.randomBytes(22).toString('hex');
     const orders_api = this.#client.ordersApi;
-    const request_body = {
+    const request_body : CreateOrderRequest = {
       idempotencyKey: idempotency_key,
       order: {
         referenceId: reference_id,
@@ -56,10 +57,10 @@ export default class SquareProvider {
     }
   }
 
-  OrderStateChange = async (square_order_id, order_version, new_state) => {
+  OrderStateChange = async (square_order_id : string, order_version : number, new_state : string) => {
     const idempotency_key = crypto.randomBytes(22).toString('hex');
     const orders_api = this.#client.ordersApi;
-    const request_body = {
+    const request_body : UpdateOrderRequest = {
       idempotencyKey: idempotency_key,
       order: {
         locationId: this.#location_id,
@@ -80,10 +81,10 @@ export default class SquareProvider {
     }
   }
 
-  ProcessPayment = async (nonce, amount_money, reference_id, square_order_id) => {
+  ProcessPayment = async (nonce : string, amount_money : bigint, reference_id : string, square_order_id : string) => {
     const idempotency_key = crypto.randomBytes(22).toString('hex');
     const payments_api = this.#client.paymentsApi;
-    const request_body = {
+    const request_body : CreatePaymentRequest = {
       sourceId: nonce,
       amountMoney: {
         amount: amount_money,

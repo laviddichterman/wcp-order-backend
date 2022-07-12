@@ -71,6 +71,4 @@ class DatabaseManager {
 
 }
 
-module.exports = ({ }) => {
-  return new DatabaseManager();
-}
+export default DatabaseManager;

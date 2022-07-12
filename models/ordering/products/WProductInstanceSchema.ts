@@ -49,8 +49,7 @@ export const WProductInstanceSchema = new Schema<IProductInstance>({
       skip_customization: Boolean,
       // governs how prices get displayed in the order page according to the enum
       price_display: {    
-        type: PriceDisplay,
-        enum: PriceDisplay
+        type: PriceDisplay
     },
       // HTML-friendly message wrapping the display of this PI in the order page
       adornment: String,

@@ -1,4 +1,5 @@
-import { Schema } from "mongoose";
+import mongoose, { Schema } from "mongoose";
+import path from 'path';
 
 // NumberList works for LeadtimeList
 export const LeadTimeSchema = new Schema({
@@ -6,4 +7,5 @@ export const LeadTimeSchema = new Schema({
   lead: Number
 }, { _id: false });
 
-module.exports = LeadTimeSchema;
+export default mongoose.model(path.basename(__filename).replace(path.extname(__filename), ''), LeadTimeSchema);
+

@@ -1,29 +1,24 @@
-import { GenerateMenu, ICatalog, SEMVER, ICatalogCategories, ICatalogModifiers, ICategory, IMenu, IOption, IOptionType, IProduct, IProductInstance, IProductInstanceFunction, IAbstractExpression, ICatalogProducts } from "@wcp/wcpshared";
+import { GenerateMenu, ICatalog, SEMVER, ICatalogCategories, ICatalogModifiers, ICategory, IMenu, IOption, IOptionType, IProduct, IProductInstance, IProductInstanceFunction, IAbstractExpression, ICatalogProducts, IWInterval, IMoney, IExternalIDs, ICatalogItem } from "@wcp/wcpshared";
+import DBVersionModel from '../models/DBVersionSchema';
 import WCategoryModel from '../models/ordering/category/WCategorySchema';
 import WProductInstanceModel from '../models/ordering/products/WProductInstanceSchema';
 import WProductModel from '../models/ordering/products/WProductSchema';
 import WOptionModel from '../models/ordering/options/WOptionSchema';
 import WOptionTypeModel from '../models/ordering/options/WOptionTypeSchema';
 import WProductInstanceFunctionModel from '../models/query/WProductInstanceFunction';
-import Promise from 'bluebird';
+import socketIo from "socket.io";
 import logger from '../logging';
+import { HydratedDocument } from "mongoose";
 
-
-const ReduceArrayToMapByKey = function (xs, key) {
-  const iv = {};
-  return xs.reduce((obj, item) => {
-    return {
-      ...obj,
-      [item[key]]: item,
-    };
-  }, iv);
+function ReduceArrayToMapByKey<T, Key extends keyof T>(xs: T[], key: Key) {
+  return Object.fromEntries(xs.map(x => [x[key], x]));
 };
 
 // Returns [ category_map, product_map ] list;
 // category_map entries are mapping of catagory_id to { category, children (id list), product (id list) }
 // product_map is mapping from product_id to { product, instances (list of instance objects)}
 // orphan_products is list of orphan product ids
-const CatalogMapGenerator = (categories: ICategory[], products : IProduct[], product_instances : IProductInstance[]) => {
+const CatalogMapGenerator = (categories: ICategory[], products: IProduct[], product_instances: IProductInstance[]) => {
   const category_map: ICatalogCategories = {};
   categories.forEach((curr) => {
     category_map[curr._id] = { category: curr, children: [], products: [] };
@@ -33,7 +28,7 @@ const CatalogMapGenerator = (categories: ICategory[], products : IProduct[], pro
       category_map[categories[i].parent_id].children.push(categories[i]._id);
     }
   }
-  const product_map : ICatalogProducts = {};
+  const product_map: ICatalogProducts = {};
   products.forEach((curr) => {
     product_map[curr._id] = { product: curr, instances: [] };
     if (curr.category_ids.length !== 0) {
@@ -124,26 +119,26 @@ const FindHasAnyModifierExpressionsForMTID: (expr: IAbstractExpression, mtid: st
   }
 }
 
-const ValidateProductModifiersFunctionsCategories = function (modifiers, category_ids : string[], catalog: CatalogProvider) {
+const ValidateProductModifiersFunctionsCategories = function (modifiers: { mtid: string; enable: IProductInstanceFunction; }[], category_ids: string[], catalog: CatalogProvider) {
   const found_all_modifiers = modifiers.map(entry =>
     catalog.ModifierTypes.some(x => x._id.toString() === entry.mtid) &&
-    (entry.enable === null || catalog.ProductInstanceFunctions.some(x => x._id.toString() === entry.enable))).every(x => x === true);
-  const found_all_categories = category_ids.map(cid => catalog.Categories.some(x => x._id.toString() === cid)).every(x => x === true);
+    (entry.enable === null || catalog.ProductInstanceFunctions.some(x => x._id === entry.enable._id))).every(x => x === true);
+  const found_all_categories = category_ids.map(cid => catalog.Categories.some(x => x._id === cid)).every(x => x === true);
   return found_all_categories && found_all_modifiers;
 }
 
 class CatalogProvider {
   #socketRO;
-  #categories: ICategory[];
-  #modifier_types: IOptionType[];
-  #options: IOption[];
-  #products: IProduct[];
-  #product_instances: IProductInstance[];
-  #product_instance_functions: IProductInstanceFunction[];
+  #categories: HydratedDocument<ICategory>[];
+  #modifier_types: HydratedDocument<IOptionType>[];
+  #options: HydratedDocument<IOption>[];
+  #products: HydratedDocument<IProduct>[];
+  #product_instances: HydratedDocument<IProductInstance>[];
+  #product_instance_functions: HydratedDocument<IProductInstanceFunction>[];
   #catalog: ICatalog;
   #menu: IMenu;
   #apiver;
-  constructor(socketRO) {
+  constructor(socketRO: socketIo.Namespace) {
     this.#socketRO = socketRO;
     this.#categories = [];
     this.#modifier_types = [];
@@ -152,7 +147,7 @@ class CatalogProvider {
     this.#product_instances = [];
     this.#product_instance_functions = [];
     this.#apiver = { major: 0, minor: 0, patch: 0 };
-    this.#catalog = CatalogGenerator([], [], [], [], [], [], {major: 0, minor: 0, patch: 0});
+    this.#catalog = CatalogGenerator([], [], [], [], [], [], { major: 0, minor: 0, patch: 0 });
   }
 
   get Categories() {
@@ -203,7 +198,7 @@ class CatalogProvider {
     logger.debug(`Syncing Modifier Types.`);
     // modifier types
     try {
-      this.#modifier_types = await this.#dbconn.WOptionTypeSchema.find().exec();
+      this.#modifier_types = await WOptionTypeModel.find().exec();
     } catch (err) {
       logger.error(`Failed fetching option types with error: ${JSON.stringify(err)}`);
       return false;
@@ -215,7 +210,7 @@ class CatalogProvider {
     logger.debug(`Syncing Modifier Options.`);
     // modifier options
     try {
-      this.#options = await this.#dbconn.WOptionSchema.find().exec();
+      this.#options = await WOptionModel.find().exec();
     } catch (err) {
       logger.error(`Failed fetching options with error: ${JSON.stringify(err)}`);
       return false;
@@ -227,7 +222,7 @@ class CatalogProvider {
     logger.debug(`Syncing Products.`);
     // products
     try {
-      this.#products = await this.#dbconn.WProductSchema.find().exec();
+      this.#products = await WProductModel.find().exec();
     } catch (err) {
       logger.error(`Failed fetching products with error: ${JSON.stringify(err)}`);
       return false;
@@ -239,7 +234,7 @@ class CatalogProvider {
     logger.debug(`Syncing Product Instances.`);
     // product instances
     try {
-      this.#product_instances = await this.#dbconn.WProductInstanceSchema.find().exec();
+      this.#product_instances = await WProductInstanceModel.find().exec();
     } catch (err) {
       logger.error(`Failed fetching product instances with error: ${JSON.stringify(err)}`);
       return false;
@@ -250,7 +245,7 @@ class CatalogProvider {
   SyncProductInstanceFunctions = async () => {
     logger.debug(`Syncing Product Instance Functions.`);
     try {
-      this.#product_instance_functions = await this.#dbconn.WProductInstanceFunction.find().exec();
+      this.#product_instance_functions = await WProductInstanceFunctionModel.find().exec();
     } catch (err) {
       logger.error(`Failed fetching product instance functions with error: ${JSON.stringify(err)}`);
       return false;
@@ -258,7 +253,7 @@ class CatalogProvider {
     return true;
   }
 
-  EmitCatalog = (dest) => {
+  EmitCatalog = (dest: socketIo.Socket | socketIo.Namespace) => {
     dest.emit('WCP_CATALOG', this.#catalog);
   }
 
@@ -267,11 +262,11 @@ class CatalogProvider {
     this.#menu = GenerateMenu(this.#catalog, new Date());
   }
 
-  Bootstrap = async (cb) => {
+  Bootstrap = async (cb: null | (() => Promise<any>)) => {
     // load catalog from DB, do not push to clients as that'll be handled when a new client connects
     logger.info("Loading catalog from database...");
 
-    this.#apiver = await this.#dbconn.DBVersionSchema.findOne().exec()
+    this.#apiver = await DBVersionModel.findOne().exec()
 
     await this.SyncCategories();
 
@@ -292,16 +287,8 @@ class CatalogProvider {
     }
   };
 
-  CreateCategory = async ({ description, name, ordinal, parent_id, subheading, footnotes, display_flags }) => {
-    const doc = new WCategoryModel({
-      description: description,
-      name: name,
-      ordinal,
-      parent_id,
-      subheading,
-      footnotes,
-      display_flags: display_flags
-    });
+  CreateCategory = async (category: Omit<ICategory, "_id">) => {
+    const doc = new WCategoryModel(category);
     await doc.save();
     await this.SyncCategories();
     this.RecomputeCatalog();
@@ -309,10 +296,10 @@ class CatalogProvider {
     return doc;
   };
 
-  UpdateCategory = async (category_id, { name, description, ordinal, subheading, footnotes, parent_id, display_flags }) => {
+  UpdateCategory = async (category_id: string, { name, description, ordinal, subheading, footnotes, parent_id, display_flags }: Omit<ICategory, "_id">) => {
     try {
-      const category_id_map = ReduceArrayToMapByKey(this.#categories, "_id");
-      if (!category_id_map[category_id]) {
+      const category_id_map = ReduceArrayToMapByKey<HydratedDocument<ICategory>, "_id">(this.#categories, "_id");
+      if (!Object.hasOwn(category_id_map, category_id)) {
         // not found
         return null;
       }
@@ -351,7 +338,7 @@ class CatalogProvider {
     }
   };
 
-  DeleteCategory = async (category_id) => {
+  DeleteCategory = async (category_id: string) => {
     logger.debug(`Removing ${category_id}`);
     try {
       const doc = await WCategoryModel.findByIdAndDelete(category_id);
@@ -378,7 +365,7 @@ class CatalogProvider {
     }
   }
 
-  CreateModifierType = async ({ name, display_name, ordinal, min_selected, max_selected, externalIDs, display_flags }) => {
+  CreateModifierType = async ({ name, display_name, ordinal, min_selected, max_selected, externalIDs, display_flags }: Omit<IOptionType, "_id">) => {
     const doc = new WOptionTypeModel({
       name,
       display_name,
@@ -395,7 +382,7 @@ class CatalogProvider {
     return doc;
   };
 
-  UpdateModifierType = async (mt_id, { name, display_name, ordinal, min_selected, max_selected, externalIDs, display_flags }) => {
+  UpdateModifierType = async (mt_id: string, { name, display_name, ordinal, min_selected, max_selected, externalIDs, display_flags }: Omit<IOptionType, "_id">) => {
     try {
       const updated = await WOptionTypeModel.findByIdAndUpdate(
         mt_id,
@@ -422,7 +409,7 @@ class CatalogProvider {
     }
   };
 
-  DeleteModifierType = async (mt_id) => {
+  DeleteModifierType = async (mt_id: string) => {
     logger.debug(`Removing Modifier Type: ${mt_id}`);
     try {
       const doc = await WOptionTypeModel.findByIdAndDelete(mt_id);
@@ -437,7 +424,7 @@ class CatalogProvider {
       if (options_delete.deletedCount > 0) {
         logger.debug(`Removed ${options_delete.deletedCount} Options from the catalog.`);
       }
-      const products_update = await WProductModel.updateMany({}, { $pull: { modifiers: mt_id } });
+      const products_update = await WProductModel.updateMany({}, { $pull: { modifiers: { mtid : mt_id } } });
       if (products_update.modifiedCount > 0) {
         const product_instance_update = await WProductInstanceModel.updateMany({}, { $pull: { modifiers: { modifier_type_id: mt_id } } });
         logger.debug(`Removed ModifierType ID from ${products_update.modifiedCount} products, ${product_instance_update.modifiedCount} product instances.`);
@@ -475,12 +462,10 @@ class CatalogProvider {
     disabled,
     externalIDs,
     ordinal,
-    flavor_factor,
-    bake_factor,
-    can_split,
+    metadata,
     enable_function,
     display_flags
-  }) => {
+  } : ICatalogItem & Omit<IOption, '_id' | 'item'>) => {
     // first find the Modifier Type ID in the catalog
     var option_type = this.#modifier_types.find(x => x._id.toString() === option_type_id);
     if (!option_type) {
@@ -489,26 +474,19 @@ class CatalogProvider {
 
     const doc = new WOptionModel({
       item: {
-        price: {
-          amount: price.amount,
-          currency: price.currency,
-        },
-        description: description,
-        display_name: display_name,
-        shortcode: shortcode,
-        disabled: disabled,
+        price,
+        description,
+        display_name,
+        shortcode,
+        disabled,
         permanent_disable: false,
         externalIDs
       },
-      option_type_id: option_type_id,
-      ordinal: ordinal,
-      metadata: {
-        flavor_factor: flavor_factor,
-        bake_factor: bake_factor,
-        can_split: can_split,
-      },
-      enable_function: enable_function,
-      display_flags: display_flags
+      option_type_id,
+      ordinal,
+      metadata,
+      enable_function,
+      display_flags
     });
     await doc.save();
     await this.SyncOptions();
@@ -516,8 +494,8 @@ class CatalogProvider {
     this.EmitCatalog(this.#socketRO);
     return doc;
   };
-
-  UpdateModifierOption = async (mo_id, {
+ 
+  UpdateModifierOption = async (mo_id : string, {
     //mt_id, 
     display_name,
     description,
@@ -526,11 +504,9 @@ class CatalogProvider {
     disabled,
     externalIDs,
     ordinal,
-    flavor_factor,
-    bake_factor,
-    can_split,
+    metadata,
     enable_function,
-    display_flags }) => {
+    display_flags } : ICatalogItem & Omit<IOption, '_id' | 'item'>) => {
     try {
       //TODO: post update: rebuild all products with the said modifier option since the ordinal might have changed
       // 
@@ -538,24 +514,17 @@ class CatalogProvider {
         mo_id,
         {
           item: {
-            price: {
-              amount: price.amount,
-              currency: price.currency,
-            },
-            description: description,
-            display_name: display_name,
-            shortcode: shortcode,
-            disabled: disabled,
+            price,
+            description,
+            display_name,
+            shortcode,
+            disabled,
             permanent_disable: false,
             externalIDs
           },
           ordinal: ordinal,
-          metadata: {
-            flavor_factor: flavor_factor,
-            bake_factor: bake_factor,
-            can_split: can_split,
-          },
-          enable_function: enable_function,
+          metadata,
+          enable_function,
           display_flags: display_flags
         },
         { new: true }
@@ -572,7 +541,7 @@ class CatalogProvider {
     }
   };
 
-  DeleteModifierOption = async (mo_id) => {
+  DeleteModifierOption = async (mo_id: string) => {
     logger.debug(`Removing Modifier Option ${mo_id}`);
     try {
       const doc = await WOptionModel.findByIdAndDelete(mo_id);
@@ -615,8 +584,8 @@ class CatalogProvider {
     externalIDs,
     modifiers,
     category_ids,
-    suppress_catalog_recomputation = false
-  }) => {
+  }: { externalIDs: IExternalIDs } & Omit<IProduct, '_id' | 'item'>,
+    suppress_catalog_recomputation = false) => {
     if (!ValidateProductModifiersFunctionsCategories(modifiers, category_ids, this)) {
       return null;
     }
@@ -641,14 +610,14 @@ class CatalogProvider {
     return doc;
   };
 
-  UpdateProduct = async (pid, {
+  UpdateProduct = async (pid: string, {
     price,
     disabled,
     service_disable,
     display_flags,
     externalIDs,
     modifiers,
-    category_ids }) => {
+    category_ids }: { externalIDs: IExternalIDs } & Omit<IProduct, '_id' | 'item'>) => {
     try {
       if (!ValidateProductModifiersFunctionsCategories(modifiers, category_ids, this)) {
         return null;
@@ -692,7 +661,7 @@ class CatalogProvider {
     }
   };
 
-  DeleteProduct = async (p_id) => {
+  DeleteProduct = async (p_id : string) => {
     logger.debug(`Removing Product ${p_id}`);
     try {
       const doc = await WProductModel.findByIdAndDelete(p_id);
@@ -713,7 +682,7 @@ class CatalogProvider {
     }
   }
 
-  CreateProductInstance = async (parent_product_id, {
+  CreateProductInstance = async (parent_product_id : string, {
     description,
     display_name,
     shortcode,
@@ -722,8 +691,8 @@ class CatalogProvider {
     modifiers,
     is_base,
     display_flags
-  }) => {
-    const doc = new this.#dbconn.WProductInstanceSchema({
+  } : Pick<ICatalogItem, 'description' | 'display_name' | 'externalIDs' | 'shortcode'> & Omit<IProductInstance, '_id' | 'item'>) => {
+    const doc = new WProductInstanceModel({
       product_id: parent_product_id,
       item: {
         description,
@@ -743,7 +712,7 @@ class CatalogProvider {
     return doc;
   };
 
-  UpdateProductInstance = async (pid, piid, {
+  UpdateProductInstance = async (pid : string, piid : string, {
     display_name,
     description,
     shortcode,
@@ -752,7 +721,7 @@ class CatalogProvider {
     modifiers,
     is_base,
     display_flags
-  }) => {
+  } : Pick<ICatalogItem, 'description' | 'display_name' | 'externalIDs' | 'shortcode'> & Omit<IProductInstance, '_id' | 'item'>) => {
     try {
       const updated = await WProductInstanceModel.findByIdAndUpdate(
         piid,
@@ -784,7 +753,7 @@ class CatalogProvider {
     }
   };
 
-  DeleteProductInstance = async (pi_id) => {
+  DeleteProductInstance = async (pi_id : string) => {
     logger.debug(`Removing Product Instance: ${pi_id}`);
     try {
       const doc = await WProductInstanceModel.findByIdAndDelete(pi_id);
@@ -803,7 +772,7 @@ class CatalogProvider {
   CreateProductInstanceFunction = async ({
     name,
     expression
-  }) => {
+  } : IProductInstanceFunction) => {
 
     const expressions = [];
     const doc = new WProductInstanceFunctionModel({
@@ -817,10 +786,10 @@ class CatalogProvider {
     return doc;
   };
 
-  UpdateProductInstanceFunction = async (pif_id, {
+  UpdateProductInstanceFunction = async (pif_id : string, {
     name,
     expression
-  }) => {
+  } : IProductInstanceFunction) => {
     try {
       const updated = await WProductInstanceFunctionModel.findByIdAndUpdate(
         pif_id,
@@ -845,7 +814,7 @@ class CatalogProvider {
     }
   };
 
-  DeleteProductInstanceFunction = async (pif_id, suppress_catalog_recomputation = false) => {
+  DeleteProductInstanceFunction = async (pif_id : string, suppress_catalog_recomputation = false) => {
     logger.debug(`Removing Product Instance Function: ${pif_id}`);
     try {
       const doc = await WProductInstanceFunctionModel.findByIdAndDelete(pif_id);
@@ -880,8 +849,4 @@ class CatalogProvider {
   }
 }
 
-
-
-module.exports = ({ socketRO }) => {
-  return new CatalogProvider(socketRO);
-}
+export default CatalogProvider;

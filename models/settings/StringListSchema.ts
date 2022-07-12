@@ -1,6 +1,7 @@
-import { Schema } from "mongoose";
+import mongoose, { Schema } from "mongoose";
+import path from 'path';
 
 // StringList works for ServicesList
-export const StringListSchema = new Schema({ services: [String] }, { _id: false });
+export const StringListSchema = new Schema<{services: string[]}>({ services: [String] }, { _id: false });
 
-module.exports = StringListSchema;
+export default mongoose.model<{services: string[]}>(path.basename(__filename).replace(path.extname(__filename), ''), StringListSchema);

@@ -1,11 +1,11 @@
 import nodemailer from "nodemailer";
-import { GoogleAuth } from 'google-auth-library';
 import { google, calendar_v3 } from "googleapis";
 import { ExponentialBackoff } from '../utils';
 import logger from '../logging';
 import OAUTH2_KEYS from "../authentication/auth.json";
 import SMTPTransport from "nodemailer/lib/smtp-transport";
 import Mail from "nodemailer/lib/mailer";
+import DataProvider from "./dataprovider";
 const OAuth2 = google.auth.OAuth2;
 
 export default class GoogleProvider {
@@ -39,7 +39,7 @@ export default class GoogleProvider {
     }
   }
 
-  BootstrapProvider = async (db) => {
+  BootstrapProvider = async (db : DataProvider) => {
     const cfg = db.KeyValueConfig;
     if (cfg.GOOGLE_REFRESH_TOKEN && cfg.EMAIL_ADDRESS) {
       logger.debug("Got refresh token from DB config: %o", cfg.GOOGLE_REFRESH_TOKEN);
