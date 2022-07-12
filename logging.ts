@@ -1,7 +1,7 @@
 import winston from 'winston';
 import PACKAGE from './package.json';
 
-const logger = winston.createLogger({
+export const logger = winston.createLogger({
   level: 'info',
   format: winston.format.combine(
     winston.format.timestamp({
@@ -29,4 +29,5 @@ const logger = winston.createLogger({
   ]
 });
 
-export = logger;
+export default logger;
+module.exports = logger;

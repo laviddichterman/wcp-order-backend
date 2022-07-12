@@ -3,6 +3,8 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { query, validationResult } from 'express-validator';
 import GoogleProvider from "../../../../../config/google";
 import StoreCreditProvider from "../../../../../config/store_credit_provider";
+import DataProviderInstance from '../../../../../config/dataprovider';
+import logger from '../../../../../logging';
 
 const ValidationChain = [
   query('code').exists().isLength({min: 19, max: 19})
@@ -10,7 +12,7 @@ const ValidationChain = [
 
 module.exports = Router({ mergeParams: true })
   .get('/v1/payments/storecredit/validate', ValidationChain, async (req : Request, res: Response, next: NextFunction) => {
-    const EMAIL_ADDRESS = req.db.KeyValueConfig.EMAIL_ADDRESS;
+    const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
@@ -19,7 +21,7 @@ module.exports = Router({ mergeParams: true })
       const credit_code = req.query.code as string;
       const validate_response = await StoreCreditProvider.ValidateAndLockCode(credit_code);
       if (validate_response.valid && validate_response.balance > 0) {
-        req.logger.info(`Found and locked ${credit_code} with value ${validate_response.balance}.`);
+        logger.info(`Found and locked ${credit_code} with value ${validate_response.balance}.`);
         return res.status(200).json({enc: validate_response.lock.enc, 
           iv: validate_response.lock.iv.toString('hex'), 
           auth: validate_response.lock.auth.toString('hex'), 
@@ -28,7 +30,7 @@ module.exports = Router({ mergeParams: true })
           credit_type: validate_response.type});
       }
       else {
-        req.logger.info(`Failed to find ${credit_code}`);
+        logger.info(`Failed to find ${credit_code}`);
         return res.status(404).json({validated: false});
       }
     } catch (error) {

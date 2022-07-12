@@ -1,17 +1,17 @@
 import {  ApiError, Client, CreateOrderRequest, CreatePaymentRequest, Environment, UpdateOrderRequest } from 'square';
-
+import { WProvider } from '../interfaces/WProvider';
 import crypto from 'crypto';
 import logger from'../logging';
-import { DataProvider } from './dataprovider';
+import DataProviderInstance from './dataprovider';
 
-export class SquareProvider {
+export class SquareProvider implements WProvider {
   #client : Client;
   #location_id : string;
   constructor() {
   }
 
-  BootstrapProvider = (db : DataProvider) => {
-    const cfg = db.KeyValueConfig;
+  Bootstrap = () => {
+    const cfg = DataProviderInstance.KeyValueConfig;
     if (cfg.SQUARE_TOKEN && cfg.SQUARE_LOCATION) {
       this.#client = new Client({
         environment: Environment.Production, // `Environment.Sandbox` to access sandbox resources // TODO: configure this

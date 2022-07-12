@@ -5,6 +5,8 @@ import { body, validationResult } from 'express-validator';
 import SquareProviderInstance from "../../../../../config/square";
 import GoogleProviderInstance from "../../../../../config/google";
 import StoreCreditProviderInstance from "../../../../../config/store_credit_provider";
+import DataProviderInstance from '../../../../../config/dataprovider';
+import logger from '../../../../../logging';
 
 const CreateExternalEmailSender = async (EMAIL_ADDRESS : string, STORE_NAME: string, amount : string, sender_email : string, recipient_name_first : string, recipient_name_last : string, credit_code : string, qr_code_fs : internal.PassThrough) => {
   const emailbody = `<h2>Thanks for thinking of Windy City Pie and Breezy Town Pizza for someone close to you!</h2>
@@ -58,8 +60,8 @@ const ValidationChain = [
 
 module.exports = Router({ mergeParams: true })
   .post('/v1/payments/storecredit/stopgap', ValidationChain, async (req : Request, res: Response, next: NextFunction) => {
-    const EMAIL_ADDRESS = req.db.KeyValueConfig.EMAIL_ADDRESS;
-    const STORE_NAME = req.db.KeyValueConfig.STORE_NAME;
+    const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
+    const STORE_NAME = DataProviderInstance.KeyValueConfig.STORE_NAME;
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
@@ -88,7 +90,7 @@ module.exports = Router({ mergeParams: true })
       const create_order_response = await SquareProviderInstance.CreateOrderStoreCredit(reference_id, amount_money, `Purchase of store credit code: ${joint_credit_code}`); // {success: true, response: {order: { id: "derp"}}};
       if (create_order_response.success === true) {
         const square_order_id = create_order_response.response.order.id;
-        req.logger.info(`For internal id ${reference_id} created Square Order ID: ${square_order_id} for ${amount_money}`)
+        logger.info(`For internal id ${reference_id} created Square Order ID: ${square_order_id} for ${amount_money}`)
         const payment_response = await SquareProviderInstance.ProcessPayment(req.body.nonce, amount_money, reference_id, square_order_id); // {success: true, result: {payment: {receiptUrl: "http://clownpenis.fart", cardDetails: {card: { last4: 1111}}, totalMoney: {amount: 5000}}}};
         if (payment_response.success === true) {
           const amount = Number(Number(payment_response.result.payment.totalMoney.amount) / 100).toFixed(2);
@@ -98,7 +100,7 @@ module.exports = Router({ mergeParams: true })
           }
           
           await StoreCreditProviderInstance.CreateCreditFromCreditCode(`${recipient_name_first} ${recipient_name_last}`, amount, "MONEY", joint_credit_code, "", "WARIO", "");
-          req.logger.info(`Store credit code: ${joint_credit_code} and Square Order ID: ${square_order_id} payment for ${amount_money} successful, credit logged to spreadsheet.`)
+          logger.info(`Store credit code: ${joint_credit_code} and Square Order ID: ${square_order_id} payment for ${amount_money} successful, credit logged to spreadsheet.`)
           return res.status(200).json({reference_id, 
             joint_credit_code, 
             square_order_id, 
@@ -108,12 +110,12 @@ module.exports = Router({ mergeParams: true })
           });
         }
         else {
-          req.logger.error("Failed to process payment: %o", payment_response);
+          logger.error("Failed to process payment: %o", payment_response);
           await SquareProviderInstance.OrderStateChange(square_order_id, create_order_response.response.order.version + 1, "CANCELED");
           return res.status(400).json(payment_response);
         }
       } else {
-        req.logger.error(JSON.stringify(create_order_response));
+        logger.error(JSON.stringify(create_order_response));
         return res.status(500).json({ success: false });
       }
     } catch (error) {

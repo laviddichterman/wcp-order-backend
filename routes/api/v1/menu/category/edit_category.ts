@@ -2,6 +2,8 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { param, body, validationResult } from 'express-validator';
 import { CheckJWT, ScopeWriteCatalog } from '../../../../../config/authorization';
+import CatalogProviderInstance from '../../../../../config/catalog_provider';
+import logger from '../../../../../logging';
 
 const ValidationChain = [
   param('catid').trim().escape().exists(),
@@ -22,7 +24,7 @@ module.exports = Router({ mergeParams: true })
       if (!errors.isEmpty()) {
         return res.status(422).json({ errors: errors.array() });
       }
-      const doc = await req.catalog.UpdateCategory(
+      const doc = await CatalogProviderInstance.UpdateCategory(
         req.params.catid, 
         {
           name: req.body.name,
@@ -34,10 +36,10 @@ module.exports = Router({ mergeParams: true })
           display_flags: req.body.display_flags
         });
       if (!doc) {
-        req.logger.info(`Unable to update category: ${req.params.catid}`);
+        logger.info(`Unable to update category: ${req.params.catid}`);
         return res.status(404).send(`Unable to update category: ${req.params.catid}`);
       }
-      req.logger.info(`Successfully updated ${doc}`);
+      logger.info(`Successfully updated ${doc}`);
       return res.status(200).send(doc);
     } catch (error) {
       next(error)

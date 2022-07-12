@@ -9,6 +9,8 @@ import WProductInstanceFunctionModel from '../models/query/WProductInstanceFunct
 import socketIo from "socket.io";
 import logger from '../logging';
 import { HydratedDocument } from "mongoose";
+import { WProvider } from "../interfaces/WProvider";
+import { WApp } from "../App";
 
 function ReduceArrayToMapByKey<T, Key extends keyof T>(xs: T[], key: Key) {
   return Object.fromEntries(xs.map(x => [x[key], x]));
@@ -127,8 +129,8 @@ const ValidateProductModifiersFunctionsCategories = function (modifiers: { mtid:
   return found_all_categories && found_all_modifiers;
 }
 
-export class CatalogProvider {
-  #socketRO;
+export class CatalogProvider implements WProvider {
+  #socketRO : socketIo.Namespace;
   #categories: HydratedDocument<ICategory>[];
   #modifier_types: HydratedDocument<IOptionType>[];
   #options: HydratedDocument<IOption>[];
@@ -137,17 +139,8 @@ export class CatalogProvider {
   #product_instance_functions: HydratedDocument<IProductInstanceFunction>[];
   #catalog: ICatalog;
   #menu: IMenu;
-  #apiver;
-  constructor(socketRO: socketIo.Namespace) {
-    this.#socketRO = socketRO;
-    this.#categories = [];
-    this.#modifier_types = [];
-    this.#options = [];
-    this.#products = [];
-    this.#product_instances = [];
-    this.#product_instance_functions = [];
-    this.#apiver = { major: 0, minor: 0, patch: 0 };
-    this.#catalog = CatalogGenerator([], [], [], [], [], [], { major: 0, minor: 0, patch: 0 });
+  #apiver: SEMVER;
+  constructor() {
   }
 
   get Categories() {
@@ -262,7 +255,8 @@ export class CatalogProvider {
     this.#menu = GenerateMenu(this.#catalog, new Date());
   }
 
-  Bootstrap = async (cb: null | (() => Promise<any>)) => {
+  Bootstrap = async (app : WApp) => {
+    this.#socketRO = app.getSocketIoNamespace('nsRO');
     // load catalog from DB, do not push to clients as that'll be handled when a new client connects
     logger.info("Loading catalog from database...");
 
@@ -281,10 +275,6 @@ export class CatalogProvider {
     await this.SyncProductInstanceFunctions();
 
     this.RecomputeCatalog();
-
-    if (cb) {
-      return await cb();
-    }
   };
 
   CreateCategory = async (category: Omit<ICategory, "_id">) => {
@@ -506,7 +496,7 @@ export class CatalogProvider {
     ordinal,
     metadata,
     enable_function,
-    display_flags } : ICatalogItem & Omit<IOption, '_id' | 'item'>) => {
+    display_flags } : ICatalogItem & Omit<IOption, '_id' | 'item' | 'option_type_id'>) => {
     try {
       //TODO: post update: rebuild all products with the said modifier option since the ordinal might have changed
       // 
@@ -691,7 +681,7 @@ export class CatalogProvider {
     modifiers,
     is_base,
     display_flags
-  } : Pick<ICatalogItem, 'description' | 'display_name' | 'externalIDs' | 'shortcode'> & Omit<IProductInstance, '_id' | 'item'>) => {
+  } : Pick<ICatalogItem, 'description' | 'display_name' | 'externalIDs' | 'shortcode'> & Omit<IProductInstance, '_id' | 'item' | 'product_id'>) => {
     const doc = new WProductInstanceModel({
       product_id: parent_product_id,
       item: {
@@ -721,7 +711,7 @@ export class CatalogProvider {
     modifiers,
     is_base,
     display_flags
-  } : Pick<ICatalogItem, 'description' | 'display_name' | 'externalIDs' | 'shortcode'> & Omit<IProductInstance, '_id' | 'item'>) => {
+  } : Pick<ICatalogItem, 'description' | 'display_name' | 'externalIDs' | 'shortcode'> & Omit<IProductInstance, '_id' | 'item' | 'product_id'>) => {
     try {
       const updated = await WProductInstanceModel.findByIdAndUpdate(
         piid,
@@ -772,7 +762,7 @@ export class CatalogProvider {
   CreateProductInstanceFunction = async ({
     name,
     expression
-  } : IProductInstanceFunction) => {
+  } : Omit<IProductInstanceFunction, '_id'>) => {
 
     const expressions = [];
     const doc = new WProductInstanceFunctionModel({
@@ -789,7 +779,7 @@ export class CatalogProvider {
   UpdateProductInstanceFunction = async (pif_id : string, {
     name,
     expression
-  } : IProductInstanceFunction) => {
+  } : Omit<IProductInstanceFunction, '_id'>) => {
     try {
       const updated = await WProductInstanceFunctionModel.findByIdAndUpdate(
         pif_id,
@@ -849,4 +839,6 @@ export class CatalogProvider {
   }
 }
 
-export default CatalogProvider;
+const CatalogProviderInstance = new CatalogProvider();
+export default CatalogProviderInstance;
+module.exports = CatalogProviderInstance;

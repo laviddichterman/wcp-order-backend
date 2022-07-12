@@ -3,6 +3,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { body, validationResult }  from 'express-validator';
 import StoreCreditProviderInstance from "../../../../../config/store_credit_provider";
 import GoogleProviderInstance from "../../../../../config/google";
+import DataProviderInstance from '../../../../../config/dataprovider';
 
 const ValidationChain = [
   body('code').exists().isLength({min: 19, max: 19}),
@@ -15,7 +16,7 @@ const ValidationChain = [
 
 module.exports = Router({ mergeParams: true })
   .post('/v1/payments/storecredit/spend', ValidationChain, async (req : Request, res: Response, next: NextFunction) => {
-    const EMAIL_ADDRESS = req.db.KeyValueConfig.EMAIL_ADDRESS;
+    const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
@@ -29,7 +30,7 @@ module.exports = Router({ mergeParams: true })
     } catch (error) {
       GoogleProviderInstance.SendEmail(
         EMAIL_ADDRESS,
-        [EMAIL_ADDRESS, "dave@windycitypie.com"],
+        { name: EMAIL_ADDRESS, address: "dave@windycitypie.com" },
         "ERROR IN GIFT CARD PROCESSING. CONTACT DAVE IMMEDIATELY",
         "dave@windycitypie.com",
         `<p>Request: ${JSON.stringify(req.body)}</p><p>Error info:${JSON.stringify(error)}</p>`);

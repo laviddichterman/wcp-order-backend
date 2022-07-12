@@ -1,3 +1,4 @@
+import { WProvider } from '../interfaces/WProvider';
 import { IWBlockedOff, IWSettings, JSFEBlockedOff, WDateUtils } from '@wcp/wcpshared';
 import { HydratedDocument } from 'mongoose';
 import logger from '../logging';
@@ -12,7 +13,8 @@ import DEFAULT_SETTINGS from "../data/settingsschemas.default.json";
 import DEFAULT_SERVICES from "../data/servicesschemas.default.json";
 import DEFAULT_DELIVERY_AREA from "../data/deliveryareaschemas.default.json";
 
-export class DataProvider {
+
+export class DataProvider implements WProvider {
   #services: string[];
   #settings : IWSettings;
   #blocked_off : JSFEBlockedOff;
@@ -21,7 +23,7 @@ export class DataProvider {
   #keyvalueconfig : { [key:string]: string };
   constructor() {
   }
-  Bootstrap = async (cb : ()=>Promise<any>) => {
+  Bootstrap = async () => {
     logger.info("Loading from and bootstrapping to database.");
 
     // look for key value config area:
@@ -140,10 +142,6 @@ export class DataProvider {
             this.#blocked_off);
         }
       }
-    }
-
-    if (cb) {
-      return await cb();
     }
   };
 

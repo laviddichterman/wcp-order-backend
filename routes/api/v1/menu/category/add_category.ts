@@ -2,6 +2,8 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { body, validationResult } from 'express-validator';
 import { CheckJWT, ScopeWriteCatalog } from '../../../../../config/authorization';
+import CatalogProviderInstance from '../../../../../config/catalog_provider';
+import logger from '../../../../../logging';
 
 const ValidationChain = [  
   body('name').trim().exists(),
@@ -21,7 +23,7 @@ module.exports = Router({ mergeParams: true })
       if (!errors.isEmpty()) {
         return res.status(422).json({ errors: errors.array() });
       }
-      const newcategory = await req.catalog.CreateCategory({
+      const newcategory = await CatalogProviderInstance.CreateCategory({
         name: req.body.name,
         ordinal: req.body.ordinal,
         description: req.body.description,
@@ -30,7 +32,7 @@ module.exports = Router({ mergeParams: true })
         parent_id: req.body.parent_id,
         display_flags: req.body.display_flags
       });
-      const location = `${req.base}${req.originalUrl}/${newcategory.id}`;
+      const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/${newcategory.id}`;
       res.setHeader('Location', location);
       return res.status(201).send(newcategory);
     } catch (error) {

@@ -3,6 +3,8 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { param, body, validationResult } from 'express-validator';
 import { CheckJWT, ScopeWriteCatalog } from '../../../../../config/authorization';
+import CatalogProviderInstance from '../../../../../config/catalog_provider';
+import logger from '../../../../../logging';
 
 const ValidationChain = [  
   // kinda wonky since you could potentially re-assign the modifier type here, but it's in the path
@@ -40,7 +42,7 @@ module.exports = Router({ mergeParams: true })
       if (!errors.isEmpty()) {
         return res.status(422).json({ errors: errors.array() });
       }
-      const doc = await req.catalog.UpdateModifierOption(req.params.mo_id, {
+      const doc = await CatalogProviderInstance.UpdateModifierOption(req.params.mo_id, {
         display_name: req.body.display_name, 
         description: req.body.description, 
         price: req.body.price, 
@@ -51,17 +53,19 @@ module.exports = Router({ mergeParams: true })
           squareID: req.body.squareID
         },
         ordinal: req.body.ordinal, 
-        flavor_factor: req.body.flavor_factor, 
-        bake_factor: req.body.bake_factor, 
-        can_split: req.body.can_split, 
+        metadata: {
+          flavor_factor: req.body.flavor_factor, 
+          bake_factor: req.body.bake_factor, 
+          can_split: req.body.can_split, 
+        },
         enable_function: req.body.enable_function,
         display_flags: req.body.display_flags,
       });
       if (!doc) {
-        req.logger.info(`Unable to update ModifierOption: ${req.params.mo_id}`);
+        logger.info(`Unable to update ModifierOption: ${req.params.mo_id}`);
         return res.status(404).send(`Unable to update ModifierOption: ${req.params.mo_id}`);;
       }
-      req.logger.info(`Successfully updated ${JSON.stringify(doc)}`);
+      logger.info(`Successfully updated ${JSON.stringify(doc)}`);
       return res.status(200).send(doc);
     } catch (error) {
       next(error)

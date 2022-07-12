@@ -7,6 +7,8 @@ import StoreCreditProviderInstance from "../../../../../config/store_credit_prov
 import GoogleProvider from "../../../../../config/google";
 import { CheckJWT, ScopeEditCredit } from '../../../../../config/authorization';
 import internal from "stream";
+import DataProviderInstance from '../../../../../config/dataprovider';
+import logger from '../../../../../logging';
 
 const DISPLAY_DATE_FORMAT = "EEEE, MMMM dd, y";
 
@@ -42,8 +44,8 @@ const ValidationChain = [
 
 module.exports = Router({ mergeParams: true })
   .post('/v1/payments/storecredit/discount', CheckJWT, ScopeEditCredit, ValidationChain, async (req : Request, res: Response, next: NextFunction) => {
-    const EMAIL_ADDRESS = req.db.KeyValueConfig.EMAIL_ADDRESS;
-    const STORE_NAME = req.db.KeyValueConfig.STORE_NAME;
+    const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
+    const STORE_NAME = DataProviderInstance.KeyValueConfig.STORE_NAME;
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
@@ -62,7 +64,7 @@ module.exports = Router({ mergeParams: true })
       const expiration_formatted = expiration ? format(expiration, WDateUtils.DATE_STRING_INTERNAL_FORMAT) : "";
       await StoreCreditProviderInstance.CreateCreditFromCreditCode(`${recipient_name_first} ${recipient_name_last}`, amountAsString, "DISCOUNT", credit_code, expiration_formatted, added_by, reason);
       await CreateExternalEmail(EMAIL_ADDRESS, STORE_NAME, amountAsString, recipient_name_first, recipient_name_last, recipient_email, credit_code, expiration, qr_code_fs);
-      req.logger.info(`Store credit code: ${credit_code} of type DISCOUNT for ${amountAsString} added by ${added_by} for reason: ${reason}.`)
+      logger.info(`Store credit code: ${credit_code} of type DISCOUNT for ${amountAsString} added by ${added_by} for reason: ${reason}.`)
       return res.status(200).json({ credit_code: credit_code });
     } catch (error) {
       GoogleProvider.SendEmail(

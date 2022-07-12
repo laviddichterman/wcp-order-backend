@@ -1,5 +1,5 @@
 import logger from '../logging';
-import {Promise} from 'bluebird';
+import { WProvider } from '../interfaces/WProvider';
 import PACKAGE_JSON from '../package.json';
 import { CURRENCY, SEMVER } from '@wcp/wcpshared';
 import DBVersionModel from '../models/DBVersionSchema';
@@ -20,12 +20,12 @@ const UPGRADE_MIGRATION_FUNCTIONS : IMigrationFunctionObject = {
   }],
 }
 
-export class DatabaseManager {
+export class DatabaseManager implements WProvider {
   #DBVersionSchema: typeof DBVersionModel;
   constructor() {
   }
 
-  Bootstrap = async (cb : any) => {
+  Bootstrap = async () => {
     const [VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH] = PACKAGE_JSON.version.split(".", 3).map(x => parseInt(x));
     const VERSION_PACKAGE = { major: VERSION_MAJOR, minor: VERSION_MINOR, patch: VERSION_PATCH };
 
@@ -61,9 +61,6 @@ export class DatabaseManager {
     }
 
     logger.info("Database upgrade checks completed.");
-    if (cb) {
-      return await cb();
-    }
   };
 
 

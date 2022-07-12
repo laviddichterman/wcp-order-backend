@@ -3,6 +3,8 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { query, validationResult } from 'express-validator';
 import { Client } from "@googlemaps/google-maps-services-js";
 import turf from '@turf/turf';
+import DataProviderInstance from '../../../../config/dataprovider';
+import logger from '../../../../logging';
 const client = new Client({});
 
 const ValidationChain = [  
@@ -25,7 +27,7 @@ export const route = Router({ mergeParams: true })
       const zipcode = req.query.zipcode as string;
       const city = req.query.city as string;
       const state = req.query.state as string;
-      const DELIVERY_POLY = turf.polygon(req.db.DeliveryArea.coordinates);
+      const DELIVERY_POLY = turf.polygon(DataProviderInstance.DeliveryArea.coordinates);
       client.geocode( { 
         params: { 
           address: `${address_line} ${zipcode} ${city}, ${state}`,
@@ -39,7 +41,7 @@ export const route = Router({ mergeParams: true })
           result.geometry.location.lat]);
         const in_area = turf.booleanPointInPolygon(address_point, DELIVERY_POLY);
         const street_number_component = result.address_components.find(x => x.types[0] === "street_number");
-        req.logger.info(`Found address ${result.formatted_address}. In area: ${in_area}`);
+        logger.info(`Found address ${result.formatted_address}. In area: ${in_area}`);
         res.status(200).json({ validated_address: result.formatted_address,
           in_area,
           found: 
@@ -49,7 +51,7 @@ export const route = Router({ mergeParams: true })
         });
       })
       .catch (e => {
-        req.logger.error(e);
+        logger.error(e);
         res.status(500).json(e);
       })
     } catch (error) {

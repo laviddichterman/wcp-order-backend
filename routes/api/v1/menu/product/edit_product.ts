@@ -4,6 +4,8 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { param, body, validationResult } from 'express-validator';
 import { CheckJWT, ScopeWriteCatalog } from '../../../../../config/authorization';
+import CatalogProviderInstance from '../../../../../config/catalog_provider';
+import logger from '../../../../../logging';
 
 const ValidationChain = [  
   param('pid').trim().escape().exists().isMongoId(), 
@@ -40,7 +42,7 @@ module.exports = Router({ mergeParams: true })
       if (!errors.isEmpty()) {
         return res.status(422).json({ errors: errors.array() });
       }
-      const doc = await req.catalog.UpdateProduct(req.params.pid, {
+      const doc = await CatalogProviderInstance.UpdateProduct(req.params.pid, {
         price: req.body.price,
         disabled: req.body.disabled ? req.body.disabled : null, 
         service_disable: req.body.service_disable || [],
@@ -53,10 +55,10 @@ module.exports = Router({ mergeParams: true })
         display_flags: req.body.display_flags,
       });
       if (!doc) {
-        req.logger.info(`Unable to update Product: ${req.params.pid}`);
+        logger.info(`Unable to update Product: ${req.params.pid}`);
         return res.status(404).send(`Unable to update Product: ${req.params.pid}`);
       }
-      req.logger.info(`Successfully updated ${JSON.stringify(doc)}`);
+      logger.info(`Successfully updated ${JSON.stringify(doc)}`);
       return res.status(200).send(doc);
     } catch (error) {
       next(error)

@@ -1,16 +1,13 @@
-import type {Logger} from 'winston';
-import * as Bluebird from 'bluebird';
+// declare module 'express-serve-static-core' {
+//   interface Request {
+//     base?: string;
+//     logger?: import('winston').Logger;
+//     catalog?: import('./config/catalog_provider').CatalogProvider;
+//     socket_ro?: import('socket.io').Namespace;
+//     db?: import('./config/dataprovider').DataProvider;
+//   }
+// }
 
-declare module 'express-serve-static-core' {
-  interface Request {
-    base?: string;
-    logger?: Logger;
-    db?: any;
-    catalog?: any
-    socket_ro?: any;
-  }
-}
-
-declare module 'mongoose' {
-  type Promise<T> = Bluebird<T>;
-}
+// declare module 'mongoose' {
+//   type Promise<T> = import('bluebird')<T>;
+// }

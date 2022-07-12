@@ -19,7 +19,7 @@ module.exports = Router({ mergeParams: true })
       }
       req.db.BlockedOff = req.body;
       req.socket_ro.emit('WCP_BLOCKED_OFF', req.db.BlockedOff);
-      const location = `${req.base}${req.originalUrl}/${req.db.BlockedOff._id}`;
+      const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/${req.db.BlockedOff._id}`;
       res.setHeader('Location', location);
       return res.status(201).send(req.db.BlockedOff);
     } catch (error) {

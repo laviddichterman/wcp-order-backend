@@ -1,80 +1,39 @@
 require('dotenv').config();
 
-import express from 'express';
-import http from "http";
-import socketIo from "socket.io";
-import bodyParser from 'body-parser';
-import cors from 'cors';
-import idempotency from 'express-idempotency';
-import expressWinston from 'express-winston';
 import { intervalToDuration, formatDuration } from 'date-fns';
 import logger from "./logging";
 import { GenerateRouter } from './routes';
-import GoogleProviderInstance from "./config/google";
-import SquareProviderInstance from "./config/square";
-import StoreCreditProviderInstance from "./config/store_credit_provider";
-import DatabaseConnectionCreator from './create_database';
+import GoogleProvider from "./config/google";
+import SquareProvider from "./config/square";
+import StoreCreditProvider from "./config/store_credit_provider";
 import DatabaseManagerInstance from "./config/database_manager";
 import DataProviderInstance from "./config/dataprovider";
-import CatalogProvider from "./config/catalog_provider";
+import CatalogProviderInstance from "./config/catalog_provider";
+import WApp from './App';
 
-const PORT = process.env.PORT || 4001;
-const ORIGINS = [/https:\/\/.*\.windycitypie\.com$/, /https:\/\/.*\.breezytownpizza\.com$/, `http://localhost:${PORT}`];
+const app = new WApp(["nsRO"],
+  [
+    // new PostController(),
+    // new AuthenticationController(),
+    // new UserController(),
+    // new ReportController(),
+  ],
+  [DatabaseManagerInstance, DataProviderInstance, GoogleProvider, SquareProvider, CatalogProviderInstance]
+);
 
-const router = GenerateRouter();
-const app = express();
-const server = http.createServer(app);
-const io = new socketIo.Server(server, 
-  {
-    transports: ["websocket", "polling"], 
-    allowEIO3: true,
-    cors: {
-      origin: ORIGINS,
-      methods: ["GET", "POST"],
-      credentials: true
-    }
-  });
-const socket_ro = io.of("/nsRO");
 
-DatabaseConnectionCreator({ logger });
-const CatalogProviderInstance = new CatalogProvider(socket_ro);
 
-// needs to run first
-DatabaseManagerInstance.Bootstrap(async () => {
-  DataProviderInstance.Bootstrap(async () => {
-    await GoogleProviderInstance.BootstrapProvider(DataProviderInstance);
-    SquareProviderInstance.BootstrapProvider(DataProviderInstance);
-    StoreCreditProviderInstance.BootstrapProvider(DataProviderInstance, GoogleProviderInstance);
-  });
-  await CatalogProviderInstance.Bootstrap(null);  
-});
 
-app.use(idempotency.idempotency());
-app.use(cors({origin: ORIGINS}));
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: false }));
-app.use(expressWinston.logger({
-  winstonInstance: logger,
-  msg: '{{res.statusCode}} {{req.method}} {{req.url}} {{res.responseTime}}ms',
-  meta: false,
-}));
-app.use((req, res, next) => {
-  req.base = `${req.protocol}://${req.get('host')}`
-  req.logger = logger;
-  req.db = DataProviderInstance;
-  req.catalog = CatalogProviderInstance;
-  req.socket_ro = socket_ro;
-  return next()
-});
 
-app.use('/api', router);
+
+
 
 socket_ro.on('connect',(socket) => { 
   const connect_time = new Date();
   socket.client.request.headers["x-real-ip"] ? 
     logger.info(`CONNECTION: Client at IP: ${socket.client.request.headers["x-real-ip"]}, UA: ${socket.client.request.headers['user-agent']}.`) : 
     logger.info(`CONNECTION: Client info: ${JSON.stringify(socket.client.request.headers)}.`);
-  logger.info(`Num Connected: ${io.engine.clientsCount}`);
+  logger.info(`Num Connected: ${app.getSocketIoServer().engine.clientsCount}`);
 
   socket.emit('WCP_SERVICES', DataProviderInstance.Services);
   socket.emit('WCP_LEAD_TIMES', DataProviderInstance.LeadTimes);
@@ -88,14 +47,11 @@ socket_ro.on('connect',(socket) => {
     socket.client.request.headers["x-real-ip"] ? 
       logger.info(`DISCONNECT: ${reason} after ${formattedDuration}. IP: ${socket.client.request.headers["x-real-ip"]}`) : 
       logger.info(`DISCONNECT: ${reason} after ${formattedDuration}.\nClient: ${JSON.stringify(socket.client.request.headers)}`);
-    logger.info(`Num Connected: ${io.engine.clientsCount}`);
+    logger.info(`Num Connected: ${app.getSocketIoServer().engine.clientsCount}`);
   });
 });
 
 
+app.listen();
 
-server.listen(PORT, function () {
-  logger.info("Server is running on Port: " + PORT);
-});
-
-module.exports = server;
+module.exports = app;

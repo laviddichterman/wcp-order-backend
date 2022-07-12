@@ -1,6 +1,8 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { param, body, validationResult } from 'express-validator';
 import { CheckJWT, ScopeWriteCatalog } from '../../../../../config/authorization';
+import CatalogProviderInstance from '../../../../../config/catalog_provider';
+import logger from '../../../../../logging';
 
 const ValidationChain = [
   param('mtid').trim().escape().exists().isMongoId(),
@@ -29,7 +31,7 @@ module.exports = Router({ mergeParams: true })
       if (!errors.isEmpty()) {
         return res.status(422).json({ errors: errors.array() });
       }
-      const doc = await req.catalog.UpdateModifierType(
+      const doc = await CatalogProviderInstance.UpdateModifierType(
         req.params.mtid,
         {
           name: req.body.name,
@@ -45,10 +47,10 @@ module.exports = Router({ mergeParams: true })
         }
       );
       if (!doc) {
-        req.logger.info(`Unable to update ModifierType: ${req.params.mtid}`);
+        logger.info(`Unable to update ModifierType: ${req.params.mtid}`);
         return res.status(404).send(`Unable to update ModifierType: ${req.params.mtid}`);;
       }
-      req.logger.info(`Successfully updated ${JSON.stringify(doc)}`);
+      logger.info(`Successfully updated ${JSON.stringify(doc)}`);
       return res.status(200).send(doc);
     } catch (error) {
       next(error)

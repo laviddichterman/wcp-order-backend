@@ -2,6 +2,8 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { param, body, validationResult } from 'express-validator';
 import { CheckJWT, ScopeWriteCatalog } from '../../../../../config/authorization';
+import CatalogProviderInstance from '../../../../../config/catalog_provider';
+import logger from '../../../../../logging';
 
 const ValidationChain = [
   param('pid').trim().escape().exists().isMongoId(), 
@@ -37,7 +39,7 @@ module.exports = Router({ mergeParams: true })
       if (!errors.isEmpty()) {
         return res.status(422).json({ errors: errors.array() });
       }
-      const doc = await req.catalog.CreateProductInstance(req.params.pid, {
+      const doc = await CatalogProviderInstance.CreateProductInstance(req.params.pid, {
         description: req.body.description,
         display_name: req.body.display_name,
         shortcode: req.body.shortcode,
@@ -51,10 +53,10 @@ module.exports = Router({ mergeParams: true })
         display_flags: req.body.display_flags
       });
       if (!doc) {
-        req.logger.info(`Unable to find parent product id: ${req.params.pid} to create new product instance`);
+        logger.info(`Unable to find parent product id: ${req.params.pid} to create new product instance`);
         return res.status(404).send(`Unable to find parent product id: ${req.params.pid} to create new product instance`);
       }
-      const location = `${req.base}${req.originalUrl}/${doc._id}`;
+      const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/${doc._id}`;
       res.setHeader('Location', location);
       return res.status(201).send(doc);
     } catch (error) {

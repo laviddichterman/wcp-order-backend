@@ -5,10 +5,11 @@ import logger from '../logging';
 import OAUTH2_KEYS from "../authentication/auth.json";
 import SMTPTransport from "nodemailer/lib/smtp-transport";
 import Mail from "nodemailer/lib/mailer";
-import { DataProvider } from "./dataprovider";
+import DataProviderInstance from "./dataprovider";
+import { WProvider } from '../interfaces/WProvider';
 const OAuth2 = google.auth.OAuth2;
 
-export class GoogleProvider {
+export class GoogleProvider implements WProvider {
   static get GOOGLE_EVENTS_DATETIME_FORMAT() {
     return "yyyy-MM-ddTHH:mm:ss";
   }
@@ -39,8 +40,8 @@ export class GoogleProvider {
     }
   }
 
-  BootstrapProvider = async (db : DataProvider) => {
-    const cfg = db.KeyValueConfig;
+  Bootstrap = async () => {
+    const cfg = DataProviderInstance.KeyValueConfig;
     if (cfg.GOOGLE_REFRESH_TOKEN && cfg.EMAIL_ADDRESS) {
       logger.debug("Got refresh token from DB config: %o", cfg.GOOGLE_REFRESH_TOKEN);
       this.#oauth2Client.setCredentials({

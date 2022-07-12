@@ -39,12 +39,12 @@ export const WOptionTypeSchema = new Schema<IOptionType>({
     // to this modifier type by saying nothing, your choice of {display_name}, or if max_selected===1 listing the choices
     // if the enable_function returns false, then no text is displayed
     empty_display_as: {
-      type: DISPLAY_AS,
+      type: String,
       enum: DISPLAY_AS,
       required: true
     },
     modifier_class: {
-      type: MODIFIER_CLASS,
+      type: String,
       enum: MODIFIER_CLASS,
       required: true
     },

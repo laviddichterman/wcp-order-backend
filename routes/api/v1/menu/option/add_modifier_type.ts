@@ -2,6 +2,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { body, validationResult } from 'express-validator';
 import { CheckJWT, ScopeWriteCatalog } from '../../../../../config/authorization';
+import CatalogProviderInstance from '../../../../../config/catalog_provider';
 
 const ValidationChain = [  
   body('name').trim().exists(),
@@ -30,7 +31,7 @@ module.exports = Router({ mergeParams: true })
       if (!errors.isEmpty()) {
         return res.status(422).json({ errors: errors.array() });
       }
-      const doc = await req.catalog.CreateModifierType({
+      const doc = await CatalogProviderInstance.CreateModifierType({
         name: req.body.name,
         display_name: req.body.display_name,
         ordinal: req.body.ordinal,
@@ -42,7 +43,7 @@ module.exports = Router({ mergeParams: true })
         },
         display_flags: req.body.display_flags,
       });
-      const location = `${req.base}${req.originalUrl}/${doc.id}`;
+      const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/${doc.id}`;
       res.setHeader('Location', location);
       return res.status(201).send(doc);
     } catch (error) {

@@ -29,7 +29,7 @@ export const WProductInstanceSchema = new Schema<IProductInstance>({
       hide: Boolean,
       // governs how prices get displayed in the menu page according to the enum      
       price_display: {    
-          type: PriceDisplay,
+          type: String,
           enum: PriceDisplay
       },
       // HTML-friendly message wrapping the display of this PI in the menu page
@@ -49,8 +49,9 @@ export const WProductInstanceSchema = new Schema<IProductInstance>({
       skip_customization: Boolean,
       // governs how prices get displayed in the order page according to the enum
       price_display: {    
-        type: PriceDisplay
-    },
+        type: String,
+        enum: PriceDisplay
+      },
       // HTML-friendly message wrapping the display of this PI in the order page
       adornment: String,
       // suppress the default pizza functionality where the full modifier list is surfaced on the product display

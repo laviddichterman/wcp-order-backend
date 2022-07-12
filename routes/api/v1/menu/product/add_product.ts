@@ -2,6 +2,8 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { body, validationResult } from 'express-validator';
 import { CheckJWT, ScopeWriteCatalog } from '../../../../../config/authorization';
+import CatalogProviderInstance from '../../../../../config/catalog_provider';
+import logger from '../../../../../logging';
 
 const ValidationChain = [
   body('display_name').trim().exists(),
@@ -40,7 +42,7 @@ module.exports = Router({ mergeParams: true })
       if (!errors.isEmpty()) {
         return res.status(422).json({ errors: errors.array() });
       }
-      const newproduct = await req.catalog.CreateProduct({
+      const newproduct = await CatalogProviderInstance.CreateProduct({
         price: req.body.price,
         disabled: req.body.disabled ? req.body.disabled : null, 
         service_disable: req.body.service_disable || [],
@@ -51,14 +53,15 @@ module.exports = Router({ mergeParams: true })
         modifiers: req.body.modifiers,
         category_ids: req.body.category_ids,
         display_flags: req.body.display_flags,
-        suppress_catalog_recomputation: req.body.create_product_instance || req.body.suppress_catalog_recomputation
-      });
+      }, 
+      req.body.create_product_instance || req.body.suppress_catalog_recomputation // aka : suppress_catalog_recomputation
+      );
       if (!newproduct) {
-        req.logger.info(`Unable to find Modifiers or Categories to create Product`);
+        logger.info(`Unable to find Modifiers or Categories to create Product`);
         return res.status(404).send("Unable to find Modifiers or Categories to create Product");
       }
       if (req.body.create_product_instance) {
-        const pi = await req.catalog.CreateProductInstance(newproduct._id, {
+        const pi = await CatalogProviderInstance.CreateProductInstance(newproduct._id, {
           description: req.body.description,
           display_name: req.body.display_name,
           shortcode: req.body.shortcode,
@@ -85,17 +88,18 @@ module.exports = Router({ mergeParams: true })
               suppress_exhaustive_modifier_list: false
             }
           },
+          modifiers: [],
           is_base: true
         });
         if (!pi) {
-          req.logger.info(`Error while creating product instance for ${newproduct._id}.`);
+          logger.info(`Error while creating product instance for ${newproduct._id}.`);
           return res.status(500).send(`Error while creating product instance for  ${newproduct._id}.`);
         }
-        const location = `${req.base}${req.originalUrl}/${newproduct._id}/${pi._id}`;
+        const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/${newproduct._id}/${pi._id}`;
         res.setHeader('Location', location);
         return res.status(201).send({ product_instance: pi, product: newproduct });
       }
-      const location = `${req.base}${req.originalUrl}/${newproduct._id}`;
+      const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/${newproduct._id}`;
       res.setHeader('Location', location);
       return res.status(201).send(newproduct);
     } catch (error) {

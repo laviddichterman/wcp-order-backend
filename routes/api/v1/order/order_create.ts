@@ -5,8 +5,10 @@ import { body, validationResult } from 'express-validator';
 import GoogleProvider from "../../../../config/google";
 import SquareProvider from "../../../../config/square";
 import StoreCreditProvider from "../../../../config/store_credit_provider";
+import CatalogProviderInstance from '../../../../config/catalog_provider';
+import logger from '../../../../logging';
+
 import {CreateProductWithMetadataFromJsFeDto, WDateUtils, PRODUCT_LOCATION, OptionPlacement, WProductMetadata, ICatalog, IMenu} from "@wcp/wcpshared";
-import winston from 'winston/lib/winston/config';
 const WCP = "Windy City Pie";
 const DELIVERY_INTERVAL_TIME = 30;
 
@@ -339,7 +341,7 @@ const CreateOrderEvent = async (
      });
 }
 
-const CreateSquareOrderAndCharge = async (logger, reference_id : string, balance : number, nonce, note) => {
+const CreateSquareOrderAndCharge = async (reference_id : string, balance : number, nonce, note) => {
   const amount_to_charge = Math.round(balance * 100);
   const create_order_response = await SquareProvider.CreateOrderStoreCredit(reference_id, amount_to_charge, note);
   if (create_order_response.success === true) {
@@ -399,7 +401,7 @@ module.exports = Router({ mergeParams: true })
     const DELIVERY_INSTRUCTIONS = req.db.KeyValueConfig.DELIVERY_INSTRUCTIONS;
     const STORE_ADDRESS = req.db.KeyValueConfig.STORE_ADDRESS;
 
-    req.logger.info(`Received order request: ${JSON.stringify(req.body)}`);
+    logger.info(`Received order request: ${JSON.stringify(req.body)}`);
 
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -443,7 +445,7 @@ module.exports = Router({ mergeParams: true })
     if (store_credit.amount_used > 0) {
       store_credit_response = await StoreCreditProvider.ValidateLockAndSpend(store_credit.code, store_credit.encoded, store_credit.amount_used, STORE_NAME);
       if (!store_credit_response.success) {
-        req.logger.error("Failed to process store credit step of ordering");
+        logger.error("Failed to process store credit step of ordering");
         return res.status(404).json({success: false, result: {errors: [{detail: "Unable to debit store credit."}]} });
       }
     }
@@ -456,19 +458,19 @@ module.exports = Router({ mergeParams: true })
     let charging_response = [false, undefined];
     if (totals.balance > 0 && nonce) {
       try {
-        charging_response = await CreateSquareOrderAndCharge(req.logger, reference_id, totals.balance, nonce, square_order_note)
+        charging_response = await CreateSquareOrderAndCharge(reference_id, totals.balance, nonce, square_order_note)
       } catch (error) {
         // if any part of step 2 fails, restore old store credit balance
         if (store_credit.amount_used > 0) {
-          req.logger.info(`Refunding ${store_credit.code} after failed credit card payment.`);
+          logger.info(`Refunding ${store_credit.code} after failed credit card payment.`);
           await StoreCreditProvider.CheckAndRefundStoreCredit(store_credit_response.entry, store_credit_response.index);
         }
-        req.logger.error(`Nasty error in processing payment: ${BigIntStringify(error)}.`);
+        logger.error(`Nasty error in processing payment: ${BigIntStringify(error)}.`);
         return res.status(500).json({success:false, result: {errors: [BigIntStringify(error)]} });
       }
       if (!charging_response[0]) {
         if (store_credit.amount_used > 0) {
-          req.logger.info(`Refunding ${store_credit.code} after failed credit card payment.`);
+          logger.info(`Refunding ${store_credit.code} after failed credit card payment.`);
           await StoreCreditProvider.CheckAndRefundStoreCredit(store_credit_response.entry, store_credit_response.index);
         }
         return res.status(400).json(charging_response[1]);
