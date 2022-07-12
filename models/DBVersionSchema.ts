@@ -1,7 +1,7 @@
-import mongoose from "mongoose";
-const Schema = mongoose.Schema;
+import { SEMVER } from "@wcp/wcpshared";
+import mongoose, {Schema} from "mongoose";
 
-export const DBVersionSchema = new Schema({ major: Number, minor: Number, patch: Number });
 
-export const DBVersionModel = mongoose.model(__filename, DBVersionSchema);
-module.exports = DBVersionSchema;
+export const DBVersionSchema = new Schema<SEMVER>({ major: Number, minor: Number, patch: Number });
+
+export default mongoose.model<SEMVER>(path.basename(__filename).replace(path.extname(__filename), ''), DBVersionSchema);

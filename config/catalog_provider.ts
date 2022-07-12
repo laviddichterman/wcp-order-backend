@@ -1,4 +1,10 @@
 import { GenerateMenu, ICatalog, SEMVER, ICatalogCategories, ICatalogModifiers, ICategory, IMenu, IOption, IOptionType, IProduct, IProductInstance, IProductInstanceFunction, IAbstractExpression, ICatalogProducts } from "@wcp/wcpshared";
+import WCategoryModel from '../models/ordering/category/WCategorySchema';
+import WProductInstanceModel from '../models/ordering/products/WProductInstanceSchema';
+import WProductModel from '../models/ordering/products/WProductSchema';
+import WOptionModel from '../models/ordering/options/WOptionSchema';
+import WOptionTypeModel from '../models/ordering/options/WOptionTypeSchema';
+import WProductInstanceFunctionModel from '../models/query/WProductInstanceFunction';
 import Promise from 'bluebird';
 import logger from '../logging';
 
@@ -118,7 +124,7 @@ const FindHasAnyModifierExpressionsForMTID: (expr: IAbstractExpression, mtid: st
   }
 }
 
-const ValidateProductModifiersFunctionsCategories = function (modifiers : , category_ids : string[], catalog: CatalogProvider) {
+const ValidateProductModifiersFunctionsCategories = function (modifiers, category_ids : string[], catalog: CatalogProvider) {
   const found_all_modifiers = modifiers.map(entry =>
     catalog.ModifierTypes.some(x => x._id.toString() === entry.mtid) &&
     (entry.enable === null || catalog.ProductInstanceFunctions.some(x => x._id.toString() === entry.enable))).every(x => x === true);
@@ -185,7 +191,7 @@ class CatalogProvider {
     // categories
     logger.debug(`Syncing Categories.`);
     try {
-      this.#categories = await this.#dbconn.WCategorySchema.find().exec();
+      this.#categories = await WCategoryModel.find().exec();
     } catch (err) {
       logger.error(`Failed fetching categories with error: ${JSON.stringify(err)}`);
       return false;
@@ -287,7 +293,7 @@ class CatalogProvider {
   };
 
   CreateCategory = async ({ description, name, ordinal, parent_id, subheading, footnotes, display_flags }) => {
-    const doc = new this.#dbconn.WCategorySchema({
+    const doc = new WCategoryModel({
       description: description,
       name: name,
       ordinal,
@@ -348,7 +354,7 @@ class CatalogProvider {
   DeleteCategory = async (category_id) => {
     logger.debug(`Removing ${category_id}`);
     try {
-      const doc = await this.#dbconn.WCategorySchema.findByIdAndDelete(category_id);
+      const doc = await WCategoryModel.findByIdAndDelete(category_id);
       if (!doc) {
         return null;
       }
@@ -358,7 +364,7 @@ class CatalogProvider {
           await cat.save();
         }
       }));
-      const products_update = await this.#dbconn.WProductSchema.updateMany({}, { $pull: { category_ids: category_id } });
+      const products_update = await WProductModel.updateMany({}, { $pull: { category_ids: category_id } });
       if (products_update.modifiedCount > 0) {
         logger.debug(`Removed Category ID from ${products_update.modifiedCount} products.`);
         await this.SyncProducts();
@@ -373,7 +379,7 @@ class CatalogProvider {
   }
 
   CreateModifierType = async ({ name, display_name, ordinal, min_selected, max_selected, externalIDs, display_flags }) => {
-    const doc = new this.#dbconn.WOptionTypeSchema({
+    const doc = new WOptionTypeModel({
       name,
       display_name,
       ordinal,
@@ -391,7 +397,7 @@ class CatalogProvider {
 
   UpdateModifierType = async (mt_id, { name, display_name, ordinal, min_selected, max_selected, externalIDs, display_flags }) => {
     try {
-      const updated = await this.#dbconn.WOptionTypeSchema.findByIdAndUpdate(
+      const updated = await WOptionTypeModel.findByIdAndUpdate(
         mt_id,
         {
           name,
@@ -419,21 +425,21 @@ class CatalogProvider {
   DeleteModifierType = async (mt_id) => {
     logger.debug(`Removing Modifier Type: ${mt_id}`);
     try {
-      const doc = await this.#dbconn.WOptionTypeSchema.findByIdAndDelete(mt_id);
+      const doc = await WOptionTypeModel.findByIdAndDelete(mt_id);
       if (!doc) {
         logger.warn("Unable to delete the ModifierType from the database.");
         return null;
       }
-      const options_delete = await this.#dbconn.WOptionSchema.deleteMany({ option_type_id: mt_id });
+      const options_delete = await WOptionModel.deleteMany({ option_type_id: mt_id });
       if (this.#catalog.modifiers[mt_id].options.length !== options_delete.deletedCount) {
         logger.error(`Mismatch between number of modifier options deleted and the number the catalog sees as child of this modifier type.`);
       }
       if (options_delete.deletedCount > 0) {
         logger.debug(`Removed ${options_delete.deletedCount} Options from the catalog.`);
       }
-      const products_update = await this.#dbconn.WProductSchema.updateMany({}, { $pull: { modifiers: mt_id } });
+      const products_update = await WProductModel.updateMany({}, { $pull: { modifiers: mt_id } });
       if (products_update.modifiedCount > 0) {
-        const product_instance_update = await this.#dbconn.WProductInstanceSchema.updateMany({}, { $pull: { modifiers: { modifier_type_id: mt_id } } });
+        const product_instance_update = await WProductInstanceModel.updateMany({}, { $pull: { modifiers: { modifier_type_id: mt_id } } });
         logger.debug(`Removed ModifierType ID from ${products_update.modifiedCount} products, ${product_instance_update.modifiedCount} product instances.`);
         await this.SyncProducts();
         await this.SyncProductInstances();
@@ -481,7 +487,7 @@ class CatalogProvider {
       return null;
     }
 
-    const doc = new this.#dbconn.WOptionSchema({
+    const doc = new WOptionModel({
       item: {
         price: {
           amount: price.amount,
@@ -528,7 +534,7 @@ class CatalogProvider {
     try {
       //TODO: post update: rebuild all products with the said modifier option since the ordinal might have changed
       // 
-      const updated = await this.#dbconn.WOptionSchema.findByIdAndUpdate(
+      const updated = await WOptionModel.findByIdAndUpdate(
         mo_id,
         {
           item: {
@@ -569,11 +575,11 @@ class CatalogProvider {
   DeleteModifierOption = async (mo_id) => {
     logger.debug(`Removing Modifier Option ${mo_id}`);
     try {
-      const doc = await this.#dbconn.WOptionSchema.findByIdAndDelete(mo_id);
+      const doc = await WOptionModel.findByIdAndDelete(mo_id);
       if (!doc) {
         return null;
       }
-      const product_instance_options_delete = await this.#dbconn.WProductInstanceSchema.updateMany(
+      const product_instance_options_delete = await WProductInstanceModel.updateMany(
         { "modifiers.modifier_type_id": doc.option_type_id },
         { $pull: { "modifiers.$.options": { option_id: mo_id } } });
       if (product_instance_options_delete.modifiedCount > 0) {
@@ -615,7 +621,7 @@ class CatalogProvider {
       return null;
     }
 
-    const doc = new this.#dbconn.WProductSchema({
+    const doc = new WProductModel({
       item: {
         externalIDs
       },
@@ -650,7 +656,7 @@ class CatalogProvider {
       const old_modifiers = this.#catalog.products[pid].product.modifiers.map(x => x.mtid.toString());
       const new_modifiers_mtids = modifiers.map(x => String(x.mtid));
       const removed_modifiers = old_modifiers.filter(x => !new_modifiers_mtids.includes(x));
-      const updated = await this.#dbconn.WProductSchema.findByIdAndUpdate(
+      const updated = await WProductModel.findByIdAndUpdate(
         pid,
         {
           item: {
@@ -671,7 +677,7 @@ class CatalogProvider {
 
       if (removed_modifiers.length) {
         await Promise.all(removed_modifiers.map(async (mtid) => {
-          const product_instance_update = await this.#dbconn.WProductInstanceSchema.updateMany({ product_id: pid }, { $pull: { modifiers: { modifier_type_id: mtid } } });
+          const product_instance_update = await WProductInstanceModel.updateMany({ product_id: pid }, { $pull: { modifiers: { modifier_type_id: mtid } } });
           logger.debug(`Removed ModifierType ID ${mtid} from ${product_instance_update.modifiedCount} product instances.`);
         }));
         await this.SyncProductInstances();
@@ -689,11 +695,11 @@ class CatalogProvider {
   DeleteProduct = async (p_id) => {
     logger.debug(`Removing Product ${p_id}`);
     try {
-      const doc = await this.#dbconn.WProductSchema.findByIdAndDelete(p_id);
+      const doc = await WProductModel.findByIdAndDelete(p_id);
       if (!doc) {
         return null;
       }
-      const product_instance_delete = await this.#dbconn.WProductInstanceSchema.deleteMany({ product_id: p_id });
+      const product_instance_delete = await WProductInstanceModel.deleteMany({ product_id: p_id });
       if (product_instance_delete.deletedCount > 0) {
         logger.debug(`Removed ${product_instance_delete.deletedCount} Product Instances.`);
         await this.SyncProductInstances();
@@ -748,7 +754,7 @@ class CatalogProvider {
     display_flags
   }) => {
     try {
-      const updated = await this.#dbconn.WProductInstanceSchema.findByIdAndUpdate(
+      const updated = await WProductInstanceModel.findByIdAndUpdate(
         piid,
         {
           product_id: pid,
@@ -781,7 +787,7 @@ class CatalogProvider {
   DeleteProductInstance = async (pi_id) => {
     logger.debug(`Removing Product Instance: ${pi_id}`);
     try {
-      const doc = await this.#dbconn.WProductInstanceSchema.findByIdAndDelete(pi_id);
+      const doc = await WProductInstanceModel.findByIdAndDelete(pi_id);
       if (!doc) {
         return null;
       }
@@ -800,7 +806,7 @@ class CatalogProvider {
   }) => {
 
     const expressions = [];
-    const doc = new this.#dbconn.WProductInstanceFunction({
+    const doc = new WProductInstanceFunctionModel({
       name: name,
       expression: expression//await GenerateAbstractExpression(this.#dbconn, expression)
     });
@@ -816,7 +822,7 @@ class CatalogProvider {
     expression
   }) => {
     try {
-      const updated = await this.#dbconn.WProductInstanceFunction.findByIdAndUpdate(
+      const updated = await WProductInstanceFunctionModel.findByIdAndUpdate(
         pif_id,
         {
           name: name,
@@ -842,18 +848,18 @@ class CatalogProvider {
   DeleteProductInstanceFunction = async (pif_id, suppress_catalog_recomputation = false) => {
     logger.debug(`Removing Product Instance Function: ${pif_id}`);
     try {
-      const doc = await this.#dbconn.WProductInstanceFunction.findByIdAndDelete(pif_id);
+      const doc = await WProductInstanceFunctionModel.findByIdAndDelete(pif_id);
       if (!doc) {
         return null;
       }
-      const options_update = await this.#dbconn.WOptionSchema.updateMany(
+      const options_update = await WOptionModel.updateMany(
         { enable_function: pif_id },
         { $set: { "enable_function": null } });
       if (options_update.modifiedCount > 0) {
         logger.debug(`Removed ${doc} from ${options_update.modifiedCount} Modifier Options.`);
         await this.SyncOptions();
       }
-      const products_update = await this.#dbconn.WProductSchema.updateMany(
+      const products_update = await WProductModel.updateMany(
         { "modifiers.enable": pif_id },
         { $set: { "modifiers.$.enable": null } });
       if (products_update.modifiedCount > 0) {
@@ -876,6 +882,6 @@ class CatalogProvider {
 
 
 
-module.exports = ({ dbconn, socketRO, socketAUTH }) => {
-  return new CatalogProvider(dbconn, socketRO, socketAUTH);
+module.exports = ({ socketRO }) => {
+  return new CatalogProvider(socketRO);
 }

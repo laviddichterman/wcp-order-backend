@@ -5,6 +5,7 @@ import { ExponentialBackoff } from '../utils';
 import logger from '../logging';
 import OAUTH2_KEYS from "../authentication/auth.json";
 import SMTPTransport from "nodemailer/lib/smtp-transport";
+import Mail from "nodemailer/lib/mailer";
 const OAuth2 = google.auth.OAuth2;
 
 export default class GoogleProvider {
@@ -12,7 +13,7 @@ export default class GoogleProvider {
     return "yyyy-MM-ddTHH:mm:ss";
   }
 
-  #accessToken : GetAccessTokenResponse | null;
+  #accessToken: string;
   #smtpTransport : nodemailer.Transporter<SMTPTransport.SentMessageInfo>;
   #calendarAPI;
   #sheetsAPI;
@@ -29,8 +30,9 @@ export default class GoogleProvider {
 
   RefreshAccessToken = async () => {
     try {
-      logger.debug("Refreshing Google OAUTH2 access token.");
-      this.#accessToken = await this.#oauth2Client.getAccessToken();
+      const token = await this.#oauth2Client.getAccessToken();
+      logger.debug(`Refreshing Google OAUTH2 access token to ${token}`);
+      this.#accessToken = token.token;
     }
     catch (error) {
       logger.error(`Failed to refresh Google access token, got error ${JSON.stringify(error)}`);
@@ -84,12 +86,11 @@ export default class GoogleProvider {
     return this.#accessToken;
   };
 
-  SendEmail = async (from : string, to : string, subject : string, replyto : string, htmlbody : string, attachments=[], retry=0, max_retry=5) => {    
-    const mailOptions = {
+  SendEmail = async (from : string, to : string, subject : string, replyto : string, htmlbody : string, attachments : Mail.Attachment[] = [], retry=0, max_retry=5) => {    
+    const mailOptions : Mail.Options = {
       from: from,
       to: to,
       subject: subject,
-      generateTextFromHTML: true,
       replyTo: replyto,
       html: htmlbody,
       attachments
