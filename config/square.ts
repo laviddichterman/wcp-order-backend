@@ -2,9 +2,9 @@ import {  ApiError, Client, CreateOrderRequest, CreatePaymentRequest, Environmen
 
 import crypto from 'crypto';
 import logger from'../logging';
-import DataProvider from './dataprovider';
+import { DataProvider } from './dataprovider';
 
-export default class SquareProvider {
+export class SquareProvider {
   #client : Client;
   #location_id : string;
   constructor() {
@@ -113,4 +113,6 @@ export default class SquareProvider {
   }
 };
 
-module.exports = SquareProvider;
+const SquareProviderInstance = new SquareProvider();
+export default SquareProviderInstance;
+module.exports = SquareProviderInstance;

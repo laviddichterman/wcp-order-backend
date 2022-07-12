@@ -1,5 +1,5 @@
 // creates a new product instance in the catalog
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { param, body, validationResult } from 'express-validator';
 import { CheckJWT, ScopeWriteCatalog } from '../../../../../config/authorization';
 
@@ -31,7 +31,7 @@ const ValidationChain = [
 ];
 
 module.exports = Router({ mergeParams: true })
-  .post('/v1/menu/product/:pid/', CheckJWT, ScopeWriteCatalog, ValidationChain, async (req, res, next) => {
+  .post('/v1/menu/product/:pid/', CheckJWT, ScopeWriteCatalog, ValidationChain, async (req : Request, res: Response, next: NextFunction) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {

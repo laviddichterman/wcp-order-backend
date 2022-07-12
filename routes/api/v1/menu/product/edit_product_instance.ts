@@ -1,7 +1,7 @@
 // edits a product in the catalog
 // TODO: double check that fields not passed aren't removed. 
 // make it so fields that aren't present in the body are handled properly
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { param, body, validationResult } from 'express-validator';
 import { CheckJWT, ScopeWriteCatalog } from '../../../../../config/authorization';
 
@@ -34,7 +34,7 @@ const ValidationChain = [
 ];
 
 module.exports = Router({ mergeParams: true })
-  .patch('/v1/menu/product/:pid/:piid', CheckJWT, ScopeWriteCatalog, ValidationChain, async (req, res, next) => {
+  .patch('/v1/menu/product/:pid/:piid', CheckJWT, ScopeWriteCatalog, ValidationChain, async (req : Request, res: Response, next: NextFunction) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {

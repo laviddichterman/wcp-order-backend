@@ -1,6 +1,6 @@
 // edits an option in the catalog
 // TODO: double check that fields not passed aren't removed. make it so fields that aren't present in the 
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { param, body, validationResult } from 'express-validator';
 import { CheckJWT, ScopeWriteCatalog } from '../../../../../config/authorization';
 
@@ -28,13 +28,13 @@ const ValidationChain = [
   body('flavor_factor').isFloat({ min: 0, max: 5 }),
   body('bake_factor').isFloat({ min: 0, max: 5 }),
   // don't sanitize this to boolean, but validate that it is a boolean
-  body('can_split').isBoolean(true), 
+  body('can_split').isBoolean({ strict: true }), 
   body('display_flags.omit_from_shortname').toBoolean(true),
   body('display_flags.omit_from_name').toBoolean(true),
 ];
 
 module.exports = Router({ mergeParams: true })
-  .patch('/v1/menu/option/:mt_id/:mo_id', CheckJWT, ScopeWriteCatalog, ValidationChain, async (req, res, next) => {
+  .patch('/v1/menu/option/:mt_id/:mo_id', CheckJWT, ScopeWriteCatalog, ValidationChain, async (req : Request, res: Response, next: NextFunction) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {

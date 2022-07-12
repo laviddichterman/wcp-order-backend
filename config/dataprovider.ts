@@ -12,7 +12,7 @@ import DEFAULT_SETTINGS from "../data/settingsschemas.default.json";
 import DEFAULT_SERVICES from "../data/servicesschemas.default.json";
 import DEFAULT_DELIVERY_AREA from "../data/deliveryareaschemas.default.json";
 
-class DataProvider {
+export class DataProvider {
   #services: string[];
   #settings : IWSettings;
   #blocked_off : JSFEBlockedOff;
@@ -256,5 +256,8 @@ class DataProvider {
   //   service_info) {
   //     //TODO
   // }
-}
-export default DataProvider;
+};
+
+const DataProviderInstance = new DataProvider();
+export default DataProviderInstance;
+module.exports = DataProviderInstance;

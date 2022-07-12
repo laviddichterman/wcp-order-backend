@@ -1,6 +1,5 @@
 // edits a category
-
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { param, body, validationResult } from 'express-validator';
 import { CheckJWT, ScopeWriteCatalog } from '../../../../../config/authorization';
 
@@ -17,7 +16,7 @@ const ValidationChain = [
 ];
 
 module.exports = Router({ mergeParams: true })
-  .patch('/v1/menu/category/:catid', CheckJWT, ScopeWriteCatalog, ValidationChain, async (req, res, next) => {
+  .patch('/v1/menu/category/:catid', CheckJWT, ScopeWriteCatalog, ValidationChain, async (req : Request, res: Response, next: NextFunction) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {

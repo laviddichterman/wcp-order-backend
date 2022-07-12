@@ -75,7 +75,7 @@ const CatalogGenerator = (
     products: product_map,
     version: Date.now().toString(36).toUpperCase(),
     product_instance_functions: product_instance_functions,
-    api,
+    api
   } as ICatalog;
 }
 
@@ -127,7 +127,7 @@ const ValidateProductModifiersFunctionsCategories = function (modifiers: { mtid:
   return found_all_categories && found_all_modifiers;
 }
 
-class CatalogProvider {
+export class CatalogProvider {
   #socketRO;
   #categories: HydratedDocument<ICategory>[];
   #modifier_types: HydratedDocument<IOptionType>[];

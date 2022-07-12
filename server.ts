@@ -10,12 +10,12 @@ import expressWinston from 'express-winston';
 import { intervalToDuration, formatDuration } from 'date-fns';
 import logger from "./logging";
 import { GenerateRouter } from './routes';
-import GoogleProvider from "./config/google";
-import SquareProvider from "./config/square";
-import StoreCreditProvider from "./config/store_credit_provider";
+import GoogleProviderInstance from "./config/google";
+import SquareProviderInstance from "./config/square";
+import StoreCreditProviderInstance from "./config/store_credit_provider";
 import DatabaseConnectionCreator from './create_database';
-import DatabaseManager from "./config/database_manager";
-import DataProvider from "./config/dataprovider";
+import DatabaseManagerInstance from "./config/database_manager";
+import DataProviderInstance from "./config/dataprovider";
 import CatalogProvider from "./config/catalog_provider";
 
 const PORT = process.env.PORT || 4001;
@@ -37,13 +37,7 @@ const io = new socketIo.Server(server,
 const socket_ro = io.of("/nsRO");
 
 DatabaseConnectionCreator({ logger });
-const DatabaseManagerInstance = new DatabaseManager();
-const DataProviderInstance = new DataProvider();
 const CatalogProviderInstance = new CatalogProvider(socket_ro);
-const GoogleProviderInstance = new GoogleProvider();
-const SquareProviderInstance = new SquareProvider();
-const StoreCreditProviderInstance = new StoreCreditProvider();
-
 
 // needs to run first
 DatabaseManagerInstance.Bootstrap(async () => {

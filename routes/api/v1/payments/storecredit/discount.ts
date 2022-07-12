@@ -2,14 +2,15 @@
 import {WDateUtils} from "@wcp/wcpshared";
 import { parse, format } from 'date-fns'; 
 import { body, validationResult } from 'express-validator';
-import { Router } from 'express';
-import StoreCreditProvider from "../../../../../config/store_credit_provider";
+import { Router, Request, Response, NextFunction } from 'express';
+import StoreCreditProviderInstance from "../../../../../config/store_credit_provider";
 import GoogleProvider from "../../../../../config/google";
 import { CheckJWT, ScopeEditCredit } from '../../../../../config/authorization';
+import internal from "stream";
 
 const DISPLAY_DATE_FORMAT = "EEEE, MMMM dd, y";
 
-const CreateExternalEmail = async (EMAIL_ADDRESS, STORE_NAME, amount, recipient_name_first, recipient_name_last, recipient_email, credit_code, expiration, qr_code_fs) => {
+const CreateExternalEmail = async (EMAIL_ADDRESS : string, STORE_NAME: string, amount : string, recipient_name_first: string, recipient_name_last: string, recipient_email : string, credit_code : string , expiration : Date | null, qr_code_fs : internal.PassThrough) => {
   const expiration_section = expiration ? `<br />Please note that this credit will expire at 11:59PM on ${format(expiration, DISPLAY_DATE_FORMAT)}.` : "";
   const emailbody = `<h2>You've been sent a discount code from ${STORE_NAME}!</h2>
   <p>Credit code: <strong>${credit_code}</strong> valuing <strong>\$${amount}</strong> for ${recipient_name_first} ${recipient_name_last}.<br />
@@ -40,7 +41,7 @@ const ValidationChain = [
 ];
 
 module.exports = Router({ mergeParams: true })
-  .post('/v1/payments/storecredit/discount', CheckJWT, ScopeEditCredit, ValidationChain, async (req, res, next) => {
+  .post('/v1/payments/storecredit/discount', CheckJWT, ScopeEditCredit, ValidationChain, async (req : Request, res: Response, next: NextFunction) => {
     const EMAIL_ADDRESS = req.db.KeyValueConfig.EMAIL_ADDRESS;
     const STORE_NAME = req.db.KeyValueConfig.STORE_NAME;
     try {
@@ -48,24 +49,25 @@ module.exports = Router({ mergeParams: true })
       if (!errors.isEmpty()) {
         return res.status(422).json({ errors: errors.array() });
       }
-      const amount = parseFloat(Number(req.body.amount).toFixed(2));
-      const expiration = req.body.expiration ? parse(req.body.expiration, WDateUtils.DATE_STRING_INTERNAL_FORMAT, new Date()) : ""
+      const amountAsString = Number(req.body.amount).toFixed(2);
+      //const amount = parseFloat(amountAsString);
+      const expiration = req.body.expiration ? parse(req.body.expiration, WDateUtils.DATE_STRING_INTERNAL_FORMAT, new Date()) : null
       const added_by = req.body.added_by;
       const recipient_name_first = req.body.recipient_name_first;
       const recipient_name_last = req.body.recipient_name_last;
       const recipient_email = req.body.recipient_email;
       const reason = req.body.reason;
-      const credit_code = StoreCreditProvider.GenerateCreditCode();
-      const qr_code_fs = await StoreCreditProvider.GenerateQRCodeFS(credit_code);
+      const credit_code = StoreCreditProviderInstance.GenerateCreditCode();
+      const qr_code_fs = await StoreCreditProviderInstance.GenerateQRCodeFS(credit_code);
       const expiration_formatted = expiration ? format(expiration, WDateUtils.DATE_STRING_INTERNAL_FORMAT) : "";
-      await StoreCreditProvider.CreateCreditFromCreditCode(`${recipient_name_first} ${recipient_name_last}`, amount, "DISCOUNT", credit_code, expiration_formatted, added_by, reason);
-      await CreateExternalEmail(EMAIL_ADDRESS, STORE_NAME, amount, recipient_name_first, recipient_name_last, recipient_email, credit_code, expiration, qr_code_fs);
-      req.logger.info(`Store credit code: ${credit_code} of type DISCOUNT for ${amount} added by ${added_by} for reason: ${reason}.`)
+      await StoreCreditProviderInstance.CreateCreditFromCreditCode(`${recipient_name_first} ${recipient_name_last}`, amountAsString, "DISCOUNT", credit_code, expiration_formatted, added_by, reason);
+      await CreateExternalEmail(EMAIL_ADDRESS, STORE_NAME, amountAsString, recipient_name_first, recipient_name_last, recipient_email, credit_code, expiration, qr_code_fs);
+      req.logger.info(`Store credit code: ${credit_code} of type DISCOUNT for ${amountAsString} added by ${added_by} for reason: ${reason}.`)
       return res.status(200).json({ credit_code: credit_code });
     } catch (error) {
       GoogleProvider.SendEmail(
         EMAIL_ADDRESS,
-        [EMAIL_ADDRESS, "dave@windycitypie.com"],
+        { name: EMAIL_ADDRESS, address: "dave@windycitypie.com" },
         "ERROR IN GIFT CARD PROCESSING. CONTACT DAVE IMMEDIATELY",
         "dave@windycitypie.com",
         `<p>Order request: ${JSON.stringify(req.body)}</p><p>Error info:${JSON.stringify(error)}</p>`);

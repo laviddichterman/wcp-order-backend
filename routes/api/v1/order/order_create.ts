@@ -1,12 +1,12 @@
 // submit an order
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { formatRFC3339, format, parse, addDays, subMinutes, addMinutes, startOfDay, isSameMinute, isSameDay } from 'date-fns';
 import { body, validationResult } from 'express-validator';
-import Promise from 'bluebird';
 import GoogleProvider from "../../../../config/google";
 import SquareProvider from "../../../../config/square";
 import StoreCreditProvider from "../../../../config/store_credit_provider";
-import {CreateProductWithMetadataFromJsFeDto, WDateUtils, PRODUCT_LOCATION} from "@wcp/wcpshared";
+import {CreateProductWithMetadataFromJsFeDto, WDateUtils, PRODUCT_LOCATION, OptionPlacement, WProductMetadata, ICatalog, IMenu} from "@wcp/wcpshared";
+import winston from 'winston/lib/winston/config';
 const WCP = "Windy City Pie";
 const DELIVERY_INTERVAL_TIME = 30;
 
@@ -19,13 +19,13 @@ const MI_AREA_CODES = ["231", "248", "269", "313", "517", "586", "616", "734", "
 const BTP_AREA_CODES = IL_AREA_CODES.concat(MI_AREA_CODES);
 const WCP_AREA_CODES = IL_AREA_CODES;
 
-const GenerateShortCode = function(metadata) {
-  return metadata.is_split && string(metadata.pi[OptionPlacement.LEFT]._id) !== string(metadata.pi[OptionPlacement.RIGHT]._id) ? 
+const GenerateShortCode = function(metadata : WProductMetadata, catalog: ICatalog) {
+  return metadata.is_split && String(metadata.pi[OptionPlacement.LEFT]._id) !== String(metadata.pi[OptionPlacement.RIGHT]._id) ? 
     `${metadata.pi[PRODUCT_LOCATION.LEFT].shortcode}|${metadata.pi[PRODUCT_LOCATION.RIGHT].shortcode}` : 
     metadata.pi[PRODUCT_LOCATION.LEFT].shortcode;
 }
 
-const BigIntStringify = (str) => (
+const BigIntStringify = (str : string) => (
   JSON.stringify(str, (key, value) =>
             typeof value === 'bigint'
                 ? Number(value)
@@ -33,13 +33,13 @@ const BigIntStringify = (str) => (
         ) )
 
 
-const IsNativeAreaCode = function (phone, area_codes) {
+const IsNativeAreaCode = function (phone : string, area_codes : string[]) {
   const numeric_phone = phone.match(/\d/g).join("");
   const area_code = numeric_phone.slice(0, 3);
-  return (numeric_phone.length == 10 && area_codes.some(x => x == area_code));
+  return (numeric_phone.length == 10 && area_codes.some(x => x === area_code));
 };
 
-const DateTimeIntervalBuilder = (date, time, service_type) => {
+const DateTimeIntervalBuilder = (date : Date | number, time : number, service_type : number) => {
   // hack for date computation on DST transition days since we're currently not open during the time jump
   var date_lower = subMinutes(addDays(date, 1), 1440-time);
   var date_upper = new Date(date_lower);
@@ -47,24 +47,24 @@ const DateTimeIntervalBuilder = (date, time, service_type) => {
   if (service_type === 2) {
     date_upper = addMinutes(date_upper, DELIVERY_INTERVAL_TIME);
   }
-  return [date_lower, date_upper];
+  return [date_lower, date_upper] as [Date, Date];
 };
 
-const DateTimeIntervalToDisplayServiceInterval = (interval) => {
+const DateTimeIntervalToDisplayServiceInterval = (interval : [Date, Date]) => {
   return isSameMinute(interval[0], interval[1]) ? format(interval[0], DISPLAY_TIME_FORMAT) : `${format(interval[0], DISPLAY_TIME_FORMAT)} - ${format(interval[1], DISPLAY_TIME_FORMAT)}`;
 }
 
 const GenerateAutoResponseBodyEscaped = function(
-  STORE_NAME,
-  PICKUP_INSTRUCTIONS,
-  DINE_INSTRUCTIONS,
-  DELIVERY_INSTRUCTIONS,
-  STORE_ADDRESS,
-  service_type_enum, 
-  date_time_interval,
-  phone_number, 
+  STORE_NAME : string,
+  PICKUP_INSTRUCTIONS : string,
+  DINE_INSTRUCTIONS : string,
+  DELIVERY_INSTRUCTIONS : string,
+  STORE_ADDRESS : string,
+  service_type_enum : number, 
+  date_time_interval : [Date, Date],
+  phone_number : string, 
   delivery_info,
-  isPaid
+  isPaid : boolean
 ) {
   const NOTE_PREPAID = "You've already paid, so unless there's an issue with the order, there's no need to handle payment from this point forward.";
   const NOTE_PAYMENT = "We happily accept any major credit card or cash for payment.";
@@ -78,7 +78,7 @@ const GenerateAutoResponseBodyEscaped = function(
   return encodeURIComponent(`${nice_area_code ? "Hey, nice area code!" : "Thanks!"} ${confirm[service_type_enum]} ${where[service_type_enum]}.\n\n${service_instructions[service_type_enum]} ${payment_section}`);
 }
 
-const GeneratePaymentSection = (totals, payment_info, store_credit, ishtml) => {
+const GeneratePaymentSection = (totals, payment_info, store_credit, ishtml : string) => {
   // TODO: check that these roundings are working properly and we don't need to switch to Math.round
   const discount = store_credit && store_credit.type == "DISCOUNT" ? `\$${Number(store_credit.amount_used).toFixed(2)}` : "";
   const base_amount = "$" + Number(totals.total - totals.tip).toFixed(2);
@@ -103,7 +103,7 @@ const GeneratePaymentSection = (totals, payment_info, store_credit, ishtml) => {
   ${store_credit_money_section}${card_payment_section}`;
 }
 
-const GenerateDeliverySection = (delivery_info, ishtml) => {
+const GenerateDeliverySection = (delivery_info, ishtml : boolean) => {
   if (!delivery_info.validated_delivery_address) {
     return "";
   }
@@ -112,13 +112,13 @@ const GenerateDeliverySection = (delivery_info, ishtml) => {
   return `${ishtml ? "<p><strong>" : "\n"}Delivery Address:${ishtml ? "</strong>":""} ${delivery_info.validated_delivery_address}${delivery_unit_info}${delivery_instructions}${ishtml ? "</p>" : ""}`;
 }
 
-const EventTitleStringBuilder = (CATALOG, service, customer, number_guests, cart, special_instructions, sliced, ispaid) => {
+const EventTitleStringBuilder = (CATALOG : ICatalog, service : number, customer : string, number_guests: number, cart, special_instructions : string, sliced : boolean, ispaid : boolean) => {
   const SERVICE_SHORTHAND = ["P", "DINE", "DELIVER"]; // TODO: move to DB
   const service_string = SERVICE_SHORTHAND[service];
 
   var has_special_instructions = special_instructions && special_instructions.length > 0;
 
-  var titles = [];
+  var titles : String[] = [];
   cart.forEach(category_cart => {
     const catid = category_cart.category;
     if (!CATALOG.categories.hasOwnProperty(category_cart.category)) {
@@ -162,7 +162,7 @@ const GenerateDisplayCartStringListFromProducts = (cart) => {
   return display_cart_string_list;
 }
 
-const GenerateShortCartFromFullCart = (cart, catalog, sliced) => {
+const GenerateShortCartFromFullCart = (cart, catalog : ICatalog, sliced : boolean) => {
   // TODO: the sliced part of this is a hack. need to move to a modifier that takes into account the service type
   const short_cart = [];
   cart.forEach((category_cart) => {
@@ -178,7 +178,7 @@ const GenerateShortCartFromFullCart = (cart, catalog, sliced) => {
   return short_cart;
 }
 
-const RebuildOrderFromDTO = (menu, cart, service_time) => {
+const RebuildOrderFromDTO = (menu : IMenu, cart, service_time : Date) => {
   const newcart = [];
   for (var cid in cart) {
     //[<quantity, {pid, modifiers: {MID: <placement, OID>} } >]
@@ -195,28 +195,28 @@ const RebuildOrderFromDTO = (menu, cart, service_time) => {
 }
 
 const CreateInternalEmail = async (
-  STORE_NAME,
-  PICKUP_INSTRUCTIONS,
-  DINE_INSTRUCTIONS,
-  DELIVERY_INSTRUCTIONS,
-  STORE_ADDRESS,
-  EMAIL_ADDRESS,
-  CATALOG,
-  service_type_enum,
-  service_title,
-  customer_name,
-  number_guests,
-  service_date, // Date
-  date_time_interval,
-  phonenum,
-  user_email,
+  STORE_NAME : string,
+  PICKUP_INSTRUCTIONS : string,
+  DINE_INSTRUCTIONS : string,
+  DELIVERY_INSTRUCTIONS : string,
+  STORE_ADDRESS : string,
+  EMAIL_ADDRESS : string,
+  CATALOG : ICatalog,
+  service_type_enum : number,
+  service_title : string,
+  customer_name : string,
+  number_guests : number,
+  service_date : Date,
+  date_time_interval : [Date, Date],
+  phonenum : string,
+  user_email : string,
   delivery_info,
   cart,
-  sliced,
-  referral,
-  special_instructions,
+  sliced : boolean,
+  referral : string,
+  special_instructions : string,
   website_metrics,
-  isPaid,
+  isPaid : boolean,
   totals,
   payment_info,
   store_credit) => {
@@ -257,18 +257,18 @@ User IP: ${website_metrics.ip}<br />
 }
 
 const CreateExternalEmail = async (
-  STORE_NAME,
-  ORDER_RESPONSE_PREAMBLE,
-  LOCATION_INFO,
-  EMAIL_ADDRESS,
-  service_option_enum,
-  service_title,
-  phonenum,
-  user_email,
+  STORE_NAME : string,
+  ORDER_RESPONSE_PREAMBLE : string,
+  LOCATION_INFO : string,
+  EMAIL_ADDRESS : string,
+  service_option_enum : number,
+  service_title : string,
+  phonenum : string,
+  user_email : string,
   cart,
-  special_instructions,
+  special_instructions : string,
   delivery_info,
-  isPaid,
+  isPaid : boolean,
   payment_info
 ) => {
   const NON_DELIVERY_AUTORESPONSE = "We'll get back to you shortly to confirm your order.";
@@ -306,17 +306,17 @@ ${location_section}We thank you for your support!`;
 }
 
 const CreateOrderEvent = async (
-  CATALOG,
-  service_option_enum,
-  customer_name,
-  number_guests,
-  phone_number,
+  CATALOG : ICatalog,
+  service_option_enum : number,
+  customer_name : string,
+  number_guests : number,
+  phone_number : string,
   cart,
-  special_instructions,
-  sliced,
-  service_time_interval,
+  special_instructions : string,
+  sliced : boolean,
+  service_time_interval : [Date, Date],
   delivery_info,
-  isPaid,
+  isPaid : boolean,
   totals,
   payment_info,
   store_credit) => {
@@ -339,13 +339,13 @@ const CreateOrderEvent = async (
      });
 }
 
-const CreateSquareOrderAndCharge = async (logger, reference_id, balance, nonce, note) => {
+const CreateSquareOrderAndCharge = async (logger, reference_id : string, balance : number, nonce, note) => {
   const amount_to_charge = Math.round(balance * 100);
   const create_order_response = await SquareProvider.CreateOrderStoreCredit(reference_id, amount_to_charge, note);
   if (create_order_response.success === true) {
     const square_order_id = create_order_response.response.order.id;
     logger.info(`For internal id ${reference_id} created Square Order ID: ${square_order_id} for ${amount_to_charge}`)
-    const payment_response = await SquareProvider.ProcessPayment(nonce, amount_to_charge, reference_id, square_order_id);
+    const payment_response = await SquareProvider.ProcessPayment(nonce, BigInt(amount_to_charge), reference_id, square_order_id);
     if (!payment_response.success) {
       logger.error("Failed to process payment: %o", payment_response);
       const order_cancel_response = await SquareProvider.OrderStateChange(square_order_id, create_order_response.response.order.version+1, "CANCELED");
@@ -389,7 +389,7 @@ const ValidationChain = [
 ];
 
 module.exports = Router({ mergeParams: true })
-  .post('/v1/order', ValidationChain, async (req, res, next) => {
+  .post('/v1/order', ValidationChain, async (req : Request, res: Response, next: NextFunction) => {
     const EMAIL_ADDRESS = req.db.KeyValueConfig.EMAIL_ADDRESS;
     const STORE_NAME = req.db.KeyValueConfig.STORE_NAME;
     const ORDER_RESPONSE_PREAMBLE = req.db.KeyValueConfig.ORDER_RESPONSE_PREAMBLE;
@@ -414,7 +414,7 @@ module.exports = Router({ mergeParams: true })
     const number_guests = req.body.number_guests || 1;
     const service_date = startOfDay(parse(req.body.service_date, WDateUtils.DATE_STRING_INTERNAL_FORMAT, Date.now()));
     const service_time = req.body.service_time; //minutes offset from beginning of day
-    const date_time_interval = DateTimeIntervalBuilder(service_date, service_time, service_option_enum);
+    const date_time_interval : [Date, Date] = DateTimeIntervalBuilder(service_date, service_time, service_option_enum);
     const service_title = ServiceTitleBuilder(service_option_display_string, customer_name, number_guests, service_date, date_time_interval);
     const phone_number = req.body.phonenum; // 10 digits matching the required regex
     const customer_email = req.body.user_email;
@@ -480,7 +480,7 @@ module.exports = Router({ mergeParams: true })
 
     // step 3: fire off success emails and create order in calendar
     try {
-      var service_calls = [];
+      var service_calls : Promise<any>[] = [];
       // TODO, need to actually test the failure of these service calls and some sort of retrying
       // for example, the event not created error happens, and it doesn't fail the service call. it should
       // send email to customer
@@ -557,7 +557,7 @@ module.exports = Router({ mergeParams: true })
     } catch (error) {
       GoogleProvider.SendEmail(
         EMAIL_ADDRESS,
-        [EMAIL_ADDRESS, "dave@windycitypie.com"],
+        { name: EMAIL_ADDRESS, address: "dave@windycitypie.com" },
         "ERROR IN ORDER PROCESSING. CONTACT DAVE IMMEDIATELY",
         "dave@windycitypie.com",
         `<p>Order request: ${JSON.stringify(req.body)}</p><p>Error info:${JSON.stringify(error)}</p>`);

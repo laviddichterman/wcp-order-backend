@@ -5,10 +5,10 @@ import logger from '../logging';
 import OAUTH2_KEYS from "../authentication/auth.json";
 import SMTPTransport from "nodemailer/lib/smtp-transport";
 import Mail from "nodemailer/lib/mailer";
-import DataProvider from "./dataprovider";
+import { DataProvider } from "./dataprovider";
 const OAuth2 = google.auth.OAuth2;
 
-export default class GoogleProvider {
+export class GoogleProvider {
   static get GOOGLE_EVENTS_DATETIME_FORMAT() {
     return "yyyy-MM-ddTHH:mm:ss";
   }
@@ -86,7 +86,7 @@ export default class GoogleProvider {
     return this.#accessToken;
   };
 
-  SendEmail = async (from : string, to : string, subject : string, replyto : string, htmlbody : string, attachments : Mail.Attachment[] = [], retry=0, max_retry=5) => {    
+  SendEmail = async (from : string | Mail.Address, to : string | Mail.Address, subject : string, replyto : string, htmlbody : string, attachments : Mail.Attachment[] = [], retry=0, max_retry=5) => {    
     const mailOptions : Mail.Options = {
       from: from,
       to: to,
@@ -198,5 +198,6 @@ export default class GoogleProvider {
   }
 
 };
-
-module.exports = GoogleProvider;
+const GoogleProviderInstance = new GoogleProvider();
+export default GoogleProviderInstance;
+module.exports = GoogleProviderInstance;

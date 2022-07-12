@@ -3,9 +3,7 @@ import {Promise} from 'bluebird';
 import PACKAGE_JSON from '../package.json';
 import { CURRENCY, SEMVER } from '@wcp/wcpshared';
 import DBVersionModel from '../models/DBVersionSchema';
-import WProductInstanceModel from '../models/ordering/products/WProductInstanceSchema';
-import WProductModel from '../models/ordering/products/WProductSchema';
-import SettingsModel from '../models/settings/SettingsSchema';
+
 
 const SetVersion = async (new_version : SEMVER) => { 
   return await DBVersionModel.findOneAndUpdate({}, new_version, {new: true, upsert: true});
@@ -22,7 +20,7 @@ const UPGRADE_MIGRATION_FUNCTIONS : IMigrationFunctionObject = {
   }],
 }
 
-class DatabaseManager {
+export class DatabaseManager {
   #DBVersionSchema: typeof DBVersionModel;
   constructor() {
   }
@@ -71,4 +69,6 @@ class DatabaseManager {
 
 }
 
-export default DatabaseManager;
+const DatabaseManagerInstance = new DatabaseManager();
+export default DatabaseManagerInstance;
+module.exports = DatabaseManagerInstance;

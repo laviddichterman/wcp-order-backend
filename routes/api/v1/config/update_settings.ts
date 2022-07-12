@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { body, validationResult } from 'express-validator';
 import { CheckJWT, ScopeWriteKVStore } from '../../../../config/authorization';
 
@@ -10,7 +10,7 @@ const ValidationChain = [
 ];
 
 module.exports = Router({ mergeParams: true })
-  .post('/v1/config/settings', CheckJWT, ScopeWriteKVStore, ValidationChain, async (req, res, next) => {
+  .post('/v1/config/settings', CheckJWT, ScopeWriteKVStore, ValidationChain, async (req : Request, res: Response, next: NextFunction) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {

@@ -1,5 +1,5 @@
 // creates a new category in the catalog
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { body, validationResult } from 'express-validator';
 import { CheckJWT, ScopeWriteOrderConfig } from '../../../../../config/authorization';
 import {WDateUtils} from '@wcp/wcpshared';
@@ -11,7 +11,7 @@ const ValidationChain = [
 ];
 
 module.exports = Router({ mergeParams: true })
-  .post('/v1/config/timing/blockoff', CheckJWT, ScopeWriteOrderConfig, ValidationChain, async (req, res, next) => {
+  .post('/v1/config/timing/blockoff', CheckJWT, ScopeWriteOrderConfig, ValidationChain, async (req : Request, res : Response, next : NextFunction) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {

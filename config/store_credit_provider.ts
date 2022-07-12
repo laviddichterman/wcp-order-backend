@@ -3,15 +3,15 @@ import { format, parse, startOfDay, isValid, isBefore } from 'date-fns';
 import qrcode from 'qrcode';
 import Stream from 'stream';
 import { WDateUtils } from "@wcp/wcpshared";
-import GoogleProvider from "./google";
+import { GoogleProvider } from "./google";
 import aes256gcm from './crypto-aes-256-gcm';
 
 import logger from '../logging';
-import DataProvider from './dataprovider';
+import { DataProvider } from './dataprovider';
 
 const ACTIVE_SHEET = "CurrentWARIO"
 const ACTIVE_RANGE = `${ACTIVE_SHEET}!A2:M`;
-export default class StoreCreditProvider {
+export class StoreCreditProvider {
   #db : DataProvider;
   #google: GoogleProvider;
   constructor() {  
@@ -67,7 +67,7 @@ BootstrapProvider = async (db : DataProvider, google : GoogleProvider) => {
    */
   CreateCreditFromCreditCode = async (
     recipient: string, 
-    amount : number, 
+    amount : string, 
     credit_type : 'MONEY' | 'DISCOUNT', 
     credit_code : string, 
     expiration : string, 
@@ -91,7 +91,7 @@ BootstrapProvider = async (db : DataProvider, google : GoogleProvider) => {
     // TODO: remove dashes from credit code
     const [enc, iv, auth] = aes256gcm.encrypt(credit_code);
     const values = await values_promise;
-    const i = values.values.findIndex(x=>x[7] === credit_code);
+    const i = values.values.findIndex((x : string[]) => x[7] === credit_code);
     if (i === -1) { 
       return {valid: false, type: "MONEY", lock: {}, balance: 0};
     }
@@ -158,4 +158,6 @@ BootstrapProvider = async (db : DataProvider, google : GoogleProvider) => {
 
 };
 
+const StoreCreditProviderInstance = new StoreCreditProvider();
+export default StoreCreditProviderInstance;
 module.exports = StoreCreditProvider;

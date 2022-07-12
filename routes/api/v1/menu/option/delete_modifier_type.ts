@@ -3,7 +3,7 @@
 // TODO: figure out if you can delete an option type with any children
 // maybe just disable?
 
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { param, validationResult } from 'express-validator';
 import { CheckJWT, ScopeDeleteCatalog } from '../../../../../config/authorization';
 
@@ -13,7 +13,7 @@ const ValidationChain = [
 ];
 
 module.exports = Router({ mergeParams: true })
-  .delete('/v1/menu/option/:mt_id', CheckJWT, ScopeDeleteCatalog, ValidationChain, async (req, res, next) => {
+  .delete('/v1/menu/option/:mt_id', CheckJWT, ScopeDeleteCatalog, ValidationChain, async (req : Request, res: Response, next: NextFunction) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {

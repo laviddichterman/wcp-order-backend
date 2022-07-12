@@ -1,18 +1,30 @@
 // validates an address inside a delivery area
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
+import { query, validationResult } from 'express-validator';
 import { Client } from "@googlemaps/google-maps-services-js";
 import turf from '@turf/turf';
 const client = new Client({});
 
+const ValidationChain = [  
+  query('address').trim().escape().exists(),
+  query('zipcode').trim().escape().exists(),
+  query('city').trim().escape().exists(),
+  query('state').trim().escape().exists(),
+];
+
 
 // uses the google maps services geocode api: https://developers.google.com/maps/documentation/javascript/geocoding#GeocodingAddressTypes
 export const route = Router({ mergeParams: true })
-  .get('/v1/addresses/validate', async (req, res, next) => {
+  .get('/v1/addresses/validate', ValidationChain, async (req : Request, res: Response, next: NextFunction) => {
     try {
-      const address_line = req.query.address;
-      const zipcode = req.query.zipcode;
-      const city = req.query.city;
-      const state = req.query.state;
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(422).json({ errors: errors.array() });
+      }
+      const address_line = req.query.address as string;
+      const zipcode = req.query.zipcode as string;
+      const city = req.query.city as string;
+      const state = req.query.state as string;
       const DELIVERY_POLY = turf.polygon(req.db.DeliveryArea.coordinates);
       client.geocode( { 
         params: { 
