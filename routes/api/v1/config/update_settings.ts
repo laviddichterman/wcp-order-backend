@@ -2,7 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { body, validationResult } from 'express-validator';
 import { CheckJWT, ScopeWriteKVStore } from '../../../../config/authorization';
 import DataProviderInstance from '../../../../config/dataprovider';
-import logger from '../../../../logging';
+import SocketIoProviderInstance from '../../../../config/socketio_provider';
 
 const ValidationChain = [  
   body("operating_hours.*.*.*").isInt({min: 0, max: 1440}),
@@ -19,8 +19,8 @@ module.exports = Router({ mergeParams: true })
         return res.status(422).json({ errors: errors.array() });
       }
       DataProviderInstance.Settings = req.body;
-      req.socket_ro.emit('WCP_SETTINGS', DataProviderInstance.Settings);
-      const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/${DataProviderInstance.Settings._id}`;
+      SocketIoProviderInstance.socketRO.emit('WCP_SETTINGS', DataProviderInstance.Settings);
+      const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/`;
       res.setHeader('Location', location);
       return res.status(201).send(DataProviderInstance.Settings);
     } catch (error) {

@@ -3,6 +3,8 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { body, validationResult } from 'express-validator';
 import { CheckJWT, ScopeWriteOrderConfig } from '../../../../../config/authorization';
 import {WDateUtils} from '@wcp/wcpshared';
+import DataProviderInstance from '../../../../../config/dataprovider';
+import SocketIoProviderInstance from '../../../../../config/socketio_provider';
 
 const ValidationChain = [  
   //body('*.*.0').matches(WDateUtils.DATE_STRING_INTERNAL_FORMAT_REGEX),
@@ -17,11 +19,11 @@ module.exports = Router({ mergeParams: true })
       if (!errors.isEmpty()) {
         return res.status(422).json({ errors: errors.array() });
       }
-      req.db.BlockedOff = req.body;
-      req.socket_ro.emit('WCP_BLOCKED_OFF', req.db.BlockedOff);
-      const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/${req.db.BlockedOff._id}`;
+      DataProviderInstance.BlockedOff = req.body;
+      SocketIoProviderInstance.socketRO.emit('WCP_BLOCKED_OFF', DataProviderInstance.BlockedOff);
+      const location = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
       res.setHeader('Location', location);
-      return res.status(201).send(req.db.BlockedOff);
+      return res.status(201).send(DataProviderInstance.BlockedOff);
     } catch (error) {
       next(error)
     }

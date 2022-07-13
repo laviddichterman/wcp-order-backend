@@ -38,7 +38,6 @@ export class WApp {
       });
     this.ioNS = ioNamespaces.reduce((acc, ns) => ({...acc, ns: this.io.of(ns) }), {});
     this.connectDb();
-    this.socketIo();
     this.initializeMiddlewares();
     this.initializeControllers(controllers);
     this.initializeErrorHandling();

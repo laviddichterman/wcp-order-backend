@@ -6,6 +6,7 @@ import GoogleProvider from "../../../../config/google";
 import SquareProvider from "../../../../config/square";
 import StoreCreditProvider from "../../../../config/store_credit_provider";
 import CatalogProviderInstance from '../../../../config/catalog_provider';
+import DataProviderInstance from '../../../../config/dataprovider';
 import logger from '../../../../logging';
 
 import {CreateProductWithMetadataFromJsFeDto, WDateUtils, PRODUCT_LOCATION, OptionPlacement, WProductMetadata, ICatalog, IMenu} from "@wcp/wcpshared";
@@ -21,8 +22,8 @@ const MI_AREA_CODES = ["231", "248", "269", "313", "517", "586", "616", "734", "
 const BTP_AREA_CODES = IL_AREA_CODES.concat(MI_AREA_CODES);
 const WCP_AREA_CODES = IL_AREA_CODES;
 
-const GenerateShortCode = function(metadata : WProductMetadata, catalog: ICatalog) {
-  return metadata.is_split && String(metadata.pi[OptionPlacement.LEFT]._id) !== String(metadata.pi[OptionPlacement.RIGHT]._id) ? 
+const GenerateShortCode = function(metadata : WProductMetadata) {
+  return metadata.is_split && String(metadata.pi[PRODUCT_LOCATION.LEFT]._id) !== String(metadata.pi[PRODUCT_LOCATION.RIGHT]._id) ? 
     `${metadata.pi[PRODUCT_LOCATION.LEFT].shortcode}|${metadata.pi[PRODUCT_LOCATION.RIGHT].shortcode}` : 
     metadata.pi[PRODUCT_LOCATION.LEFT].shortcode;
 }
@@ -80,7 +81,7 @@ const GenerateAutoResponseBodyEscaped = function(
   return encodeURIComponent(`${nice_area_code ? "Hey, nice area code!" : "Thanks!"} ${confirm[service_type_enum]} ${where[service_type_enum]}.\n\n${service_instructions[service_type_enum]} ${payment_section}`);
 }
 
-const GeneratePaymentSection = (totals, payment_info, store_credit, ishtml : string) => {
+const GeneratePaymentSection = (totals, payment_info, store_credit, ishtml : boolean) => {
   // TODO: check that these roundings are working properly and we don't need to switch to Math.round
   const discount = store_credit && store_credit.type == "DISCOUNT" ? `\$${Number(store_credit.amount_used).toFixed(2)}` : "";
   const base_amount = "$" + Number(totals.total - totals.tip).toFixed(2);
@@ -114,26 +115,26 @@ const GenerateDeliverySection = (delivery_info, ishtml : boolean) => {
   return `${ishtml ? "<p><strong>" : "\n"}Delivery Address:${ishtml ? "</strong>":""} ${delivery_info.validated_delivery_address}${delivery_unit_info}${delivery_instructions}${ishtml ? "</p>" : ""}`;
 }
 
-const EventTitleStringBuilder = (CATALOG : ICatalog, service : number, customer : string, number_guests: number, cart, special_instructions : string, sliced : boolean, ispaid : boolean) => {
+const EventTitleStringBuilder = (service : number, customer : string, number_guests: number, cart, special_instructions : string, sliced : boolean, ispaid : boolean) => {
   const SERVICE_SHORTHAND = ["P", "DINE", "DELIVER"]; // TODO: move to DB
   const service_string = SERVICE_SHORTHAND[service];
-
+  const catalogCategories = CatalogProviderInstance.Catalog.categories;
   var has_special_instructions = special_instructions && special_instructions.length > 0;
 
   var titles : String[] = [];
   cart.forEach(category_cart => {
     const catid = category_cart.category;
-    if (!CATALOG.categories.hasOwnProperty(category_cart.category)) {
+    if (!catalogCategories.hasOwnProperty(category_cart.category)) {
       throw "Cannot find category in the catalog!";
     }
-    const category = CATALOG.categories[category_cart.category].category;
+    const category = catalogCategories[category_cart.category].category;
     const call_line_category_name_with_space = category.display_flags && category.display_flags.call_line_name ? `${category.display_flags.call_line_name} ` : ""; 
     // TODO: this is incomplete since both technically use the shortcode for now. so we don't get modifiers in the call line
     // pending https://app.asana.com/0/1192054646278650/1192054646278651
     switch(category.display_flags.call_line_display) {
       case "SHORTCODE": 
         var total = 0;
-        var product_shortcodes = [];
+        var product_shortcodes : string[] = [];
         category_cart.items.forEach(item => {
           total += item.quantity;
           product_shortcodes = product_shortcodes.concat(Array(item.quantity).fill(GenerateShortCode(item.metadata)));
@@ -141,7 +142,7 @@ const EventTitleStringBuilder = (CATALOG : ICatalog, service : number, customer 
         titles.push(`${total.toString(10)}x ${call_line_category_name_with_space}${product_shortcodes.join(" ")}`);
         break; 
       default: //SHORTNAME
-        var product_shortcodes = category_cart.items.map(item => `${item.quantity}x${GenerateShortCode(item.metadata)}`);
+        var product_shortcodes : string[] = category_cart.items.map(item => `${item.quantity}x${GenerateShortCode(item.metadata)}`);
         titles.push(`${call_line_category_name_with_space}${product_shortcodes.join(" ")}`);
         break; 
     }
@@ -149,13 +150,13 @@ const EventTitleStringBuilder = (CATALOG : ICatalog, service : number, customer 
   return `${service_string}${sliced ? " SLICED" : ""} ${customer}${number_guests > 1 ? `+${number_guests-1}` : ""} ${titles.join(" ")}${has_special_instructions ? " *" : ""}${ispaid ? " PAID" : " UNPAID"}`;
 };
 
-const ServiceTitleBuilder = (service_option_display_string, customer_name, number_guests, service_date, service_time_interval) => {
+const ServiceTitleBuilder = (service_option_display_string : string, customer_name : string, number_guests : number, service_date : Date | number, service_time_interval : [Date, Date] ) => {
   const display_service_time_interval = DateTimeIntervalToDisplayServiceInterval(service_time_interval);
   return `${service_option_display_string} for ${customer_name}${number_guests > 1 ? `+${number_guests-1}` : ""} on ${format(service_date, DISPLAY_DATE_FORMAT)} at ${display_service_time_interval}`;
 }
 
 const GenerateDisplayCartStringListFromProducts = (cart) => {
-  const display_cart_string_list = [];
+  const display_cart_string_list : string[] = [];
   cart.forEach((category_cart) => {
     category_cart.items.forEach((item) => {
       display_cart_string_list.push(`${item.quantity}x: ${item.metadata.name}`)
@@ -164,15 +165,16 @@ const GenerateDisplayCartStringListFromProducts = (cart) => {
   return display_cart_string_list;
 }
 
-const GenerateShortCartFromFullCart = (cart, catalog : ICatalog, sliced : boolean) => {
+const GenerateShortCartFromFullCart = (cart, sliced : boolean) => {
   // TODO: the sliced part of this is a hack. need to move to a modifier that takes into account the service type
+  const catalogCategories = CatalogProviderInstance.Catalog.categories;
   const short_cart = [];
   cart.forEach((category_cart) => {
-    if (!catalog.categories.hasOwnProperty(category_cart.category)) {
+    if (!catalogCategories.hasOwnProperty(category_cart.category)) {
       throw "Cannot find category in the catalog!";
     }
     if (category_cart.items.length > 0) {
-      const category_name = catalog.categories[category_cart.category].category.name;
+      const category_name = catalogCategories[category_cart.category].category.name;
       const category_shortcart = { category_name: category_name, products: category_cart.items.map(x => `${x.quantity}x: ${x.metadata.shortname}${sliced && category_name === "Pizza" ? " SLICED" : ""}`) };
       short_cart.push(category_shortcart);
     }
@@ -203,7 +205,6 @@ const CreateInternalEmail = async (
   DELIVERY_INSTRUCTIONS : string,
   STORE_ADDRESS : string,
   EMAIL_ADDRESS : string,
-  CATALOG : ICatalog,
   service_type_enum : number,
   service_title : string,
   customer_name : string,
@@ -226,7 +227,7 @@ const CreateInternalEmail = async (
   const confirmation_subject_escaped = encodeURIComponent(service_title);
   const payment_section = isPaid ? GeneratePaymentSection(totals, payment_info, store_credit, true) : "";
   const delivery_section = GenerateDeliverySection(delivery_info, true);
-  const shortcart = GenerateShortCartFromFullCart(cart, CATALOG, sliced);
+  const shortcart = GenerateShortCartFromFullCart(cart, sliced);
   const special_instructions_section = special_instructions && special_instructions.length > 0 ? "<br />Special Instructions: " + special_instructions : "";
   const emailbody = `<p>From: ${customer_name} ${user_email}</p>${number_guests > 1 ? `<strong>Number Guests:</strong> ${number_guests}<br \>` : ""}
 <p>${shortcart.map(x=> `<strong>${x.category_name}:</strong><br />${x.products.join("<br />")}`).join("<br />")}
@@ -308,7 +309,6 @@ ${location_section}We thank you for your support!`;
 }
 
 const CreateOrderEvent = async (
-  CATALOG : ICatalog,
   service_option_enum : number,
   customer_name : string,
   number_guests : number,
@@ -322,8 +322,8 @@ const CreateOrderEvent = async (
   totals,
   payment_info,
   store_credit) => {
-  const shortcart = GenerateShortCartFromFullCart(cart, CATALOG, sliced);
-  const calendar_event_title = EventTitleStringBuilder(CATALOG, service_option_enum, customer_name, number_guests, cart, special_instructions, sliced, isPaid);
+  const shortcart = GenerateShortCartFromFullCart(cart, sliced);
+  const calendar_event_title = EventTitleStringBuilder(service_option_enum, customer_name, number_guests, cart, special_instructions, sliced, isPaid);
   const special_instructions_section = special_instructions && special_instructions.length > 0 ? "\nSpecial Instructions: " + special_instructions : "";
   const number_guests_section = number_guests > 1 ? `Number Guests: ${number_guests}\n` : "";
   const payment_section = isPaid ? "\n" + GeneratePaymentSection(totals, payment_info, store_credit, false) : "";
@@ -341,9 +341,9 @@ const CreateOrderEvent = async (
      });
 }
 
-const CreateSquareOrderAndCharge = async (reference_id : string, balance : number, nonce, note) => {
+const CreateSquareOrderAndCharge = async (reference_id : string, balance : number, nonce : string, note : string) => {
   const amount_to_charge = Math.round(balance * 100);
-  const create_order_response = await SquareProvider.CreateOrderStoreCredit(reference_id, amount_to_charge, note);
+  const create_order_response = await SquareProvider.CreateOrderStoreCredit(reference_id, BigInt(amount_to_charge), note);
   if (create_order_response.success === true) {
     const square_order_id = create_order_response.response.order.id;
     logger.info(`For internal id ${reference_id} created Square Order ID: ${square_order_id} for ${amount_to_charge}`)
@@ -392,14 +392,14 @@ const ValidationChain = [
 
 module.exports = Router({ mergeParams: true })
   .post('/v1/order', ValidationChain, async (req : Request, res: Response, next: NextFunction) => {
-    const EMAIL_ADDRESS = req.db.KeyValueConfig.EMAIL_ADDRESS;
-    const STORE_NAME = req.db.KeyValueConfig.STORE_NAME;
-    const ORDER_RESPONSE_PREAMBLE = req.db.KeyValueConfig.ORDER_RESPONSE_PREAMBLE;
-    const LOCATION_INFO = req.db.KeyValueConfig.LOCATION_INFO;
-    const PICKUP_INSTRUCTIONS = req.db.KeyValueConfig.PICKUP_INSTRUCTIONS;
-    const DINE_INSTRUCTIONS = req.db.KeyValueConfig.DINE_INSTRUCTIONS;
-    const DELIVERY_INSTRUCTIONS = req.db.KeyValueConfig.DELIVERY_INSTRUCTIONS;
-    const STORE_ADDRESS = req.db.KeyValueConfig.STORE_ADDRESS;
+    const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
+    const STORE_NAME = DataProviderInstance.KeyValueConfig.STORE_NAME;
+    const ORDER_RESPONSE_PREAMBLE = DataProviderInstance.KeyValueConfig.ORDER_RESPONSE_PREAMBLE;
+    const LOCATION_INFO = DataProviderInstance.KeyValueConfig.LOCATION_INFO;
+    const PICKUP_INSTRUCTIONS = DataProviderInstance.KeyValueConfig.PICKUP_INSTRUCTIONS;
+    const DINE_INSTRUCTIONS = DataProviderInstance.KeyValueConfig.DINE_INSTRUCTIONS;
+    const DELIVERY_INSTRUCTIONS = DataProviderInstance.KeyValueConfig.DELIVERY_INSTRUCTIONS;
+    const STORE_ADDRESS = DataProviderInstance.KeyValueConfig.STORE_ADDRESS;
 
     logger.info(`Received order request: ${JSON.stringify(req.body)}`);
 
@@ -411,7 +411,7 @@ module.exports = Router({ mergeParams: true })
     const reference_id = Date.now().toString(36).toUpperCase();
     const nonce = req.body.nonce;
     const service_option_enum = req.body.service_option;
-    const service_option_display_string = req.db.Services[service_option_enum];
+    const service_option_display_string = DataProviderInstance.Services[service_option_enum];
     const customer_name = req.body.customer_name;
     const number_guests = req.body.number_guests || 1;
     const service_date = startOfDay(parse(req.body.service_date, WDateUtils.DATE_STRING_INTERNAL_FORMAT, Date.now()));
@@ -431,7 +431,7 @@ module.exports = Router({ mergeParams: true })
     };
     const totals = req.body.totals;
     const store_credit = req.body.store_credit;
-    const cart = RebuildOrderFromDTO(req.catalog.Menu, req.body.products, date_time_interval[0]);
+    const cart = RebuildOrderFromDTO(CatalogProviderInstance.Menu, req.body.products, date_time_interval[0]);
     const sliced = req.body.sliced || false;
     const special_instructions = req.body.special_instructions;
     let isPaid = false;
@@ -509,7 +509,6 @@ module.exports = Router({ mergeParams: true })
         DELIVERY_INSTRUCTIONS,
         STORE_ADDRESS,
         EMAIL_ADDRESS,
-        req.catalog.Catalog,
         service_option_enum,
         service_title,
         customer_name,
@@ -530,7 +529,6 @@ module.exports = Router({ mergeParams: true })
         store_credit
       ));
       service_calls.push(CreateOrderEvent(
-        req.catalog.Catalog,
         service_option_enum,
         customer_name,
         number_guests,
