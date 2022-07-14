@@ -61,7 +61,7 @@ module.exports = Router({ mergeParams: true })
         return res.status(404).send("Unable to find Modifiers or Categories to create Product");
       }
       if (req.body.create_product_instance) {
-        const pi = await CatalogProviderInstance.CreateProductInstance(newproduct._id, {
+        const pi = await CatalogProviderInstance.CreateProductInstance(newproduct.id, {
           description: req.body.description,
           display_name: req.body.display_name,
           shortcode: req.body.shortcode,

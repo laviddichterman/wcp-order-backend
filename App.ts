@@ -1,15 +1,24 @@
 import bodyParser from 'body-parser';
 import express, { Application} from 'express';
-import mongoose from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
 import { Server as IoServer, Namespace as IoNamespace } from 'socket.io';
 import { createServer, Server as HttpServer } from 'http';
 import expressWinston from 'express-winston';
 import IExpressController from './interfaces/IExpressController';
 import logger from "./logging";
-import idempotency from 'express-idempotency';
+import { idempotency } from 'express-idempotency';
 import cors from 'cors';
 import { WProvider } from './interfaces/WProvider';
 
+// // Duplicate the ID field.
+// Schema.virtual<string>('id').get(function(){
+//   return this._id.toHexString();
+// });
+
+// Ensure virtual fields are serialised.
+// Schema.set('toJSON', {
+//   virtuals: true
+// });
 
 const PORT = process.env.PORT || 4001;
 const ORIGINS = [/https:\/\/.*\.windycitypie\.com$/, /https:\/\/.*\.breezytownpizza\.com$/, `http://localhost:${PORT}`];
@@ -36,20 +45,29 @@ export class WApp {
           credentials: true
         }
       });
-    this.ioNS = ioNamespaces.reduce((acc, ns) => ({...acc, ns: this.io.of(ns) }), {});
-    this.connectDb();
+    this.ioNS = ioNamespaces.reduce((acc, ns) => ({...acc, [ns]: this.io.of(ns) }), {});
     this.initializeMiddlewares();
     this.initializeControllers(controllers);
     this.initializeErrorHandling();
   }
 
   public async listen() {
-    if (!this.hasBootstrapped) {
+    logger.info("Starting connection to DB");
+    const DBTABLE = process.env.DBTABLE || "wcp";
+    const DBUSER = process.env.DBUSER || null;
+    const DBPASS = process.env.DBPASS || null;
+    const DBENDPOINT = process.env.DBENDPOINT || '127.0.0.1:27017';
+    const url = `mongodb://${DBENDPOINT}/${DBTABLE}`;
+    mongoose.connect(url, { user: DBUSER, pass: DBPASS });
+    mongoose.connection
+    .on('error', error => { throw error })
+    .once('open', async () => { 
+      logger.info(`MongoDB connected at ${url}`);
       await this.runBootstrap();
-    }
-    this.httpServer.listen(PORT, function () {
-      logger.info(`App listening on the port ${PORT}`);
-    });
+      this.httpServer.listen(PORT, function () {
+        logger.info(`App listening on the port ${PORT}`);
+      });
+     });
   }
 
   public getApp() {
@@ -69,7 +87,7 @@ export class WApp {
   }
 
   private initializeMiddlewares() {
-    this.app.use(idempotency.idempotency());
+    this.app.use(idempotency());
     this.app.use(cors({origin: ORIGINS}));
     this.app.use(bodyParser.json());
     this.app.use(bodyParser.urlencoded({ extended: false }));
@@ -78,10 +96,6 @@ export class WApp {
       msg: '{{res.statusCode}} {{req.method}} {{req.url}} {{res.responseTime}}ms',
       meta: false,
     }));
-    this.app.use((req, res, next) => {
-      //req.socket_ro = socket_ro;
-      return next()
-    });
   }
 
   private initializeErrorHandling() {
@@ -90,7 +104,9 @@ export class WApp {
 
   private async runBootstrap() {
     this.hasBootstrapped = true;
-    Promise.all(this.providers.map(async (p)=> await p.Bootstrap(this)));
+    for (let i = 0; i < this.providers.length; ++i) {
+      await this.providers[i].Bootstrap(this);
+    }
   }
 
   private initializeControllers(controllers: IExpressController[]) {
@@ -100,15 +116,6 @@ export class WApp {
   }
 
   private connectDb() {
-    const DBTABLE = process.env.DBTABLE || "wcp";
-    const DBUSER = process.env.DBUSER || null;
-    const DBPASS = process.env.DBPASS || null;
-    const DBENDPOINT = process.env.DBENDPOINT || '127.0.0.1:27017';
-    const url = `mongodb://${DBENDPOINT}/${DBTABLE}`;
-    mongoose.connect(url, { user: DBUSER, pass: DBPASS });
-    mongoose.connection
-    .on('error', error => { throw error })
-    .once('open', () => logger.info(`MongoDB connected at ${url}`));
   }
 }
 

@@ -15,7 +15,7 @@ export const WAbstractExpression = new Schema<IAbstractExpression>({
     enum: ['ConstLiteral', 'IfElse', 'Logical', 'ModifierPlacement', 'HasAnyOfModifierType'],//, 'MetadataSum'],
     required: true
   }
-});
+}, {_id: false});
 
 
 export default mongoose.model<IAbstractExpression>(path.basename(__filename).replace(path.extname(__filename), ''), WAbstractExpression);

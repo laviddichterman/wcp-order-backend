@@ -41,6 +41,7 @@ export class GoogleProvider implements WProvider {
   }
 
   Bootstrap = async () => {
+    logger.debug("Bootstrapping GoogleProvider");
     const cfg = DataProviderInstance.KeyValueConfig;
     if (cfg.GOOGLE_REFRESH_TOKEN && cfg.EMAIL_ADDRESS) {
       logger.debug("Got refresh token from DB config: %o", cfg.GOOGLE_REFRESH_TOKEN);
@@ -81,6 +82,7 @@ export class GoogleProvider implements WProvider {
     else {
       logger.warn("CANT DO IT BRO");
     }
+    logger.info(`Finished Bootstrap of GoogleProvider`);
   }
 
   get AccessToken() {

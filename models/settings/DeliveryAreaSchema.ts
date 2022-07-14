@@ -9,6 +9,6 @@ export const DeliveryAreaSchema = new Schema<GeoJSON.Polygon>({
   coordinates: {
     type: [[[Number]]], // Array of arrays of arrays of numbers
   }
-});
+}, {id: true, toJSON: {virtuals: true}});
 
 export default mongoose.model<GeoJSON.Polygon>(path.basename(__filename).replace(path.extname(__filename), ''), DeliveryAreaSchema);

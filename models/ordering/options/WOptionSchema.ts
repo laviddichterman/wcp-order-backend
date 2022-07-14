@@ -3,7 +3,9 @@ import { WCatalogItemSchema } from "../WCatalogItemSchema";
 import path from "path";
 import { IOption } from "@wcp/wcpshared";
 
-export const WOptionSchema = new Schema<IOption>({
+type MT = Omit<IOption, "id">;
+
+export const WOptionSchema = new Schema<MT>({
   // inheritance by composition
   // the base catalog item
   item: { 
@@ -18,7 +20,7 @@ export const WOptionSchema = new Schema<IOption>({
   },
 
   // option type enumeration
-  option_type_id: { type: Schema.Types.String, ref: 'WOptionTypeSchema', required: true }, 
+  option_type_id: { type: String, ref: 'WOptionTypeSchema', required: true }, 
 
   metadata: {
     // how much this contributes to the flavor
@@ -33,7 +35,7 @@ export const WOptionSchema = new Schema<IOption>({
 
   // optional function object that operates on a product instance
   // and returns true if the option should be enabled.
-  enable_function: { type: Schema.Types.String, ref: 'WProductInstanceFunction' },
+  enable_function: { type: String, ref: 'WProductInstanceFunction' },
 
   display_flags: {
     // supresses listing on the shortname of the end product
@@ -44,6 +46,6 @@ export const WOptionSchema = new Schema<IOption>({
     // if not the pre-populated value for the matching product instance
     omit_from_name: Boolean
   },
-});
+}, {id: true, toJSON: {virtuals: true}, toObject: { virtuals: true}});
 
 export default mongoose.model<IOption>(path.basename(__filename).replace(path.extname(__filename), ''), WOptionSchema);

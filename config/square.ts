@@ -1,4 +1,4 @@
-import {  ApiError, Client, CreateOrderRequest, CreatePaymentRequest, Environment, UpdateOrderRequest } from 'square';
+import {  ApiError, Client, CreateOrderRequest, CreateOrderResponse, CreatePaymentRequest, CreatePaymentResponse, Environment, UpdateOrderRequest } from 'square';
 import { WProvider } from '../interfaces/WProvider';
 import crypto from 'crypto';
 import logger from'../logging';
@@ -11,6 +11,7 @@ export class SquareProvider implements WProvider {
   }
 
   Bootstrap = () => {
+    logger.info(`Starting Bootstrap of SquareProvider`);
     const cfg = DataProviderInstance.KeyValueConfig;
     if (cfg.SQUARE_TOKEN && cfg.SQUARE_LOCATION) {
       this.#client = new Client({
@@ -22,9 +23,12 @@ export class SquareProvider implements WProvider {
     else {
       logger.warn("Can't Bootstrap SQUARE Provider");
     }
+    logger.info(`Finished Bootstrap of SquareProvider`);
   }
 
-  CreateOrderStoreCredit = async (reference_id : string, amount_money : bigint, note : string) => {
+  CreateOrderStoreCredit = async (reference_id : string, amount_money : bigint, note : string) :
+  Promise<{ success: true; result: CreateOrderResponse; error: null; } | 
+    { success: false; result: null; error: any; }> => {
     const idempotency_key = crypto.randomBytes(22).toString('hex');
     const orders_api = this.#client.ordersApi;
     const request_body : CreateOrderRequest = {
@@ -47,12 +51,13 @@ export class SquareProvider implements WProvider {
     try {
       logger.info(`sending order request: ${JSON.stringify(request_body)}`);
       const { result, ...httpResponse } = await orders_api.createOrder(request_body);
-      return { success: true, response: result };
+      return { success: true, result: result, error: null };
     } catch (error) {
       logger.error(error);
       return {
         success: false,
-        response: error
+        result: null,
+        error: error
       };
     }
   }
@@ -81,7 +86,9 @@ export class SquareProvider implements WProvider {
     }
   }
 
-  ProcessPayment = async (nonce : string, amount_money : bigint, reference_id : string, square_order_id : string) => {
+  ProcessPayment = async (nonce : string, amount_money : bigint, reference_id : string, square_order_id : string) : 
+    Promise<{ success: true; result: CreatePaymentResponse; error: null; } | 
+    { success: false; result: null; error: any; }> => {
     const idempotency_key = crypto.randomBytes(22).toString('hex');
     const payments_api = this.#client.paymentsApi;
     const request_body : CreatePaymentRequest = {
@@ -102,12 +109,13 @@ export class SquareProvider implements WProvider {
     try {
       logger.info(`sending payment request: ${JSON.stringify(request_body)}`);
       const { result, ...httpResponse } = await payments_api.createPayment(request_body);
-      return { success: true, result: result };
+      return { success: true, result: result, error: null };
     } catch (error) {
       logger.error(error);
       return {
         success: false,
-        result: error.result
+        result: null,
+        error: error.result
       };
     }
   }

@@ -4,8 +4,9 @@ import { WCatalogItemSchema } from "../WCatalogItemSchema";
 import { WMoney } from "../WMoney";
 import path from 'path';
 
+type MT = Omit<IProduct, "id">;
 export const ProductModifierSchema = new Schema({ 
-  mtid: { type: Schema.Types.String, ref: 'WOptionTypeSchema' }, 
+  mtid: { type: Schema.Types.String, ref: 'WOptionTypeSchema', required: true }, 
   // optional function object that operates on a product instance
   // and returns true if the option type should be enabled.
   enable: { type: Schema.Types.String, ref: 'WProductInstanceFunction' } 
@@ -13,8 +14,7 @@ export const ProductModifierSchema = new Schema({
 
 
 // represents a class of products that can be made and inserted into the catalog
-const WProductSchema = new Schema<IProduct>({
-
+const WProductSchema = new Schema<MT>({  
   // in process of deprecation
   item: WCatalogItemSchema,
 
@@ -59,7 +59,7 @@ const WProductSchema = new Schema<IProduct>({
   modifiers: [ProductModifierSchema],
   
   // Corresponding to a WCategorySchema
-  category_ids: [{ type: Schema.Types.ObjectId, ref: 'WCategorySchema'}],
-});
+  category_ids: [{ type: String, ref: 'WCategorySchema', _id: false }],
+}, {id: true, toJSON: {virtuals: true}, toObject: { virtuals: true}});
 
 export default mongoose.model<IProduct>(path.basename(__filename).replace(path.extname(__filename), ''), WProductSchema);

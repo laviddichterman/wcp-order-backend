@@ -3,25 +3,106 @@ import { WProvider } from '../interfaces/WProvider';
 import PACKAGE_JSON from '../package.json';
 import { CURRENCY, SEMVER } from '@wcp/wcpshared';
 import DBVersionModel from '../models/DBVersionSchema';
+import mongoose, { Schema } from "mongoose";
 
 
-const SetVersion = async (new_version : SEMVER) => { 
-  return await DBVersionModel.findOneAndUpdate({}, new_version, {new: true, upsert: true});
+//import WOptionModel from '../models/ordering/options/WOptionSchema';
+//import WCategoryModel from '../models/ordering/category/WCategorySchema';
+
+const SetVersion = async (new_version: SEMVER) => {
+  return await DBVersionModel.findOneAndUpdate({}, new_version, { new: true, upsert: true });
 }
 
 interface IMigrationFunctionObject {
-  [index:string]: [SEMVER, () => Promise<void>]
+  [index: string]: [SEMVER, () => Promise<void>]
 }
-const UPGRADE_MIGRATION_FUNCTIONS : IMigrationFunctionObject = {
-  "0.2.21": [{ major: 0, minor: 2, patch: 22 }, async () => {
-    { 
-    
+const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
+  "0.2.21": [{ major: 0, minor: 3, patch: 0 }, async () => {
+    {
+      // re-assign each option_type_id and enable_function in every ModifierOption
+      {
+        var promises: Promise<any>[] = [];
+        const WOptionModel = mongoose.model('woptionschema', new Schema({ option_type_id: Schema.Types.Mixed, enable_function: Schema.Types.Mixed }));
+        const options = await WOptionModel.find();
+        options.forEach(
+          o => {
+            // @ts-ignore
+            o.option_type_id = String(o.option_type_id);
+            if (o.enable_function) {
+              // @ts-ignore
+              o.enable_function = String(o.enable_function);
+            }
+            promises.push(o.save().then(() => {
+              // @ts-ignore
+              logger.debug(`Updated Option ${o.id} with type safe option type id ${o.option_type_id} ${typeof o.option_type_id}.`);
+            }).catch((err) => {
+              // @ts-ignore
+              logger.error(`Unable to update Option ${o.id}. Got error: ${JSON.stringify(err)}`);
+            }));
+          });
+        await Promise.all(promises);
+      }
+      {
+        var promises: Promise<any>[] = [];
+        const WProductModel = mongoose.model('wproductschema', new Schema({ 
+          modifiers: [{ mtid: Schema.Types.Mixed, enable: Schema.Types.Mixed }], 
+          category_ids: [Schema.Types.Mixed],
+          }));
+        const elts = await WProductModel.find();
+        elts.forEach(
+          o => {
+            //@ts-ignore
+            o.modifiers = o.modifiers.map(mod => ({ mtid: String(mod.mtid), enable: mod.enable ? String(mod.enable) : null  }));
+            //@ts-ignore
+            o.category_ids = o.category_ids.map(c => String(c));
+            promises.push(o.save({}).then(() => {
+              logger.debug(`Updated WProductModel ${o.id} with type safe modifers ${o.modifiers}, categoryIds: ${o.category_ids}.`);
+            }).catch((err) => {
+              logger.error(`Unable to update WProductModel ${o.id}. Got error: ${JSON.stringify(err)}`);
+            }));
+          });
+        await Promise.all(promises);
+      }
+      {
+        var promises: Promise<any>[] = [];
+        const WProductInstanceModel = mongoose.model('wproductinstanceschema', new Schema({ product_id: Schema.Types.Mixed }));
+        const elts = await WProductInstanceModel.find();
+        elts.forEach(
+          o => {
+            //@ts-ignore
+            o.product_id = String(o.product_id)
+            promises.push(o.save({}).then(() => {
+              logger.debug(`Updated WProductInstanceModel ${o.id} with type safe product ID ${o.product_id}.`);
+            }).catch((err) => {
+              logger.error(`Unable to update WProductInstanceModel ${o.id}. Got error: ${JSON.stringify(err)}`);
+            }));
+          });
+        await Promise.all(promises);
+      }
+      {
+        var promises: Promise<any>[] = [];
+        const WCategoryModel = mongoose.model('wcategoryschema', new Schema({ parent_id: Schema.Types.Mixed }));
+        const cats = await WCategoryModel.find();
+        cats.forEach(
+          c => {
+            if (c.parent_id) {
+              //@ts-ignore
+              c.parent_id = String(c.parent_id)
+              promises.push(c.save({}).then(() => {
+                logger.debug(`Updated WCategorySchema ${c.id} with type safe parent ID ${c.parent_id}.`);
+              }).catch((err) => {
+                logger.error(`Unable to update WCategorySchema ${c.id}. Got error: ${JSON.stringify(err)}`);
+              }));
+            }
+
+          });
+        await Promise.all(promises);
+      }
     }
   }],
 }
 
 export class DatabaseManager implements WProvider {
-  #DBVersionSchema: typeof DBVersionModel;
   constructor() {
   }
 
@@ -34,10 +115,10 @@ export class DatabaseManager implements WProvider {
 
     var current_db_version = "0.0.0";
 
-    const db_version = await this.#DBVersionSchema.find({});
+    const db_version = await DBVersionModel.find({});
     if (db_version.length > 1) {
       logger.error(`Found more than one DB version entry: ${JSON.stringify(db_version)}, deleting all.`);
-      await this.#DBVersionSchema.deleteMany({});
+      await DBVersionModel.deleteMany({});
     }
     else if (db_version.length === 1) {
       current_db_version = `${db_version[0].major}.${db_version[0].minor}.${db_version[0].patch}`;
@@ -59,7 +140,6 @@ export class DatabaseManager implements WProvider {
         current_db_version = PACKAGE_JSON.version;
       }
     }
-
     logger.info("Database upgrade checks completed.");
   };
 

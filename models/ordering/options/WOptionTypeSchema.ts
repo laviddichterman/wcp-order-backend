@@ -3,7 +3,9 @@ import { ExternalIDsSchema } from "../ExternalIDsSchema";
 import path from "path";
 import { IOptionType, DISPLAY_AS, MODIFIER_CLASS } from "@wcp/wcpshared";
 
-export const WOptionTypeSchema = new Schema<IOptionType>({
+type MT = Omit<IOptionType, "id">;
+
+export const WOptionTypeSchema = new Schema<MT>({
   // Human readable name
   name: { type: String, required: true },
 
@@ -60,10 +62,8 @@ export const WOptionTypeSchema = new Schema<IOptionType>({
     
     // when the section is not empty, string to append to the whole modifier type section when used in description/title, etc
     non_empty_group_suffix: String,
-
-
   },
 
-});
+}, {id: true, toJSON: {virtuals: true}, toObject: { virtuals: true}});
 
 export default mongoose.model<IOptionType>(path.basename(__filename).replace(path.extname(__filename), ''), WOptionTypeSchema);

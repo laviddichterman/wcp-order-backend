@@ -11,4 +11,4 @@ export const WMoney = new Schema({
     enum: ['USD'],
     required: true
   }
-});
+}, { _id: false});

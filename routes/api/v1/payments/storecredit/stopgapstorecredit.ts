@@ -87,11 +87,11 @@ module.exports = Router({ mergeParams: true })
       const qr_code_fs_b = new Stream.PassThrough();
       qr_code_fs.pipe(qr_code_fs_a);
       qr_code_fs.pipe(qr_code_fs_b);
-      const create_order_response = await SquareProviderInstance.CreateOrderStoreCredit(reference_id, amount_money, `Purchase of store credit code: ${joint_credit_code}`); // {success: true, response: {order: { id: "derp"}}};
+      const create_order_response = await SquareProviderInstance.CreateOrderStoreCredit(reference_id, amount_money, `Purchase of store credit code: ${joint_credit_code}`);
       if (create_order_response.success === true) {
-        const square_order_id = create_order_response.response.order.id;
+        const square_order_id = create_order_response.result.order.id;
         logger.info(`For internal id ${reference_id} created Square Order ID: ${square_order_id} for ${amount_money}`)
-        const payment_response = await SquareProviderInstance.ProcessPayment(req.body.nonce, amount_money, reference_id, square_order_id); // {success: true, result: {payment: {receiptUrl: "http://clownpenis.fart", cardDetails: {card: { last4: 1111}}, totalMoney: {amount: 5000}}}};
+        const payment_response = await SquareProviderInstance.ProcessPayment(req.body.nonce, amount_money, reference_id, square_order_id);
         if (payment_response.success === true) {
           const amount = Number(Number(payment_response.result.payment.totalMoney.amount) / 100).toFixed(2);
           CreateExternalEmailSender(EMAIL_ADDRESS, STORE_NAME, amount, sender_email_address, recipient_name_first, recipient_name_last, joint_credit_code, qr_code_fs_a);
@@ -111,7 +111,7 @@ module.exports = Router({ mergeParams: true })
         }
         else {
           logger.error("Failed to process payment: %o", payment_response);
-          await SquareProviderInstance.OrderStateChange(square_order_id, create_order_response.response.order.version + 1, "CANCELED");
+          await SquareProviderInstance.OrderStateChange(square_order_id, create_order_response.result.order.version + 1, "CANCELED");
           return res.status(400).json(payment_response);
         }
       } else {

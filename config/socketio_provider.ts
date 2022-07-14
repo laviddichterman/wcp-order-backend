@@ -13,8 +13,9 @@ export class SocketIoProvider implements WProvider {
   constructor() {
   }
   Bootstrap = (app : WApp) => {
+    logger.info(`Starting Bootstrap of SocketIoProvider`);
     this.socketRO = app.getSocketIoNamespace('nsRO');
-    
+
     this.socketRO.on('connect',(socket) => { 
       const connect_time = new Date();
       socket.client.request.headers["x-real-ip"] ? 
@@ -37,6 +38,7 @@ export class SocketIoProvider implements WProvider {
         logger.info(`Num Connected: ${app.getSocketIoServer().engine.clientsCount}`);
       });
     });
+    logger.info(`Finished Bootstrap of SocketIoProvider`);
   }
 };
 

@@ -2,9 +2,8 @@ import mongoose, { Schema } from 'mongoose';
 import { ICategory, CALL_LINE_DISPLAY } from '@wcp/wcpshared';
 import path from 'path';
 
-export const WCategorySchema = new Schema<ICategory>({
-  _id: { type: String, required: true },
-
+type MT = Omit<ICategory, "id">;
+export const WCategorySchema = new Schema<MT>({
   // brief name of the category
   name: { type: String, required: true },
 
@@ -35,6 +34,6 @@ export const WCategorySchema = new Schema<ICategory>({
       required: true
     }
   }
-});
+}, {id: true, toJSON: {virtuals: true}, toObject: { virtuals: true}});
 
 export default mongoose.model<ICategory>(path.basename(__filename).replace(path.extname(__filename), ''), WCategorySchema);

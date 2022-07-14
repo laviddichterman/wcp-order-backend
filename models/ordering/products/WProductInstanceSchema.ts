@@ -5,9 +5,10 @@ import { WOptionInstanceSchema } from "../options/WOptionInstanceSchema";
 import { WCatalogItemSchema } from "../WCatalogItemSchema";
 //const WPriceDisplayEnumSchema = require("../WPriceDisplayEnumSchema");
 
-export const WProductInstanceSchema = new Schema<IProductInstance>({
+type MT = Omit<IProductInstance, "id">;
+export const WProductInstanceSchema = new Schema<MT>({
   // reference to the WProductSchema ID for this class of item
-  product_id: { type: Schema.Types.String, ref: 'WProductSchema'},
+  product_id: { type: String, ref: 'WProductSchema', required: true },
 
   // ordinal for product matching
   ordinal: Number,
@@ -63,6 +64,6 @@ export const WProductInstanceSchema = new Schema<IProductInstance>({
   // optional catalog data if this is a catalog item
   // should allow for specific configurations of products (pizza) to be added and referenced directly in the catalog
   item: WCatalogItemSchema
-});
+}, {id: true, toJSON: {virtuals: true}, toObject: { virtuals: true}});
 
 export default mongoose.model<IProductInstance>(path.basename(__filename).replace(path.extname(__filename), ''), WProductInstanceSchema);

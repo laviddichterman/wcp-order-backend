@@ -19,12 +19,18 @@ export class DataProvider implements WProvider {
   #settings : IWSettings;
   #blocked_off : JSFEBlockedOff;
   #leadtimes : number[];
-  #delivery_area : GeoJSON.Polygon;
+  #delivery_area : GeoJSON.Polygon; 
   #keyvalueconfig : { [key:string]: string };
   constructor() {
+    this.#services = null;
+    this.#settings = null;
+    this.#blocked_off = [];
+    this.#leadtimes = [];
+    this.#delivery_area = DEFAULT_DELIVERY_AREA as unknown as GeoJSON.Polygon;
+    this.#keyvalueconfig = {};
   }
   Bootstrap = async () => {
-    logger.info("Loading from and bootstrapping to database.");
+    logger.info("DataProvider: Loading from and bootstrapping to database.");
 
     // look for key value config area:
     const found_key_value_store = await KeyValueModel.findOne();
@@ -37,7 +43,7 @@ export class DataProvider implements WProvider {
     else {
       logger.debug("Found KeyValueSchema in database: ", found_key_value_store);
       for (var i in found_key_value_store.settings) {
-        if (this.#keyvalueconfig.hasOwnProperty(found_key_value_store.settings[i].key)) {
+        if (Object.hasOwn(this.#keyvalueconfig, found_key_value_store.settings[i].key)) {
           logger.error(`Clobbering key: ${found_key_value_store.settings[i].key} containing ${this.#keyvalueconfig[found_key_value_store.settings[i].key]}`);
         }
         this.#keyvalueconfig[found_key_value_store.settings[i].key] = found_key_value_store.settings[i].value;
@@ -143,6 +149,8 @@ export class DataProvider implements WProvider {
         }
       }
     }
+
+    logger.debug("Done Bootstrapping DataProvider");
   };
 
   get BlockedOff() {
