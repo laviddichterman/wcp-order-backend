@@ -1,4 +1,4 @@
-import { GenerateMenu, ICatalog, SEMVER, ICatalogCategories, ICatalogModifiers, ICategory, IMenu, IOption, IOptionType, IProduct, IProductInstance, IProductInstanceFunction, IAbstractExpression, ICatalogProducts, IWInterval, IMoney, IExternalIDs, ICatalogItem } from "@wcp/wcpshared";
+import { GenerateMenu, ICatalog, SEMVER, ICatalogCategories, ICatalogModifiers, ICategory, IMenu, IOption, IOptionType, IProduct, IProductInstance, IProductInstanceFunction, IAbstractExpression, ICatalogProducts, IExternalIDs, ICatalogItem, RecordProductInstanceFunctions } from "@wcp/wcpshared";
 import DBVersionModel from '../models/DBVersionSchema';
 import WCategoryModel from '../models/ordering/category/WCategorySchema';
 import WProductInstanceModel from '../models/ordering/products/WProductInstanceSchema';
@@ -20,25 +20,18 @@ function ReduceArrayToMapByKey<T, Key extends keyof T>(xs: T[], key: Key) {
 // product_map is mapping from product_id to { product, instances (list of instance objects)}
 // orphan_products is list of orphan product ids
 const CatalogMapGenerator = (categories: ICategory[], products: IProduct[], product_instances: IProductInstance[]) => {
-  const category_map: ICatalogCategories = {};
+  const category_map: ICatalogCategories = categories.reduce((acc, cat) =>({...acc, [cat.id]: {category: cat, children: [], products: []}}), {});
   categories.forEach((curr) => {
-    category_map[curr.id] = { category: curr, children: [], products: [] };
+    category_map[curr.parent_id].children.push(curr.id);
   });
-  for (var i = 0; i < categories.length; ++i) {
-    if (categories[i].parent_id) {
-      category_map[categories[i].parent_id].children.push(categories[i].id);
-    }
-  }
-  const product_map: ICatalogProducts = {};
-  products.forEach((curr) => {
-    
-    product_map[curr.id] = { product: curr, instances: [] };
-    if (curr.category_ids.length !== 0) {
-      curr.category_ids.forEach((cid) => {
-        category_map[cid] ? category_map[cid].products.push(curr.id) : console.error(`Missing category ID: ${cid} in product: ${JSON.stringify(curr)}`);
+  const product_map: ICatalogProducts = products.reduce((acc, p) => {
+    if (p.category_ids.length !== 0) {
+      p.category_ids.forEach((cid) => {
+        category_map[cid] ? category_map[cid].products.push(p.id) : console.error(`Missing category ID: ${cid} in product: ${JSON.stringify(p)}`);
       });
     }
-  });
+    return {...acc, [p.id]:  { product: p, instances: [] } };
+  }, {});
   product_instances.forEach((curr) => {
     product_map[curr.product_id].instances.push(curr);
   })
@@ -46,10 +39,7 @@ const CatalogMapGenerator = (categories: ICategory[], products: IProduct[], prod
 };
 
 const ModifierTypeMapGenerator = (modifier_types: IOptionType[], options: IOption[]) => {
-  var modifier_types_map: ICatalogModifiers = {};
-  modifier_types.forEach(mt => {
-    modifier_types_map[mt.id] = { options: [], modifier_type: mt };
-  });
+  var modifier_types_map: ICatalogModifiers = modifier_types.reduce((acc, m)=>({...acc, [m.id]: { options: [], modifier_type: m }}), {});
   options.forEach(o => {
     if (Object.hasOwn(modifier_types_map, o.option_type_id)) {
       modifier_types_map[o.option_type_id].options.push(o);
@@ -76,7 +66,7 @@ const CatalogGenerator = (
     categories: category_map,
     products: product_map,
     version: Date.now().toString(36).toUpperCase(),
-    product_instance_functions: product_instance_functions,
+    product_instance_functions: product_instance_functions.reduce((acc, pif) => ({...acc, [pif.id]: pif}), {} as RecordProductInstanceFunctions),
     api
   } as ICatalog;
 }
