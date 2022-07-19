@@ -8,10 +8,10 @@ import LeadTimeModel from '../models/settings/LeadTimeSchema';
 import BlockedOffModel from '../models/settings/BlockedOffSchema';
 import StringListModel from '../models/settings/StringListSchema';
 import SettingsModel from '../models/settings/SettingsSchema';
-import DEFAULT_LEAD_TIMES from "../data/leadtimeschemas.default.json";
-import DEFAULT_SETTINGS from "../data/settingsschemas.default.json";
-import DEFAULT_SERVICES from "../data/servicesschemas.default.json";
-import DEFAULT_DELIVERY_AREA from "../data/deliveryareaschemas.default.json";
+import DEFAULT_LEAD_TIMES from "../../data/leadtimeschemas.default.json";
+import DEFAULT_SETTINGS from "../../data/settingsschemas.default.json";
+import DEFAULT_SERVICES from "../../data/servicesschemas.default.json";
+import DEFAULT_DELIVERY_AREA from "../../data/deliveryareaschemas.default.json";
 
 
 export class DataProvider implements WProvider {

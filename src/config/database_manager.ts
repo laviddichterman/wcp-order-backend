@@ -1,6 +1,6 @@
 import logger from '../logging';
 import { WProvider } from '../types/WProvider';
-import PACKAGE_JSON from '../package.json';
+import PACKAGE_JSON from '../../package.json';
 import { IAbstractExpression, IConstLiteralExpression, IHasAnyOfModifierExpression, IIfElseExpression, ILogicalExpression, IModifierPlacementExpression, ProductInstanceFunctionType, SEMVER } from '@wcp/wcpshared';
 import DBVersionModel from '../models/DBVersionSchema';
 import mongoose, { Schema } from "mongoose";

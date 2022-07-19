@@ -1,5 +1,5 @@
 import winston from 'winston';
-import PACKAGE from './package.json';
+import PACKAGE from '../package.json';
 
 export const logger = winston.createLogger({
   level: 'info',

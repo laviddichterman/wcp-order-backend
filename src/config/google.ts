@@ -2,7 +2,7 @@ import nodemailer from "nodemailer";
 import { google, calendar_v3 } from "googleapis";
 import { ExponentialBackoff } from '../utils';
 import logger from '../logging';
-import OAUTH2_KEYS from "../authentication/auth.json";
+import OAUTH2_KEYS from "../../authentication/auth.json";
 import SMTPTransport from "nodemailer/lib/smtp-transport";
 import Mail from "nodemailer/lib/mailer";
 import DataProviderInstance from "./dataprovider";

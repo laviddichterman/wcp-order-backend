@@ -2,10 +2,17 @@
   "name": "@wcp/wcp-order-backend",
   "version": "0.3.0",
   "main": "dist/server.js",
+  "files": [
+    "dist",
+    "package.json",
+    "package-lock.json",
+    "README.md"
+  ],
   "scripts": {
     "test": "mocha",
     "build": "tsc",
-    "startprod": "node ./dist/server.js",
+    "prepare": "tsc",
+    "start:prod": "node ./dist/server.js",
     "start": "ts-node ./server.ts",
     "debug": "ts-node-dev --inspect-brk ./dist/server.js"
   },
@@ -58,6 +65,7 @@
     "@types/node": "^18.0.6",
     "@types/nodemailer": "^6.4.4",
     "@types/qrcode": "^1.4.2",
+    "@types/validator": "^13.7.4",
     "@types/voucher-code-generator": "^1.1.1",
     "@typescript-eslint/eslint-plugin": "^5.30.7",
     "@typescript-eslint/parser": "^5.30.7",
