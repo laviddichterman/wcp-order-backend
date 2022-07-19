@@ -1,7 +1,7 @@
 {
   "name": "@wcp/wcp-order-backend",
   "version": "0.3.1",
-  "main": "dist/server.js",
+  "main": "dist/src/server.js",
   "files": [
     "dist",
     "package.json",
@@ -11,10 +11,10 @@
   "scripts": {
     "test": "mocha",
     "build": "tsc",
-    "prepare": "tsc",
-    "start:prod": "node ./dist/server.js",
+    "prepare": "rm -fr ./dist && tsc --build --clean && tsc --build",
+    "start:prod": "node ./dist/src/server.js",
     "start": "ts-node ./src/server.ts",
-    "debug": "ts-node-dev --inspect-brk ./dist/server.js"
+    "debug": "ts-node-dev --inspect-brk ./src/server.ts"
   },
   "keywords": [],
   "repository": {
