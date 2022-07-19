@@ -57,7 +57,7 @@ export class DeliveryAddressController implements IExpressController {
       client.geocode({
         params: {
           address: `${validationRequest.address} ${validationRequest.zipcode} ${validationRequest.city}, ${validationRequest.state}`,
-          key: process.env.GOOGLEKEY
+          key: DataProviderInstance.KeyValueConfig.GOOGLE_GEOCODE_KEY
         },
         timeout: 2000 //ms
       }).then(r => {

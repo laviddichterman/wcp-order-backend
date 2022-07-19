@@ -1,8 +1,8 @@
 import nodemailer from "nodemailer";
 import { google, calendar_v3 } from "googleapis";
+import { OAuth2Client } from 'google-auth-library';
 import { ExponentialBackoff } from '../utils';
 import logger from '../logging';
-import OAUTH2_KEYS from "../../authentication/auth.json";
 import SMTPTransport from "nodemailer/lib/smtp-transport";
 import Mail from "nodemailer/lib/mailer";
 import DataProviderInstance from "./dataprovider";
@@ -18,13 +18,8 @@ export class GoogleProvider implements WProvider {
   #smtpTransport : nodemailer.Transporter<SMTPTransport.SentMessageInfo>;
   #calendarAPI;
   #sheetsAPI;
-  #oauth2Client;
+  #oauth2Client: OAuth2Client;
   constructor() {
-    this.#oauth2Client = new OAuth2(
-      OAUTH2_KEYS.CLIENT_ID,
-      OAUTH2_KEYS.CLIENT_SECRET,
-      "https://developers.google.com/oauthplayground"
-    );
     this.#calendarAPI = google.calendar('v3');
     this.#sheetsAPI = google.sheets('v4');
   }
@@ -43,6 +38,11 @@ export class GoogleProvider implements WProvider {
   Bootstrap = async () => {
     logger.debug("Bootstrapping GoogleProvider");
     const cfg = DataProviderInstance.KeyValueConfig;
+    this.#oauth2Client = new OAuth2(
+      cfg.GOOGLE_CLIENTID,
+      cfg.GOOGLE_CLIENT_SECRET,
+      "https://developers.google.com/oauthplayground"
+    );
     if (cfg.GOOGLE_REFRESH_TOKEN && cfg.EMAIL_ADDRESS) {
       logger.debug("Got refresh token from DB config: %o", cfg.GOOGLE_REFRESH_TOKEN);
       this.#oauth2Client.setCredentials({
@@ -60,8 +60,8 @@ export class GoogleProvider implements WProvider {
         auth: {
           type: "OAuth2",
           user: cfg.EMAIL_ADDRESS,
-          clientId: OAUTH2_KEYS.CLIENT_ID,
-          clientSecret: OAUTH2_KEYS.CLIENT_SECRET,
+          clientId: cfg.GOOGLE_CLIENTID,
+          clientSecret: cfg.GOOGLE_CLIENT_SECRET,
           refreshToken: cfg.GOOGLE_REFRESH_TOKEN
         }
       });
