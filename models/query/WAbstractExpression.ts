@@ -1,21 +1,36 @@
-import { IAbstractExpression, ProductInstanceFunctionType } from "@wcp/wcpshared";
+import { AbstractExpressionConstLiteral, AbstractExpressionHasAnyOfModifierExpression, AbstractExpressionIfElseExpression, AbstractExpressionLogicalExpression, AbstractExpressionModifierPlacementExpression, IAbstractExpression, IConstLiteralExpression, IHasAnyOfModifierExpression, IIfElseExpression, ILogicalExpression, IModifierPlacementExpression, ProductInstanceFunctionType } from "@wcp/wcpshared";
 import mongoose, { Schema } from "mongoose";
 import path from 'path';
+import { WConstLiteral } from "./WConstLiteral";
 
 export const WAbstractExpression = new Schema<IAbstractExpression>({
-  const_literal: Schema.Types.Mixed,//{ type: Schema.Types.ObjectId, ref: 'WConstLiteral' },
-  if_else: Schema.Types.Mixed,//{ type: Schema.Types.ObjectId, ref: 'WIfElse' },
-  logical: Schema.Types.Mixed,//{ type: Schema.Types.ObjectId, ref: 'WLogicalOperator' },
-  modifier_placement: Schema.Types.Mixed,//{ type: Schema.Types.ObjectId, ref: 'WModifierPlacementExtractionOperator' },
-  has_any_of_modifier: Schema.Types.Mixed,//{ type: Schema.Types.ObjectId, ref: 'WHasAnyOfModifierType' },
-  // fulfillmentInfo -- something that can check for fulfillment conditions (to disable slicing modifier on dine-in at BTP, disable slushy size on dine-in at windy )
-  // metadata -- we need something that can read an arbitrary field in metadata 
+  //expr: Schema.Types.Mixed,
   discriminator: {
     type: String,
-    enum: ['ConstLiteral', 'IfElse', 'Logical', 'ModifierPlacement', 'HasAnyOfModifierType'],//, 'MetadataSum'],
+    enum: ProductInstanceFunctionType,
     required: true
   }
-}, {_id: false});
+}, {_id: false, discriminatorKey: 'discriminator'});
 
 
-export default mongoose.model<IAbstractExpression>(path.basename(__filename).replace(path.extname(__filename), ''), WAbstractExpression);
+export const WAbstractExpressionModel = mongoose.model<IAbstractExpression>(path.basename(__filename).replace(path.extname(__filename), ''), WAbstractExpression);
+export const WConstLiteralExpressionModel = WAbstractExpressionModel.discriminator<AbstractExpressionConstLiteral>(ProductInstanceFunctionType.ConstLiteral, 
+  new Schema<{ expr: IConstLiteralExpression }>({
+  expr: { value: Schema.Types.Mixed }
+}, {_id: false}));
+export const WHasAnyOfModifierExpressionModel = WAbstractExpressionModel.discriminator<AbstractExpressionHasAnyOfModifierExpression>(ProductInstanceFunctionType.HasAnyOfModifierType, 
+  new Schema<{ expr: IHasAnyOfModifierExpression }>({
+  expr: { value: Schema.Types.Mixed }
+}, {_id: false}));
+export const WIfElseExpressionModel = WAbstractExpressionModel.discriminator<AbstractExpressionIfElseExpression>(ProductInstanceFunctionType.IfElse, 
+  new Schema<{ expr: IIfElseExpression }>({
+  expr: { value: Schema.Types.Mixed }
+}, {_id: false}));
+export const WLogicalExpressionModel = WAbstractExpressionModel.discriminator<AbstractExpressionLogicalExpression>(ProductInstanceFunctionType.Logical, 
+  new Schema<{ expr: ILogicalExpression }>({
+  expr: { value: Schema.Types.Mixed }
+}, {_id: false}));
+export const WModifierPlacementExpressionModel = WAbstractExpressionModel.discriminator<AbstractExpressionModifierPlacementExpression>(ProductInstanceFunctionType.ModifierPlacement, 
+  new Schema<{ expr: IModifierPlacementExpression }>({
+  expr: { value: Schema.Types.Mixed }
+}, {_id: false}));

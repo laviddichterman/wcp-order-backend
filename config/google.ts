@@ -6,7 +6,7 @@ import OAUTH2_KEYS from "../authentication/auth.json";
 import SMTPTransport from "nodemailer/lib/smtp-transport";
 import Mail from "nodemailer/lib/mailer";
 import DataProviderInstance from "./dataprovider";
-import { WProvider } from '../interfaces/WProvider';
+import { WProvider } from '../types/WProvider';
 const OAuth2 = google.auth.OAuth2;
 
 export class GoogleProvider implements WProvider {
@@ -32,7 +32,7 @@ export class GoogleProvider implements WProvider {
   RefreshAccessToken = async () => {
     try {
       const token = await this.#oauth2Client.getAccessToken();
-      logger.debug(`Refreshing Google OAUTH2 access token to ${token}`);
+      logger.debug(`Refreshing Google OAUTH2 access token to ${token.token}`);
       this.#accessToken = token.token;
     }
     catch (error) {

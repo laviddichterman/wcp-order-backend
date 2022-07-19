@@ -1,4 +1,4 @@
-import { WProvider } from '../interfaces/WProvider';
+import { WProvider } from '../types/WProvider';
 import { IWBlockedOff, IWSettings, JSFEBlockedOff, WDateUtils } from '@wcp/wcpshared';
 import { HydratedDocument } from 'mongoose';
 import logger from '../logging';

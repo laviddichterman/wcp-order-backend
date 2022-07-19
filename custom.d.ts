@@ -8,6 +8,6 @@
 //   }
 // }
 
-// declare module 'mongoose' {
-//   type Promise<T> = import('bluebird')<T>;
-// }
+declare module 'mongoose' {
+  type Promise<T> = import('bluebird')<T>;
+}

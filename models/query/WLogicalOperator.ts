@@ -4,7 +4,7 @@ import { WAbstractExpression } from "./WAbstractExpression";
 import path from 'path';
 
 export const WLogicalOperator = new Schema<ILogicalExpression>({
-  operandA: WAbstractExpression,
+  operandA: { type: WAbstractExpression, required: true },
   // operand B is ignored in the case of the NOT operator 
   operandB: WAbstractExpression,
   operator: {

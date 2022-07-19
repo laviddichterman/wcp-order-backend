@@ -1,5 +1,5 @@
 import {  ApiError, Client, CreateOrderRequest, CreateOrderResponse, CreatePaymentRequest, CreatePaymentResponse, Environment, UpdateOrderRequest } from 'square';
-import { WProvider } from '../interfaces/WProvider';
+import { WProvider } from '../types/WProvider';
 import crypto from 'crypto';
 import logger from'../logging';
 import DataProviderInstance from './dataprovider';

@@ -4,11 +4,12 @@ import mongoose, { Schema } from 'mongoose';
 import { Server as IoServer, Namespace as IoNamespace } from 'socket.io';
 import { createServer, Server as HttpServer } from 'http';
 import expressWinston from 'express-winston';
-import IExpressController from './interfaces/IExpressController';
+import IExpressController from './types/IExpressController';
 import logger from "./logging";
 import { idempotency } from 'express-idempotency';
 import cors from 'cors';
-import { WProvider } from './interfaces/WProvider';
+import { WProvider } from './types/WProvider';
+import errorMiddleware from './middleware/errorMiddleware';
 
 // // Duplicate the ID field.
 // Schema.virtual<string>('id').get(function(){
@@ -99,7 +100,7 @@ export class WApp {
   }
 
   private initializeErrorHandling() {
-//    this.app.use(errorMiddleware);
+    this.app.use(errorMiddleware);
   }
 
   private async runBootstrap() {

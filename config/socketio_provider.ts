@@ -1,4 +1,4 @@
-import { WProvider } from '../interfaces/WProvider';
+import { WProvider } from '../types/WProvider';
 import logger from '../logging';
 import { Namespace } from 'socket.io';
 import CatalogProviderInstance from './catalog_provider';

@@ -1,4 +1,21 @@
-import { GenerateMenu, ICatalog, SEMVER, ICatalogCategories, ICatalogModifiers, ICategory, IMenu, IOption, IOptionType, IProduct, IProductInstance, IProductInstanceFunction, IAbstractExpression, ICatalogProducts, IExternalIDs, ICatalogItem, RecordProductInstanceFunctions } from "@wcp/wcpshared";
+import { GenerateMenu, 
+  ICatalog, 
+  SEMVER, 
+  ICatalogCategories, 
+  ICatalogModifiers, 
+  ICategory, 
+  IMenu, 
+  IOption, 
+  IOptionType, 
+  IProduct, 
+  IProductInstance, 
+  IProductInstanceFunction, 
+  IAbstractExpression, 
+  ICatalogProducts, 
+  IExternalIDs, 
+  ICatalogItem, 
+  RecordProductInstanceFunctions, 
+  AbstractExpressionModifierPlacementExpression } from "@wcp/wcpshared";
 import DBVersionModel from '../models/DBVersionSchema';
 import WCategoryModel from '../models/ordering/category/WCategorySchema';
 import WProductInstanceModel from '../models/ordering/products/WProductInstanceSchema';
@@ -8,7 +25,7 @@ import WOptionTypeModel from '../models/ordering/options/WOptionTypeSchema';
 import WProductInstanceFunctionModel from '../models/query/WProductInstanceFunction';
 import socketIo from "socket.io";
 import logger from '../logging';
-import { WProvider } from "../interfaces/WProvider";
+import { WProvider } from "../types/WProvider";
 import { WApp } from "../App";
 
 function ReduceArrayToMapByKey<T, Key extends keyof T>(xs: T[], key: Key) {
@@ -22,7 +39,14 @@ function ReduceArrayToMapByKey<T, Key extends keyof T>(xs: T[], key: Key) {
 const CatalogMapGenerator = (categories: ICategory[], products: IProduct[], product_instances: IProductInstance[]) => {
   const category_map: ICatalogCategories = categories.reduce((acc, cat) =>({...acc, [cat.id]: {category: cat, children: [], products: []}}), {});
   categories.forEach((curr) => {
-    category_map[curr.parent_id].children.push(curr.id);
+    if (curr.parent_id) {
+      if (category_map[curr.parent_id]) {
+        category_map[curr.parent_id].children.push(curr.id);
+      }
+      else {
+        logger.error(`Missing category ID ${curr.parent_id} specified by ${JSON.stringify(curr)}`);
+      }  
+    }
   });
   const product_map: ICatalogProducts = products.reduce((acc, p) => {
     if (p.category_ids.length !== 0) {
@@ -75,15 +99,15 @@ const CatalogGenerator = (
 const FindModifierPlacementExpressionsForMTID: (expr: IAbstractExpression, mtid: string) => IAbstractExpression[] = function (expr, mtid) {
   switch (expr.discriminator) {
     case "IfElse":
-      return FindModifierPlacementExpressionsForMTID(expr.if_else.true_branch, mtid).concat(
-        FindModifierPlacementExpressionsForMTID(expr.if_else.false_branch, mtid)).concat(
-          FindModifierPlacementExpressionsForMTID(expr.if_else.test, mtid));
+      return FindModifierPlacementExpressionsForMTID(expr.expr.true_branch, mtid).concat(
+        FindModifierPlacementExpressionsForMTID(expr.expr.false_branch, mtid)).concat(
+          FindModifierPlacementExpressionsForMTID(expr.expr.test, mtid));
     case "Logical":
-      const operandA_expressions = expr.logical.operandA ? FindModifierPlacementExpressionsForMTID(expr.logical.operandA, mtid) : [];
-      const operandB_expressions = expr.logical.operandB ? FindModifierPlacementExpressionsForMTID(expr.logical.operandB, mtid) : [];
+      const operandA_expressions = FindModifierPlacementExpressionsForMTID(expr.expr.operandA, mtid);
+      const operandB_expressions = expr.expr.operandB !== undefined ? FindModifierPlacementExpressionsForMTID(expr.expr.operandB, mtid) : [];
       return operandA_expressions.concat(operandB_expressions);
     case "ModifierPlacement":
-      return expr.modifier_placement.mtid === mtid ? [expr] : [];
+      return expr.expr.mtid === mtid ? [expr] : [];
     case "HasAnyOfModifierType":
     case "ConstLiteral":
     default:
@@ -95,15 +119,15 @@ const FindModifierPlacementExpressionsForMTID: (expr: IAbstractExpression, mtid:
 const FindHasAnyModifierExpressionsForMTID: (expr: IAbstractExpression, mtid: string) => IAbstractExpression[] = function (expr, mtid) {
   switch (expr.discriminator) {
     case "IfElse":
-      return FindHasAnyModifierExpressionsForMTID(expr.if_else.true_branch, mtid).concat(
-        FindHasAnyModifierExpressionsForMTID(expr.if_else.false_branch, mtid)).concat(
-          FindHasAnyModifierExpressionsForMTID(expr.if_else.test, mtid));
+      return FindHasAnyModifierExpressionsForMTID(expr.expr.true_branch, mtid).concat(
+        FindHasAnyModifierExpressionsForMTID(expr.expr.false_branch, mtid)).concat(
+          FindHasAnyModifierExpressionsForMTID(expr.expr.test, mtid));
     case "Logical":
-      const operandA_expressions = expr.logical.operandA ? FindHasAnyModifierExpressionsForMTID(expr.logical.operandA, mtid) : [];
-      const operandB_expressions = expr.logical.operandB ? FindHasAnyModifierExpressionsForMTID(expr.logical.operandB, mtid) : [];
+      const operandA_expressions = FindHasAnyModifierExpressionsForMTID(expr.expr.operandA, mtid);
+      const operandB_expressions = expr.expr.operandB !== undefined ? FindHasAnyModifierExpressionsForMTID(expr.expr.operandB, mtid) : [];
       return operandA_expressions.concat(operandB_expressions);
     case "HasAnyOfModifierType":
-      return expr.has_any_of_modifier.mtid === mtid ? [expr] : [];
+      return expr.expr.mtid === mtid ? [expr] : [];
     case "ModifierPlacement":
     case "ConstLiteral":
     default:
@@ -541,8 +565,8 @@ export class CatalogProvider implements WProvider {
       await this.SyncOptions();
       // need to delete any ProductInstanceFunctions that use this MO
       await Promise.all(this.#product_instance_functions.map(async (pif) => {
-        const dependent_pfi_expressions = FindModifierPlacementExpressionsForMTID(pif.expression, doc.option_type_id);
-        const filtered = dependent_pfi_expressions.filter(x => x.modifier_placement.moid === mo_id)
+        const dependent_pfi_expressions = FindModifierPlacementExpressionsForMTID(pif.expression, doc.option_type_id) as AbstractExpressionModifierPlacementExpression[];
+        const filtered = dependent_pfi_expressions.filter(x => x.expr.moid === mo_id)
         if (filtered.length > 0) {
           logger.debug(`Found product instance function composed of ${doc.option_type_id}:${mo_id}, removing PIF with ID: ${pif.id}.`);
           // the PIF and any dependent objects will be synced, but the catalog will not be recomputed / emitted

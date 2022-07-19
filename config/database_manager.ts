@@ -1,13 +1,9 @@
 import logger from '../logging';
-import { WProvider } from '../interfaces/WProvider';
+import { WProvider } from '../types/WProvider';
 import PACKAGE_JSON from '../package.json';
-import { CURRENCY, SEMVER } from '@wcp/wcpshared';
+import { IAbstractExpression, IConstLiteralExpression, IHasAnyOfModifierExpression, IIfElseExpression, ILogicalExpression, IModifierPlacementExpression, ProductInstanceFunctionType, SEMVER } from '@wcp/wcpshared';
 import DBVersionModel from '../models/DBVersionSchema';
 import mongoose, { Schema } from "mongoose";
-
-
-//import WOptionModel from '../models/ordering/options/WOptionSchema';
-//import WCategoryModel from '../models/ordering/category/WCategorySchema';
 
 const SetVersion = async (new_version: SEMVER) => {
   return await DBVersionModel.findOneAndUpdate({}, new_version, { new: true, upsert: true });
@@ -44,15 +40,15 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
       }
       {
         var promises: Promise<any>[] = [];
-        const WProductModel = mongoose.model('wproductschema', new Schema({ 
-          modifiers: [{ mtid: Schema.Types.Mixed, enable: Schema.Types.Mixed }], 
+        const WProductModel = mongoose.model('wproductschema', new Schema({
+          modifiers: [{ mtid: Schema.Types.Mixed, enable: Schema.Types.Mixed }],
           category_ids: [Schema.Types.Mixed],
-          }));
+        }));
         const elts = await WProductModel.find();
         elts.forEach(
           o => {
             //@ts-ignore
-            o.modifiers = o.modifiers.map(mod => ({ mtid: String(mod.mtid), enable: mod.enable ? String(mod.enable) : null  }));
+            o.modifiers = o.modifiers.map(mod => ({ mtid: String(mod.mtid), enable: mod.enable ? String(mod.enable) : null }));
             //@ts-ignore
             o.category_ids = o.category_ids.map(c => String(c));
             promises.push(o.save({}).then(() => {
@@ -85,17 +81,90 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
         const cats = await WCategoryModel.find();
         cats.forEach(
           c => {
-            if (c.parent_id) {
+            if (c.parent_id === undefined || c.parent_id === null || String(c.parent_id) === "" ) {
+              c.parent_id = null;
+            }
+            else {
               //@ts-ignore
               c.parent_id = String(c.parent_id)
-              promises.push(c.save({}).then(() => {
-                logger.debug(`Updated WCategorySchema ${c.id} with type safe parent ID ${c.parent_id}.`);
-              }).catch((err) => {
-                logger.error(`Unable to update WCategorySchema ${c.id}. Got error: ${JSON.stringify(err)}`);
-              }));
             }
-
+            promises.push(c.save({}).then(() => {
+              logger.debug(`Updated WCategorySchema ${c.id} with type safe parent ID ${c.parent_id}.`);
+            }).catch((err) => {
+              logger.error(`Unable to update WCategorySchema ${c.id}. Got error: ${JSON.stringify(err)}`);
+            }));
           });
+        await Promise.all(promises);
+      }
+      {
+        interface IAbstractExpressionOld {
+          const_literal?: IConstLiteralExpression;
+          if_else?: IIfElseExpression;
+          logical?: ILogicalExpression;
+          modifier_placement?: IModifierPlacementExpression;
+          has_any_of_modifier?: IHasAnyOfModifierExpression;
+          discriminator: keyof typeof ProductInstanceFunctionType;
+        };
+
+        var promises: Promise<any>[] = [];
+        const WProductInstanceFunctionModel = mongoose.model('WProductinstancefunction', new Schema({
+          name: { type: String, required: true },
+          expression: {
+            required: true,
+            type: {
+              expr: Schema.Types.Mixed,
+              discriminator: { type: String, enum: ProductInstanceFunctionType, required: true },
+              const_literal: Schema.Types.Mixed,
+              if_else: Schema.Types.Mixed,
+              logical: Schema.Types.Mixed,
+              modifier_placement: Schema.Types.Mixed,
+              has_any_of_modifier: Schema.Types.Mixed
+            }
+          }
+        }));
+        const res = await WProductInstanceFunctionModel.find();
+        const convertRecursive = function (e: IAbstractExpressionOld): IAbstractExpression {
+          switch (e.discriminator) {
+            case ProductInstanceFunctionType.ConstLiteral:
+              return { discriminator: ProductInstanceFunctionType.ConstLiteral, expr: e.const_literal };
+            case ProductInstanceFunctionType.HasAnyOfModifierType:
+              return { discriminator: ProductInstanceFunctionType.HasAnyOfModifierType, expr: e.has_any_of_modifier }
+            case ProductInstanceFunctionType.IfElse:
+              return {
+                discriminator: ProductInstanceFunctionType.IfElse,
+                expr: {
+                  test: convertRecursive(e.if_else.test),
+                  true_branch: convertRecursive(e.if_else.true_branch),
+                  false_branch: convertRecursive(e.if_else.false_branch)
+                }
+              };
+            case ProductInstanceFunctionType.Logical:
+              return {
+                discriminator: ProductInstanceFunctionType.Logical,
+                expr: {
+                  operandA: convertRecursive(e.logical.operandA),
+                  operandB: e.logical.operandB ? convertRecursive(e.logical.operandB) : undefined,
+                  operator: e.logical.operator
+                }
+              };
+            case ProductInstanceFunctionType.ModifierPlacement:
+              return {
+                discriminator: ProductInstanceFunctionType.ModifierPlacement,
+                expr: e.modifier_placement
+              };
+          }
+        }
+        res.forEach(
+          e => {
+            // @ts-ignore
+            e.expression = convertRecursive(e.expression);
+            promises.push(e.save({}).then(() => {
+              logger.debug(`Updated WProductInstanceFunction ${e.id} with discriminator based typed expression: ${JSON.stringify(e.expression)}`);
+            }).catch((err) => {
+              logger.error(`Unable to update WProductInstanceFunction ${e.id}. Got error: ${JSON.stringify(err)}`);
+            }));
+          }
+        );
         await Promise.all(promises);
       }
     }

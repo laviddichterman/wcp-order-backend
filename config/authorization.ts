@@ -58,3 +58,11 @@ export const ScopeEditCredit = requiredScopes("edit:store_credit");
 * Allows advanced editing store credit
 */
 export const ScopeAdvancedCredit = requiredScopes("advanced:store_credit");
+/**
+* Allows reading accounting information
+*/
+export const ScopeAccountingRead = requiredScopes("read:accounting");
+/**
+* Allows writing accounting information
+*/
+export const ScopeAccountingWrite = requiredScopes("write:accounting");
