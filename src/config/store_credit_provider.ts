@@ -149,6 +149,5 @@ export class StoreCreditProvider {
 
 };
 
-const StoreCreditProviderInstance = new StoreCreditProvider();
+export const StoreCreditProviderInstance = new StoreCreditProvider();
 export default StoreCreditProviderInstance;
-module.exports = StoreCreditProvider;

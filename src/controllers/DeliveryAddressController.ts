@@ -3,39 +3,16 @@
 
 import { Router, Request, Response, NextFunction } from 'express';
 import { Client } from "@googlemaps/google-maps-services-js";
-import { Equals, IsString, Length, ValidateNested } from 'class-validator';
 import turf, { invariant } from '@turf/turf';
 
 import DataProviderInstance from '../config/dataprovider';
 import SocketIoProviderInstance from '../config/socketio_provider';
 import logger from '../logging';
 import IExpressController from '../types/IExpressController';
-import validationMiddleware from '../middleware/validationMiddleware';
 import { CheckJWT, ScopeWriteKVStore } from '../config/authorization';
 
 const client = new Client({});
 
-class ValidationRequestDto {
-  @IsString({ message: "Invalid address" })
-  public address: string;
-  @IsString()
-  @Length(5, 5, { message: "Zipcode length is incorrect" })
-  public zipcode: string;
-  @IsString()
-  public city: string;
-  @IsString()
-  public state: string;
-}
-
-class AddressPostDto {
-  @IsString()
-  @Equals("Polygon")
-  public type: string;
-
-  @ValidateNested()
-  public coordinates: number[][][];
-
-}
 export class DeliveryAddressController implements IExpressController {
   public path = "/api/v1/addresses";
   public router = Router({ mergeParams: true });
@@ -45,19 +22,22 @@ export class DeliveryAddressController implements IExpressController {
   }
 
   private initializeRoutes() {
-    this.router.get(`${this.path}`, validationMiddleware(ValidationRequestDto), this.validateAddress);
-    this.router.get(`${this.path}/validate`, validationMiddleware(ValidationRequestDto), this.validateAddress);
-    this.router.post(`${this.path}`, CheckJWT, ScopeWriteKVStore, validationMiddleware(AddressPostDto), this.setDeliveryArea);
+    this.router.get(`${this.path}`, this.validateAddress);
+    this.router.get(`${this.path}/validate`, this.validateAddress);
+    this.router.post(`${this.path}`, CheckJWT, ScopeWriteKVStore, this.setDeliveryArea);
   };
 
-  private validateAddress = async (request: Request, response: Response, next: NextFunction) => {
+  private validateAddress = async (req: Request, response: Response, next: NextFunction) => {
     try {
-      const validationRequest: ValidationRequestDto = request.body;
+      const address_line = req.query.address as string;
+      const zipcode = req.query.zipcode as string;
+      const city = req.query.city as string;
+      const state = req.query.state as string;
       const DELIVERY_POLY = turf.polygon(DataProviderInstance.DeliveryArea.coordinates);
-      client.geocode({
-        params: {
-          address: `${validationRequest.address} ${validationRequest.zipcode} ${validationRequest.city}, ${validationRequest.state}`,
-          key: DataProviderInstance.KeyValueConfig.GOOGLE_GEOCODE_KEY
+      client.geocode( { 
+        params: { 
+          address: `${address_line} ${zipcode} ${city}, ${state}`,
+          key: process.env.GOOGLEKEY
         },
         timeout: 2000 //ms
       }).then(r => {
@@ -73,7 +53,7 @@ export class DeliveryAddressController implements IExpressController {
           in_area,
           found:
             street_number_component != undefined &&
-            validationRequest.address.indexOf(street_number_component.long_name) === 0,
+            address_line.indexOf(street_number_component.long_name) === 0,
           address_components: result.address_components
         });
       })

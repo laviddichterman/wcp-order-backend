@@ -1,6 +1,6 @@
 {
   "name": "@wcp/wcp-order-backend",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "main": "dist/src/server.js",
   "files": [
     "dist",
@@ -14,7 +14,7 @@
     "prepare": "rm -fr ./dist && tsc --build --clean && tsc --build",
     "start:prod": "node ./dist/src/server.js",
     "start": "ts-node ./src/server.ts",
-    "debug": "ts-node-dev --inspect-brk ./src/server.ts"
+    "debug": "ts-node-dev ./src/server.ts"
   },
   "keywords": [],
   "repository": {
@@ -32,7 +32,7 @@
     "@turf/invariant": "^6.5.0",
     "@turf/turf": "^6.5.0",
     "@types/papaparse": "^5.3.2",
-    "@wcp/wcpshared": "^3.4.3",
+    "@wcp/wcpshared": "^3.4.4",
     "bluebird": "^3.7.2",
     "body-parser": "^1.20.0",
     "class-transformer": "^0.5.1",

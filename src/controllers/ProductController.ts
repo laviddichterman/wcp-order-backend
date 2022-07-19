@@ -86,7 +86,7 @@ const EditProductInstanceValidationChain = [
 
 
 export class ProductController implements IExpressController {
-  public path = "/api/v1/menu/product/";
+  public path = "/api/v1/menu/product";
   public router = Router({ mergeParams: true });
 
   constructor() {

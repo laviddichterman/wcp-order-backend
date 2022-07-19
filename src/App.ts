@@ -22,7 +22,12 @@ import errorMiddleware from './middleware/errorMiddleware';
 // });
 
 const PORT = process.env.PORT || 4001;
-const ORIGINS = [/https:\/\/.*\.windycitypie\.com$/, /https:\/\/.*\.breezytownpizza\.com$/, `http://localhost:${PORT}`];
+const ORIGINS = [/https:\/\/.*\.windycitypie\.com$/,
+  /https:\/\/windycitypie\.com$/, 
+  /https:\/\/breezytownpizza\.com$/, 
+`http://127.0.0.1:3000`, 
+`http://localhost:3000`, 
+`http://localhost:${PORT}`];
 
 export class WApp {
   private hasBootstrapped: boolean;

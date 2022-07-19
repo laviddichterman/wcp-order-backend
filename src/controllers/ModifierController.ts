@@ -69,7 +69,7 @@ const EditModifierOptionValidationChain = [
 
 
 export class ModifierController implements IExpressController {
-  public path = "/api/v1/menu/option/";
+  public path = "/api/v1/menu/option";
   public router = Router({ mergeParams: true });
 
   constructor() {

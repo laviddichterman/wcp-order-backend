@@ -258,7 +258,7 @@ export class StoreCreditController implements IExpressController {
         return res.status(422).json({ errors: errors.array() });
       }
       const amountAsString = Number(req.body.amount).toFixed(2);
-      const expiration = req.body.expiration ? parse(req.body.expiration, WDateUtils.DATE_STRING_INTERNAL_FORMAT, new Date()) : null
+      const expiration = req.body.expiration ? parse(req.body.expiration, WDateUtils.DATE_STRING_INTERNAL_FORMAT, Date.now()) : null
       const added_by = req.body.added_by;
       const recipient_name_first = req.body.recipient_name_first;
       const recipient_name_last = req.body.recipient_name_last;
