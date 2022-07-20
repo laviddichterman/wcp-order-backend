@@ -1,6 +1,6 @@
 {
   "name": "@wcp/wcp-order-backend",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "main": "dist/src/server.js",
   "files": [
     "dist",
@@ -11,7 +11,7 @@
   "scripts": {
     "test": "mocha",
     "build": "tsc",
-    "prepare": "rm -fr ./dist && tsc --build --clean && tsc --build",
+    "clean": "rm -fr ./dist && tsc --build --clean",
     "start:prod": "node ./dist/src/server.js",
     "start": "ts-node ./src/server.ts",
     "debug": "ts-node-dev ./src/server.ts"
@@ -32,7 +32,7 @@
     "@turf/invariant": "^6.5.0",
     "@turf/turf": "^6.5.0",
     "@types/papaparse": "^5.3.2",
-    "@wcp/wcpshared": "^3.4.4",
+    "@wcp/wcpshared": "^3.4.5",
     "bluebird": "^3.7.2",
     "body-parser": "^1.20.0",
     "class-transformer": "^0.5.1",

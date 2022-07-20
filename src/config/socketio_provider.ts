@@ -22,7 +22,7 @@ export class SocketIoProvider implements WProvider {
         logger.info(`CONNECTION: Client at IP: ${socket.client.request.headers["x-real-ip"]}, UA: ${socket.client.request.headers['user-agent']}.`) : 
         logger.info(`CONNECTION: Client info: ${JSON.stringify(socket.client.request.headers)}.`);
       logger.info(`Num Connected: ${app.getSocketIoServer().engine.clientsCount}`);
-    
+      socket.emit('WCP_SERVER_TIME', connect_time.valueOf());
       socket.emit('WCP_SERVICES', DataProviderInstance.Services);
       socket.emit('WCP_LEAD_TIMES', DataProviderInstance.LeadTimes);
       socket.emit('WCP_BLOCKED_OFF', DataProviderInstance.BlockedOff);

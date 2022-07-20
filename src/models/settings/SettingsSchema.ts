@@ -20,9 +20,12 @@ export const SettingsSchema = new Schema<IWSettings>({
   config: {
     SQUARE_LOCATION: String,
     MENU_CATID: String,
-    PIZZAS_CATID: String,
+    MAIN_CATID: String,
+    SUPP_CATID: String,
     TAX_RATE: Number,
-    SQUARE_APPLICATION_ID: String
+    SQUARE_APPLICATION_ID: String,
+    ALLOW_ADVANCED: Boolean,
+    ALLOW_SLICING: Boolean
   },
   pipeline_info: PipelineSchema,
   operating_hours: [[[[Number]]]]
