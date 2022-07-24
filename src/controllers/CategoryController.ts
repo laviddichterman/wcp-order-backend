@@ -17,7 +17,7 @@ const CategoryValidationChain = [
   body('subheading').trim(),
   body('footnotes').trim(),
   body('ordinal').exists().isInt({ min: 0 }),
-  body('parent_id').trim().escape().isMongoId(),
+  body('parent_id').trim().escape().isMongoId().optional({ nullable: true }),
   body('display_flags.call_line_name').trim().escape(),
   body('display_flags.call_line_display').isIn(Object.keys(CALL_LINE_DISPLAY))
 ];

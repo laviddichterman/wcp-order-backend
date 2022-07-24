@@ -10,7 +10,8 @@ import GoogleProviderInstance from '../config/google';
 import SquareProviderInstance from '../config/square';
 import internal, { Stream } from 'stream';
 import { format, parse } from 'date-fns';
-import { WDateUtils } from '@wcp/wcpshared';
+import { ValidateAndLockCreditResponse, WDateUtils } from '@wcp/wcpshared';
+import { BigIntStringify } from '../utils';
 
 const CreditCodeValidationChain = [
   query('code').exists().isLength({min: 19, max: 19})
@@ -140,7 +141,7 @@ export class StoreCreditController implements IExpressController {
           auth: validate_response.lock.auth.toString('hex'), 
           validated: validate_response.valid, 
           amount: validate_response.balance, 
-          credit_type: validate_response.type});
+          credit_type: validate_response.type} as ValidateAndLockCreditResponse);
       }
       else {
         logger.info(`Failed to find ${credit_code}`);
@@ -152,7 +153,7 @@ export class StoreCreditController implements IExpressController {
         { name: EMAIL_ADDRESS, address: "dave@windycitypie.com" },
         "ERROR IN GIFT CARD PROCESSING. CONTACT DAVE IMMEDIATELY",
         "dave@windycitypie.com",
-        `<p>Request: ${JSON.stringify(req.query)}</p><p>Error info:${JSON.stringify(error)}</p>`);
+        `<p>Request: ${BigIntStringify(req.query)}</p><p>Error info:${BigIntStringify(error)}</p>`);
       next(error)
     }
   }
@@ -175,7 +176,7 @@ export class StoreCreditController implements IExpressController {
         { name: EMAIL_ADDRESS, address: "dave@windycitypie.com" },
         "ERROR IN GIFT CARD PROCESSING. CONTACT DAVE IMMEDIATELY",
         "dave@windycitypie.com",
-        `<p>Request: ${JSON.stringify(req.body)}</p><p>Error info:${JSON.stringify(error)}</p>`);
+        `<p>Request: ${BigIntStringify(req.body)}</p><p>Error info:${BigIntStringify(error)}</p>`);
       next(error)
     }
   }
@@ -191,7 +192,7 @@ export class StoreCreditController implements IExpressController {
           { name: EMAIL_ADDRESS, address: "dave@windycitypie.com" },
           "ERROR IN GIFT CARD PROCESSING. CONTACT DAVE IMMEDIATELY",
           "dave@windycitypie.com",
-          `<p>Order request: ${JSON.stringify(req.body)}</p><p>Error info:${JSON.stringify(errors.array())}</p>`);
+          `<p>Order request: ${BigIntStringify(req.body)}</p><p>Error info:${BigIntStringify(errors.array())}</p>`);
         return res.status(422).json({ errors: errors.array() });
       }
       const reference_id = Date.now().toString(36).toUpperCase();
@@ -236,8 +237,8 @@ export class StoreCreditController implements IExpressController {
           return res.status(400).json(payment_response);
         }
       } else {
-        logger.error(JSON.stringify(create_order_response));
-        return res.status(500).json({ success: false });
+        logger.error(BigIntStringify(create_order_response));
+        return res.status(500).json(create_order_response);
       }
     } catch (error) {
       GoogleProviderInstance.SendEmail(
@@ -245,7 +246,7 @@ export class StoreCreditController implements IExpressController {
         { name: EMAIL_ADDRESS, address: "dave@windycitypie.com" },
         "ERROR IN GIFT CARD PROCESSING. CONTACT DAVE IMMEDIATELY",
         "dave@windycitypie.com",
-        `<p>Order request: ${JSON.stringify(req.body)}</p><p>Error info:${JSON.stringify(error)}</p>`);
+        `<p>Order request: ${BigIntStringify(req.body)}</p><p>Error info:${BigIntStringify(error)}</p>`);
       next(error)
     }
   }
@@ -277,7 +278,7 @@ export class StoreCreditController implements IExpressController {
         { name: EMAIL_ADDRESS, address: "dave@windycitypie.com" },
         "ERROR IN GIFT CARD PROCESSING. CONTACT DAVE IMMEDIATELY",
         "dave@windycitypie.com",
-        `<p>Order request: ${JSON.stringify(req.body)}</p><p>Error info:${JSON.stringify(error)}</p>`);
+        `<p>Order request: ${BigIntStringify(req.body)}</p><p>Error info:${BigIntStringify(error)}</p>`);
       next(error)
     }
   }

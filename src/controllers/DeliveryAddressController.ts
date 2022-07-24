@@ -3,13 +3,14 @@
 
 import { Router, Request, Response, NextFunction } from 'express';
 import { Client } from "@googlemaps/google-maps-services-js";
-import turf, { invariant } from '@turf/turf';
+import * as turf from '@turf/turf'
 
-import DataProviderInstance from '../config/dataprovider';
+import DataProviderInstance, { DataProvider } from '../config/dataprovider';
 import SocketIoProviderInstance from '../config/socketio_provider';
 import logger from '../logging';
 import IExpressController from '../types/IExpressController';
 import { CheckJWT, ScopeWriteKVStore } from '../config/authorization';
+import { DeliveryAddressValidateRequest, DeliveryAddressValidateResponse } from '@wcp/wcpshared';
 
 const client = new Client({});
 
@@ -29,18 +30,16 @@ export class DeliveryAddressController implements IExpressController {
 
   private validateAddress = async (req: Request, response: Response, next: NextFunction) => {
     try {
-      const address_line = req.query.address as string;
-      const zipcode = req.query.zipcode as string;
-      const city = req.query.city as string;
-      const state = req.query.state as string;
+      const GOOGLE_GEOCODE_KEY = DataProviderInstance.KeyValueConfig.GOOGLE_GEOCODE_KEY;
+      const typedQuery = req.query as unknown as DeliveryAddressValidateRequest;
       const DELIVERY_POLY = turf.polygon(DataProviderInstance.DeliveryArea.coordinates);
       client.geocode( { 
         params: { 
-          address: `${address_line} ${zipcode} ${city}, ${state}`,
-          key: process.env.GOOGLEKEY
+          address: `${typedQuery.address} ${typedQuery.zipcode} ${typedQuery.city}, ${typedQuery.state}`,
+          key: GOOGLE_GEOCODE_KEY
         },
         timeout: 2000 //ms
-      }).then(r => {
+      }).then( r => {
         const result = r.data.results[0];
         const address_point = turf.point([
           result.geometry.location.lng,
@@ -53,24 +52,24 @@ export class DeliveryAddressController implements IExpressController {
           in_area,
           found:
             street_number_component != undefined &&
-            address_line.indexOf(street_number_component.long_name) === 0,
+            typedQuery.address.indexOf(street_number_component.long_name) === 0,
           address_components: result.address_components
-        });
+        } as DeliveryAddressValidateResponse);
       })
         .catch(e => {
           logger.error(e);
           response.status(500).json(e);
         })
-    } catch (error) {
-      next(error)
-    }
+      } catch (error) {
+        next(error)
+      }
   }
 
   private setDeliveryArea = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const json_from_body = { type: req.body.type, coordinates: req.body.coordinates };
       try {
-        invariant.geojsonType(json_from_body, "Polygon", "delivery_area");
+        turf.invariant.geojsonType(json_from_body, "Polygon", "delivery_area");
       }
       catch (e) {
         logger.info(`Got invalid polygon, validation error: ${e}`);
@@ -84,5 +83,5 @@ export class DeliveryAddressController implements IExpressController {
     } catch (error) {
       next(error)
     }
-  }
+  } 
 }

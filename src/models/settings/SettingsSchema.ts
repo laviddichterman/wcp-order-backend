@@ -25,7 +25,9 @@ export const SettingsSchema = new Schema<IWSettings>({
     TAX_RATE: Number,
     SQUARE_APPLICATION_ID: String,
     ALLOW_ADVANCED: Boolean,
-    ALLOW_SLICING: Boolean
+    ALLOW_SLICING: Boolean,
+    MAX_PARTY_SIZE: Number,
+    DELIVERY_LINK: String
   },
   pipeline_info: PipelineSchema,
   operating_hours: [[[[Number]]]]

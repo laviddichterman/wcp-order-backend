@@ -1,8 +1,9 @@
-import {  ApiError, Client, CreateOrderRequest, CreateOrderResponse, CreatePaymentRequest, CreatePaymentResponse, Environment, UpdateOrderRequest } from 'square';
+import { Error as SquareError, Client, CreateOrderRequest, CreateOrderResponse, CreatePaymentRequest, CreatePaymentResponse, Environment, UpdateOrderRequest } from 'square';
 import { WProvider } from '../types/WProvider';
 import crypto from 'crypto';
 import logger from'../logging';
 import DataProviderInstance from './dataprovider';
+import { BigIntStringify } from '../utils';
 
 export class SquareProvider implements WProvider {
   #client : Client;
@@ -28,7 +29,7 @@ export class SquareProvider implements WProvider {
 
   CreateOrderStoreCredit = async (reference_id : string, amount_money : bigint, note : string) :
   Promise<{ success: true; result: CreateOrderResponse; error: null; } | 
-    { success: false; result: null; error: any; }> => {
+    { success: false; result: null; error: SquareError[]; }> => {
     const idempotency_key = crypto.randomBytes(22).toString('hex');
     const orders_api = this.#client.ordersApi;
     const request_body : CreateOrderRequest = {
@@ -49,16 +50,14 @@ export class SquareProvider implements WProvider {
       }
     };
     try {
-      logger.info(`sending order request: ${JSON.stringify(request_body)}`);
+      logger.info(`sending order request: ${BigIntStringify(request_body)}`);
       const { result, ...httpResponse } = await orders_api.createOrder(request_body);
       return { success: true, result: result, error: null };
     } catch (error) {
-      logger.error(error);
-      return {
-        success: false,
-        result: null,
-        error: error
-      };
+      if (typeof error === 'object' && Object.hasOwn(error, 'errors')) {
+        return { success: false, result: null, error: error.errors as SquareError[] };
+      }
+      return { success: false, result: null, error: [{category: "API_ERROR", code: "INTERNAL_SERVER_ERROR"}]};
     }
   }
 
@@ -74,7 +73,7 @@ export class SquareProvider implements WProvider {
       }
     };
     try {
-      logger.info(`sending order status change request: ${JSON.stringify(request_body)}`);
+      logger.info(`sending order status change request: ${BigIntStringify(request_body)}`);
       const { result, ...httpResponse } = await orders_api.updateOrder(square_order_id, request_body);
       return { success: true, response: result };
     } catch (error) {
@@ -86,9 +85,9 @@ export class SquareProvider implements WProvider {
     }
   }
 
-  ProcessPayment = async (nonce : string, amount_money : bigint, reference_id : string, square_order_id : string) : 
+  ProcessPayment = async (nonce : string, amount_money : bigint, reference_id : string, square_order_id : string, verificationToken?: string) : 
     Promise<{ success: true; result: CreatePaymentResponse; error: null; } | 
-    { success: false; result: null; error: any; }> => {
+    { success: false; result: null; error: SquareError[]; }> => {
     const idempotency_key = crypto.randomBytes(22).toString('hex');
     const payments_api = this.#client.paymentsApi;
     const request_body : CreatePaymentRequest = {
@@ -103,11 +102,11 @@ export class SquareProvider implements WProvider {
       autocomplete: true,
       acceptPartialAuthorization: false,
       statementDescriptionIdentifier: "WCP/BTP Online Order",
-      //verification_token: request_params.verification_token, //TODO: VERIFICATION TOKEN FOR SCA
+      verificationToken,
       idempotencyKey: idempotency_key
     };
     try {
-      logger.info(`sending payment request: ${JSON.stringify(request_body)}`);
+      logger.info(`sending payment request: ${BigIntStringify(request_body)}`);
       const { result, ...httpResponse } = await payments_api.createPayment(request_body);
       return { success: true, result: result, error: null };
     } catch (error) {
@@ -115,7 +114,7 @@ export class SquareProvider implements WProvider {
       return {
         success: false,
         result: null,
-        error: error.result
+        error: error && error.errors ? error.errors : null
       };
     }
   }

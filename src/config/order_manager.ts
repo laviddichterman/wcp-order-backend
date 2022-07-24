@@ -1,4 +1,4 @@
-import { CreateProductWithMetadataFromJsFeDto, WDateUtils, PRODUCT_LOCATION, WProduct } from "@wcp/wcpshared";
+import { CreateProductWithMetadataFromJsFeDto, WDateUtils, PRODUCT_LOCATION, WProduct, ValidateDeliveryResponse, JSFECartDto, JSFEMetrics, JSFETotals, JSFECredit } from "@wcp/wcpshared";
 
 import { WProvider } from '../types/WProvider';
 
@@ -10,47 +10,10 @@ import StoreCreditProvider from "./store_credit_provider";
 import CatalogProviderInstance from './catalog_provider';
 import DataProviderInstance from './dataprovider';
 import logger from '../logging';
+import { BigIntStringify } from "../utils";
 
-export type WCPProductJsFeDto = Parameters<typeof CreateProductWithMetadataFromJsFeDto>[0];
-export type V1CartDto = { [cid: string]: [number, WCPProductJsFeDto][] };
 export type RebuiltCart = { category: string; items: ({ quantity: number } & WProduct)[]; }[];
-export interface JSFETotals {
-  delivery_fee: number,
-  autograt: number; // sent as the percentage
-  subtotal: number;
-  tax: number; // state.computed_tax,
-  tip: number; //state.tip_value,
-  total: number;
-  balance: number;
-}
-export interface JSFECredit {
-  code: string;
-  validation_successful: boolean,
-  validation_processing: boolean,
-  validation_fail: boolean,
-  amount: number,
-  amount_used: number;
-  type: 'MONEY' | 'DISCOUNT';
-  encoded: {
-    enc: string;
-    iv: string;
-    auth: string;
-  };
-};
-export interface JSFEMetrics {
-  load_time: string;
-  time_selection_time: string;
-  time_submit: string;
-  ip: string;
-  ua: string;
-};
 
-export interface JSFEDelivery { 
-  validated_delivery_address: string;
-  address1: string;
-  address2: string;
-  instructions: string;
-}
 const WCP = "Windy City Pie";
 const DELIVERY_INTERVAL_TIME = 30;
 
@@ -69,15 +32,6 @@ const GenerateShortCode = function (p: WProduct) {
     `${pInstances[p.m.pi[PRODUCT_LOCATION.LEFT]].item.shortcode}|${pInstances[p.m.pi[PRODUCT_LOCATION.RIGHT]].item.shortcode}` :
     pInstances[p.m.pi[PRODUCT_LOCATION.LEFT]].item.shortcode;
 }
-
-
-const BigIntStringify = (str: string) => (
-  JSON.stringify(str, (key, value) =>
-    typeof value === 'bigint'
-      ? Number(value)
-      : value // return everything else unchanged
-  ))
-
 
 const IsNativeAreaCode = function (phone: string, area_codes: string[]) {
   const numeric_phone = phone.match(/\d/g).join("");
@@ -109,7 +63,7 @@ const GenerateAutoResponseBodyEscaped = function (
   service_type_enum: number,
   date_time_interval: [Date, Date],
   phone_number: string,
-  delivery_info : JSFEDelivery,
+  delivery_info : ValidateDeliveryResponse,
   isPaid: boolean
 ) {
   const NOTE_PREPAID = "You've already paid, so unless there's an issue with the order, there's no need to handle payment from this point forward.";
@@ -149,7 +103,7 @@ const GeneratePaymentSection = (totals: JSFETotals, payment_info : CreatePayment
   ${store_credit_money_section}${card_payment_section}`;
 }
 
-const GenerateDeliverySection = (delivery_info : JSFEDelivery, ishtml: boolean) => {
+const GenerateDeliverySection = (delivery_info : ValidateDeliveryResponse, ishtml: boolean) => {
   if (!delivery_info.validated_delivery_address) {
     return "";
   }
@@ -223,7 +177,7 @@ const GenerateShortCartFromFullCart = (cart: RebuiltCart, sliced: boolean) => {
   })
 }
 
-const RebuildOrderFromDTO = (cart: V1CartDto, service_time: Date): RebuiltCart => {
+const RebuildOrderFromDTO = (cart: JSFECartDto, service_time: Date): RebuiltCart => {
   const menu = CatalogProviderInstance.Menu;
   return Object.entries(cart).reduce(
     (acc, [cid, items]) => [...acc, {
@@ -247,7 +201,7 @@ const CreateInternalEmail = async (
   date_time_interval: [Date, Date],
   phonenum: string,
   user_email: string,
-  delivery_info : JSFEDelivery,
+  delivery_info : ValidateDeliveryResponse,
   cart: RebuiltCart,
   sliced: boolean,
   referral: string,
@@ -304,7 +258,7 @@ const CreateExternalEmail = async (
   user_email: string,
   cart: RebuiltCart,
   special_instructions: string,
-  delivery_info: JSFEDelivery,
+  delivery_info: ValidateDeliveryResponse,
   isPaid: boolean,
   payment_info: CreatePaymentResponse | null
 ) => {
@@ -351,7 +305,7 @@ const CreateOrderEvent = async (
   special_instructions: string,
   sliced: boolean,
   service_time_interval: [Date, Date],
-  delivery_info : JSFEDelivery,
+  delivery_info : ValidateDeliveryResponse,
   isPaid: boolean,
   totals: JSFETotals,
   payment_info: CreatePaymentResponse | null,
@@ -399,7 +353,7 @@ const CreateSquareOrderAndCharge = async (reference_id: string, balance: number,
 }
 
 export interface CreateOrderProps {
-  cartDto: V1CartDto
+  cartDto: JSFECartDto
   nonce: string;
   service_option_enum: number;
   customer_name: string;
@@ -409,7 +363,7 @@ export interface CreateOrderProps {
   phone_number: string;
   customer_email: string;
   referral: string | null;
-  delivery_info: JSFEDelivery;
+  delivery_info: ValidateDeliveryResponse;
   website_metrics : JSFEMetrics;
   totals: JSFETotals;
   store_credit: JSFECredit;

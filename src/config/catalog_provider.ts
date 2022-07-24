@@ -29,7 +29,7 @@ import { WProvider } from "../types/WProvider";
 import { WApp } from "../App";
 
 function ReduceArrayToMapByKey<T, Key extends keyof T>(xs: T[], key: Key) {
-  return Object.fromEntries(xs.map(x => [x[key], x]));
+  return Object.fromEntries(xs.map(x => [x[key], x])) as Record<string, T>;
 };
 
 // Returns [ category_map, product_map ] list;
@@ -315,24 +315,24 @@ export class CatalogProvider implements WProvider {
       if (category_id_map[category_id].parent_id !== parent_id && parent_id) {
         // need to check for potential cycle
         var cur = parent_id;
-        while (cur && category_id_map[cur].parent_id != category_id) {
+        while (cur && category_id_map[cur].parent_id !== category_id) {
           cur = category_id_map[cur].parent_id;
         }
         // if the cursor is not empty/null/blank then we stopped because we found the cycle
         if (cur) {
           logger.debug(`In changing ${category_id}'s parent_id to ${parent_id}, found cycle at ${cur}, blanking out ${cur}'s parent_id to prevent cycle.`);
           category_id_map[cur].parent_id = null;
-          cycle_update_promise = category_id_map[cur].save();
+          cycle_update_promise = WCategoryModel.findByIdAndUpdate(cur, { parent_id: null });
         }
       }
-      category_id_map[category_id].name = name;
-      category_id_map[category_id].description = description;
-      category_id_map[category_id].parent_id = parent_id;
-      category_id_map[category_id].ordinal = ordinal;
-      category_id_map[category_id].subheading = subheading;
-      category_id_map[category_id].footnotes = footnotes;
-      category_id_map[category_id].display_flags = display_flags;
-      await category_id_map[category_id].save();
+      const response = await WCategoryModel.findByIdAndUpdate(category_id, { 
+        name, 
+        description, 
+        parent_id, 
+        ordinal, 
+        subheading, 
+        footnotes, 
+        display_flags });
       if (cycle_update_promise) {
         await cycle_update_promise;
       }
@@ -340,7 +340,7 @@ export class CatalogProvider implements WProvider {
       this.RecomputeCatalog();
       this.EmitCatalog(this.#socketRO);
       // is this going to still be valid after the Sync above?
-      return category_id_map[category_id];
+      return response.toObject();
     } catch (err) {
       throw err;
     }
@@ -355,7 +355,7 @@ export class CatalogProvider implements WProvider {
       }
       await Promise.all(this.#categories.map(async (cat) => {
         if (cat.parent_id && cat.parent_id === category_id) {
-          await WCategoryModel.findByIdAndUpdate(category_id, { parent_id: "" });
+          await WCategoryModel.findByIdAndUpdate(category_id, { parent_id: null });
         }
       }));
       const products_update = await WProductModel.updateMany({}, { $pull: { category_ids: category_id } });

@@ -2,12 +2,14 @@ import { Router, Request, Response, NextFunction } from 'express';
 import turf, { invariant } from '@turf/turf';
 
 import DataProviderInstance from '../config/dataprovider';
-import OrderManagerInstance from '../config/order_manager';
+import OrderManagerInstance, { CreateOrderProps } from '../config/order_manager';
 import SocketIoProviderInstance from '../config/socketio_provider';
 import logger from '../logging';
 import IExpressController from '../types/IExpressController';
 import { body, validationResult } from 'express-validator';
 import GoogleProviderInstance from '../config/google';
+import { BigIntStringify } from '../utils';
+import { CreateOrderRequest } from '@wcp/wcpshared';
 
 const V1OrderValidationChain = [
   body('service_option').isInt({ min: 0, max: 2 }).exists(),
@@ -55,30 +57,32 @@ export class OrderController implements IExpressController {
       if (!errors.isEmpty()) {
         return res.status(422).json({ errors: errors.array() });
       }
-      const response = await OrderManagerInstance.CreateOrder({
-        cartDto: req.body.products,
-        customer_email: req.body.user_email,
-        customer_name: req.body.customer_name,
-        nonce: req.body.nonce,
-        service_option_enum: req.body.service_option,
-        delivery_info: req.body.delivery_info,
-        number_guests: req.body.number_guests || 1,
-        phone_number: req.body.phonenum,
-        referral: req.body.referral,
+      const reqBody : CreateOrderRequest = req.body;
+      const props : CreateOrderProps = {
+        cartDto: reqBody.products,
+        customer_email: reqBody.user_email,
+        customer_name: reqBody.customer_name,
+        nonce: reqBody.nonce,
+        service_option_enum: reqBody.service_option,
+        delivery_info: reqBody.delivery_info,
+        number_guests: reqBody.number_guests || 1,
+        phone_number: reqBody.phonenum,
+        referral: reqBody.referral,
         website_metrics: {
-          load_time: req.body.load_time,
-          time_selection_time: req.body.time_selection_time,
-          time_submit: req.body.submittime,
-          ua: req.body.useragent,
+          load_time: reqBody.load_time,
+          time_selection_time: reqBody.time_selection_time,
+          time_submit: reqBody.submittime,
+          ua: reqBody.useragent,
           ip: (req.headers['x-real-ip'] as string) || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress
         },
-        service_date_string: req.body.service_date,
-        service_time: req.body.service_time,
-        sliced: req.body.sliced || false,
-        special_instructions: req.body.special_instructions,
-        store_credit: req.body.store_credit,
-        totals: req.body.totals
-      });
+        service_date_string: reqBody.service_date,
+        service_time: reqBody.service_time,
+        sliced: reqBody.sliced || false,
+        special_instructions: reqBody.special_instructions,
+        store_credit: reqBody.store_credit,
+        totals: reqBody.totals
+      }
+      const response = await OrderManagerInstance.CreateOrder(props);
       res.status(response.status).json({ success: response.success, result: response.result });
     } catch(error) {
     GoogleProviderInstance.SendEmail(
@@ -86,7 +90,7 @@ export class OrderController implements IExpressController {
       { name: EMAIL_ADDRESS, address: "dave@windycitypie.com" },
       "ERROR IN ORDER PROCESSING. CONTACT DAVE IMMEDIATELY",
       "dave@windycitypie.com",
-      `<p>Order request: ${JSON.stringify(req.body)}</p><p>Error info:${JSON.stringify(error)}</p>`);
+      `<p>Order request: ${BigIntStringify(req.body)}</p><p>Error info:${BigIntStringify(error)}</p>`);
     res.status(500).send(error);
     next(error)
   }
