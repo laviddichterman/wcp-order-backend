@@ -1,4 +1,4 @@
-import { CreateProductWithMetadataFromJsFeDto, WDateUtils, PRODUCT_LOCATION, WProduct, ValidateDeliveryResponse, JSFECartDto, JSFEMetrics, JSFETotals, JSFECredit } from "@wcp/wcpshared";
+import { CreateProductWithMetadataFromJsFeDto, WDateUtils, PRODUCT_LOCATION, WProduct, ValidateDeliveryResponseV1, CartDto, JSFEMetrics, JSFETotalsV1, JSFECreditV1, SERVICE_DATE_DISPLAY_FORMAT, WCPProductJsFeDto } from "@wcp/wcpshared";
 
 import { WProvider } from '../types/WProvider';
 
@@ -18,7 +18,6 @@ const WCP = "Windy City Pie";
 const DELIVERY_INTERVAL_TIME = 30;
 
 const DISPLAY_TIME_FORMAT = "h:mma";
-const DISPLAY_DATE_FORMAT = "EEEE, MMMM dd, y";
 
 const IL_AREA_CODES = ["217", "309", "312", "630", "331", "618", "708", "773", "815", "779", "847", "224", "872"];
 const MI_AREA_CODES = ["231", "248", "269", "313", "517", "586", "616", "734", "810", "906", "947", "989", "679"];
@@ -63,7 +62,7 @@ const GenerateAutoResponseBodyEscaped = function (
   service_type_enum: number,
   date_time_interval: [Date, Date],
   phone_number: string,
-  delivery_info : ValidateDeliveryResponse,
+  delivery_info : ValidateDeliveryResponseV1,
   isPaid: boolean
 ) {
   const NOTE_PREPAID = "You've already paid, so unless there's an issue with the order, there's no need to handle payment from this point forward.";
@@ -78,7 +77,7 @@ const GenerateAutoResponseBodyEscaped = function (
   return encodeURIComponent(`${nice_area_code ? "Hey, nice area code!" : "Thanks!"} ${confirm[service_type_enum]} ${where[service_type_enum]}.\n\n${service_instructions[service_type_enum]} ${payment_section}`);
 }
 
-const GeneratePaymentSection = (totals: JSFETotals, payment_info : CreatePaymentResponse | null, store_credit: JSFECredit, ishtml: boolean) => {
+const GeneratePaymentSection = (totals: JSFETotalsV1, payment_info : CreatePaymentResponse | null, store_credit: JSFECreditV1, ishtml: boolean) => {
   // TODO: check that these roundings are working properly and we don't need to switch to Math.round
   const discount = store_credit && store_credit.type == "DISCOUNT" ? `\$${Number(store_credit.amount_used).toFixed(2)}` : "";
   const base_amount = "$" + Number(totals.total - totals.tip).toFixed(2);
@@ -103,7 +102,7 @@ const GeneratePaymentSection = (totals: JSFETotals, payment_info : CreatePayment
   ${store_credit_money_section}${card_payment_section}`;
 }
 
-const GenerateDeliverySection = (delivery_info : ValidateDeliveryResponse, ishtml: boolean) => {
+const GenerateDeliverySection = (delivery_info : ValidateDeliveryResponseV1, ishtml: boolean) => {
   if (!delivery_info.validated_delivery_address) {
     return "";
   }
@@ -149,7 +148,7 @@ const EventTitleStringBuilder = (service: number, customer: string, number_guest
 
 const ServiceTitleBuilder = (service_option_display_string: string, customer_name: string, number_guests: number, service_date: Date | number, service_time_interval: [Date, Date]) => {
   const display_service_time_interval = DateTimeIntervalToDisplayServiceInterval(service_time_interval);
-  return `${service_option_display_string} for ${customer_name}${number_guests > 1 ? `+${number_guests - 1}` : ""} on ${format(service_date, DISPLAY_DATE_FORMAT)} at ${display_service_time_interval}`;
+  return `${service_option_display_string} for ${customer_name}${number_guests > 1 ? `+${number_guests - 1}` : ""} on ${format(service_date, SERVICE_DATE_DISPLAY_FORMAT)} at ${display_service_time_interval}`;
 }
 
 const GenerateDisplayCartStringListFromProducts = (cart: RebuiltCart) => {
@@ -177,7 +176,7 @@ const GenerateShortCartFromFullCart = (cart: RebuiltCart, sliced: boolean) => {
   })
 }
 
-const RebuildOrderFromDTO = (cart: JSFECartDto, service_time: Date): RebuiltCart => {
+const RebuildOrderFromDTO = (cart: CartDto<WCPProductJsFeDto>, service_time: Date): RebuiltCart => {
   const menu = CatalogProviderInstance.Menu;
   return Object.entries(cart).reduce(
     (acc, [cid, items]) => [...acc, {
@@ -201,16 +200,16 @@ const CreateInternalEmail = async (
   date_time_interval: [Date, Date],
   phonenum: string,
   user_email: string,
-  delivery_info : ValidateDeliveryResponse,
+  delivery_info : ValidateDeliveryResponseV1,
   cart: RebuiltCart,
   sliced: boolean,
   referral: string,
   special_instructions: string,
   website_metrics : JSFEMetrics,
   isPaid: boolean,
-  totals: JSFETotals,
+  totals: JSFETotalsV1,
   payment_info : CreatePaymentResponse,
-  store_credit: JSFECredit) => {
+  store_credit: JSFECreditV1) => {
   const confirmation_body_escaped = GenerateAutoResponseBodyEscaped(STORE_NAME, PICKUP_INSTRUCTIONS, DINE_INSTRUCTIONS, DELIVERY_INSTRUCTIONS, STORE_ADDRESS, service_type_enum, date_time_interval, phonenum, delivery_info, isPaid)
   const confirmation_subject_escaped = encodeURIComponent(service_title);
   const payment_section = isPaid ? GeneratePaymentSection(totals, payment_info, store_credit, true) : "";
@@ -258,7 +257,7 @@ const CreateExternalEmail = async (
   user_email: string,
   cart: RebuiltCart,
   special_instructions: string,
-  delivery_info: ValidateDeliveryResponse,
+  delivery_info: ValidateDeliveryResponseV1,
   isPaid: boolean,
   payment_info: CreatePaymentResponse | null
 ) => {
@@ -305,11 +304,11 @@ const CreateOrderEvent = async (
   special_instructions: string,
   sliced: boolean,
   service_time_interval: [Date, Date],
-  delivery_info : ValidateDeliveryResponse,
+  delivery_info : ValidateDeliveryResponseV1,
   isPaid: boolean,
-  totals: JSFETotals,
+  totals: JSFETotalsV1,
   payment_info: CreatePaymentResponse | null,
-  store_credit: JSFECredit) => {
+  store_credit: JSFECreditV1) => {
   const shortcart = GenerateShortCartFromFullCart(cart, sliced);
   const calendar_event_title = EventTitleStringBuilder(service_option_enum, customer_name, number_guests, cart, special_instructions, sliced, isPaid);
   const special_instructions_section = special_instructions && special_instructions.length > 0 ? "\nSpecial Instructions: " + special_instructions : "";
@@ -353,7 +352,7 @@ const CreateSquareOrderAndCharge = async (reference_id: string, balance: number,
 }
 
 export interface CreateOrderProps {
-  cartDto: JSFECartDto
+  cartDto: CartDto<WCPProductJsFeDto>
   nonce: string;
   service_option_enum: number;
   customer_name: string;
@@ -363,10 +362,10 @@ export interface CreateOrderProps {
   phone_number: string;
   customer_email: string;
   referral: string | null;
-  delivery_info: ValidateDeliveryResponse;
+  delivery_info: ValidateDeliveryResponseV1;
   website_metrics : JSFEMetrics;
-  totals: JSFETotals;
-  store_credit: JSFECredit;
+  totals: JSFETotalsV1;
+  store_credit: JSFECreditV1;
   sliced: boolean;
   special_instructions: string;
 }

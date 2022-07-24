@@ -11,16 +11,6 @@ import cors from 'cors';
 import { WProvider } from './types/WProvider';
 import errorMiddleware from './middleware/errorMiddleware';
 
-// // Duplicate the ID field.
-// Schema.virtual<string>('id').get(function(){
-//   return this._id.toHexString();
-// });
-
-// Ensure virtual fields are serialised.
-// Schema.set('toJSON', {
-//   virtuals: true
-// });
-
 const PORT = process.env.PORT || 4001;
 const ORIGINS = [/https:\/\/.*\.windycitypie\.com$/,
   /https:\/\/windycitypie\.com$/, 
@@ -110,7 +100,7 @@ export class WApp {
 
   private async runBootstrap() {
     this.hasBootstrapped = true;
-    for (let i = 0; i < this.providers.length; ++i) {
+    for (let i = 0;   i < this.providers.length; ++i) {
       await this.providers[i].Bootstrap(this);
     }
   }

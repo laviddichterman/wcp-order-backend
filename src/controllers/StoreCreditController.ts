@@ -139,7 +139,6 @@ export class StoreCreditController implements IExpressController {
         return res.status(200).json({enc: validate_response.lock.enc, 
           iv: validate_response.lock.iv.toString('hex'), 
           auth: validate_response.lock.auth.toString('hex'), 
-          validated: validate_response.valid, 
           amount: validate_response.balance, 
           credit_type: validate_response.type} as ValidateAndLockCreditResponse);
       }

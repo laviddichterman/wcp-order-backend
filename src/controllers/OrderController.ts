@@ -9,7 +9,7 @@ import IExpressController from '../types/IExpressController';
 import { body, validationResult } from 'express-validator';
 import GoogleProviderInstance from '../config/google';
 import { BigIntStringify } from '../utils';
-import { CreateOrderRequest } from '@wcp/wcpshared';
+import { CreateOrderRequestV1 } from '@wcp/wcpshared';
 
 const V1OrderValidationChain = [
   body('service_option').isInt({ min: 0, max: 2 }).exists(),
@@ -57,7 +57,7 @@ export class OrderController implements IExpressController {
       if (!errors.isEmpty()) {
         return res.status(422).json({ errors: errors.array() });
       }
-      const reqBody : CreateOrderRequest = req.body;
+      const reqBody : CreateOrderRequestV1 = req.body;
       const props : CreateOrderProps = {
         cartDto: reqBody.products,
         customer_email: reqBody.user_email,
