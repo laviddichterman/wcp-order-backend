@@ -1,4 +1,4 @@
-import bodyParser from 'body-parser';
+import JSONBig from 'json-bigint';
 import express, { Application} from 'express';
 import mongoose, { Schema } from 'mongoose';
 import { Server as IoServer, Namespace as IoNamespace } from 'socket.io';
@@ -18,6 +18,11 @@ const ORIGINS = [/https:\/\/.*\.windycitypie\.com$/,
 `http://127.0.0.1:3000`, 
 `http://localhost:3000`, 
 `http://localhost:${PORT}`];
+
+
+// DANGEROUSLY override JSON prototype methods to handle big ints.
+JSON.parse = JSONBig.parse;
+JSON.stringify = JSONBig.stringify;
 
 export class WApp {
   private hasBootstrapped: boolean;
@@ -85,8 +90,8 @@ export class WApp {
   private initializeMiddlewares() {
     this.app.use(idempotency());
     this.app.use(cors({origin: ORIGINS}));
-    this.app.use(bodyParser.json());
-    this.app.use(bodyParser.urlencoded({ extended: false }));
+    this.app.use(express.json());
+    this.app.use(express.urlencoded({ extended: false }));
     this.app.use(expressWinston.logger({
       winstonInstance: logger,
       msg: '{{res.statusCode}} {{req.method}} {{req.url}} {{res.responseTime}}ms',

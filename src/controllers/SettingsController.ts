@@ -1,11 +1,11 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { body, validationResult } from 'express-validator';
+import { body } from 'express-validator';
 
 import DataProviderInstance from '../config/dataprovider';
 import SocketIoProviderInstance from '../config/socketio_provider';
-import logger from '../logging';
 import IExpressController from '../types/IExpressController';
 import { CheckJWT, ScopeWriteKVStore, ScopeWriteOrderConfig } from '../config/authorization';
+import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
 
 const BlockOffValidationChain = [  
   //body('*.*.0').matches(WDateUtils.DATE_STRING_INTERNAL_FORMAT_REGEX),
@@ -33,17 +33,13 @@ export class SettingsController implements IExpressController {
   }
 
   private initializeRoutes() {
-    this.router.post(`${this.path}/timing/blockoff`, CheckJWT, ScopeWriteOrderConfig, BlockOffValidationChain, this.setBlockedOff);
-    this.router.post(`${this.path}/timing/leadtime`, CheckJWT, ScopeWriteOrderConfig, LeadTimeValidationChain, this.setLeadtime);
-    this.router.post(`${this.path}/settings`, CheckJWT, ScopeWriteKVStore, SettingsValidationChain, this.setSettings);
+    this.router.post(`${this.path}/timing/blockoff`, CheckJWT, ScopeWriteOrderConfig, expressValidationMiddleware(BlockOffValidationChain), this.setBlockedOff);
+    this.router.post(`${this.path}/timing/leadtime`, CheckJWT, ScopeWriteOrderConfig, expressValidationMiddleware(LeadTimeValidationChain), this.setLeadtime);
+    this.router.post(`${this.path}/settings`, CheckJWT, ScopeWriteKVStore, expressValidationMiddleware(SettingsValidationChain), this.setSettings);
   };
 
   private setBlockedOff = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(422).json({ errors: errors.array() });
-      }
       DataProviderInstance.BlockedOff = req.body;
       SocketIoProviderInstance.socketRO.emit('WCP_BLOCKED_OFF', DataProviderInstance.BlockedOff);
       const location = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
@@ -55,10 +51,6 @@ export class SettingsController implements IExpressController {
   }
   private setLeadtime = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(422).json({ errors: errors.array() });
-      }
       DataProviderInstance.LeadTimes = req.body;
       SocketIoProviderInstance.socketRO.emit('WCP_LEAD_TIMES', DataProviderInstance.LeadTimes);
       const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/`;
@@ -70,10 +62,6 @@ export class SettingsController implements IExpressController {
   }
   private setSettings = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(422).json({ errors: errors.array() });
-      }
       DataProviderInstance.Settings = req.body;
       SocketIoProviderInstance.socketRO.emit('WCP_SETTINGS', DataProviderInstance.Settings);
       const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/`;

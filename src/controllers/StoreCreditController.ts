@@ -10,7 +10,7 @@ import GoogleProviderInstance from '../config/google';
 import SquareProviderInstance from '../config/square';
 import internal, { Stream } from 'stream';
 import { format, parse } from 'date-fns';
-import { ValidateAndLockCreditResponse, WDateUtils } from '@wcp/wcpshared';
+import { SpendCreditResponse, WDateUtils, ValidateLockAndSpendRequest } from '@wcp/wcpshared';
 import { BigIntStringify } from '../utils';
 
 const CreditCodeValidationChain = [
@@ -31,10 +31,10 @@ const PurchaseStoreCreditValidationChain = [
 const SpendStoreCreditValidationChain = [
   body('code').exists().isLength({min: 19, max: 19}),
   body('amount').exists().isFloat({min: 0.01}),
-  body('processed_by').exists(),
-  body('lock.enc').exists(),
-  body('lock.iv').exists(),
-  body('lock.auth').exists()
+  body('updatedBy').exists(),
+  body('lock.enc').exists().isString(),
+  body('lock.iv').exists().isString(),
+  body('lock.auth').exists().isString()
 ];
 
 const IssueStoreCreditValidationChain = [
@@ -134,17 +134,13 @@ export class StoreCreditController implements IExpressController {
       }
       const credit_code = req.query.code as string;
       const validate_response = await StoreCreditProviderInstance.ValidateAndLockCode(credit_code);
-      if (validate_response.valid && validate_response.balance > 0) {
-        logger.info(`Found and locked ${credit_code} with value ${validate_response.balance}.`);
-        return res.status(200).json({enc: validate_response.lock.enc, 
-          iv: validate_response.lock.iv.toString('hex'), 
-          auth: validate_response.lock.auth.toString('hex'), 
-          amount: validate_response.balance, 
-          credit_type: validate_response.type} as ValidateAndLockCreditResponse);
+      if (validate_response.valid) {
+        logger.info(`Found and locked ${credit_code} with value ${validate_response.amount}.`);
+        return res.status(200).json(validate_response);
       }
       else {
         logger.info(`Failed to find ${credit_code}`);
-        return res.status(404).json({validated: false});
+        return res.status(404).json(validate_response);
       }
     } catch (error) {
       GoogleProviderInstance.SendEmail(
@@ -164,11 +160,12 @@ export class StoreCreditController implements IExpressController {
       if (!errors.isEmpty()) {
         return res.status(422).json({ errors: errors.array() });
       }
-      const spending_result = await StoreCreditProviderInstance.ValidateLockAndSpend(req.body.code, req.body.lock, req.body.amount, req.body.processed_by);
+      const typedRequest : ValidateLockAndSpendRequest = req.body; 
+      const spending_result = await StoreCreditProviderInstance.ValidateLockAndSpend(typedRequest);
       if (!spending_result.success) {
-        return res.status(422).json({success: false, result: {errors: [{detail: "Unable to debit store credit."}]} });
+        return res.status(422).json({success: false} as SpendCreditResponse);
       }
-      return res.status(200).json({success: true, balance: spending_result.entry[3]-req.body.amount})
+      return res.status(200).json({success: true, balance: spending_result.entry[3]-req.body.amount} as SpendCreditResponse)
     } catch (error) {
       GoogleProviderInstance.SendEmail(
         EMAIL_ADDRESS,

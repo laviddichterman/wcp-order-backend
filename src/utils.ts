@@ -25,7 +25,7 @@ export async function ExponentialBackoff<T>(
 export const BigIntStringify = (str : any) => (
   JSON.stringify(str, (_, value) =>
             typeof value === 'bigint'
-                ? Number(value)
+                ? BigInt(value)
                 : value // return everything else unchanged
         ) )
 
