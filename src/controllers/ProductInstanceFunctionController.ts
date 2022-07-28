@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { body, param, validationResult } from 'express-validator';
-import { IAbstractExpression, OptionPlacement, OptionQualifier, PriceDisplay } from '@wcp/wcpshared';
+import { body, param } from 'express-validator';
+import { IAbstractExpression } from '@wcp/wcpshared';
+import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
 
 import logger from '../logging';
 
@@ -8,7 +9,7 @@ import IExpressController from '../types/IExpressController';
 import { CheckJWT, ScopeDeleteCatalog, ScopeWriteCatalog } from '../config/authorization';
 import CatalogProviderInstance from '../config/catalog_provider';
 const PIFByIdValidationChain = [
-  param('fxnid').trim().escape().exists().isMongoId(), 
+  param('fxnid').trim().escape().exists().isMongoId(),
 ];
 
 const PIFValidationChain = [
@@ -30,16 +31,12 @@ export class ProductInstanceFunctionController implements IExpressController {
   }
 
   private initializeRoutes() {
-    this.router.post(`${this.path}`, CheckJWT, ScopeWriteCatalog, PIFValidationChain, this.postPIF);
-    this.router.patch(`${this.path}/:fxnid`, CheckJWT, ScopeWriteCatalog, EditPIFValidationChain, this.patchPIF);
-    this.router.delete(`${this.path}/:fxnid`, CheckJWT, ScopeDeleteCatalog, PIFByIdValidationChain, this.deletePIF);
+    this.router.post(`${this.path}`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(PIFValidationChain), this.postPIF);
+    this.router.patch(`${this.path}/:fxnid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(EditPIFValidationChain), this.patchPIF);
+    this.router.delete(`${this.path}/:fxnid`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware(PIFByIdValidationChain), this.deletePIF);
   };
   private postPIF = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(422).json({ errors: errors.array() });
-      }
       const doc = await CatalogProviderInstance.CreateProductInstanceFunction({
         name: req.body.name as string,
         expression: req.body.expression as IAbstractExpression
@@ -58,10 +55,6 @@ export class ProductInstanceFunctionController implements IExpressController {
 
   private patchPIF = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(422).json({ errors: errors.array() });
-      }
       const doc = await CatalogProviderInstance.UpdateProductInstanceFunction(req.params.fxnid, {
         name: req.body.name as string,
         expression: req.body.expression as IAbstractExpression
@@ -79,10 +72,6 @@ export class ProductInstanceFunctionController implements IExpressController {
 
   private deletePIF = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(422).json({ errors: errors.array() });
-      }
       const doc = await CatalogProviderInstance.DeleteProductInstanceFunction(req.params.fxnid);
       if (!doc) {
         logger.info(`Unable to delete ProductInstanceFunction: ${req.params.fxnid}`);

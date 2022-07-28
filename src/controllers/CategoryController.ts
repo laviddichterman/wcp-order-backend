@@ -1,12 +1,14 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { body, param, validationResult } from 'express-validator';
-import { CALL_LINE_DISPLAY, IAbstractExpression, OptionPlacement, OptionQualifier, PriceDisplay } from '@wcp/wcpshared';
+import { body, param } from 'express-validator';
+import { CALL_LINE_DISPLAY } from '@wcp/wcpshared';
 
 import logger from '../logging';
 
 import IExpressController from '../types/IExpressController';
 import { CheckJWT, ScopeDeleteCatalog, ScopeWriteCatalog } from '../config/authorization';
 import CatalogProviderInstance from '../config/catalog_provider';
+import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
+
 const CategoryByIdValidationChain = [
   param('catid').trim().escape().exists().isMongoId(),
 ];
@@ -36,16 +38,12 @@ export class CategoryController implements IExpressController {
   }
 
   private initializeRoutes() {
-    this.router.post(`${this.path}`, CheckJWT, ScopeWriteCatalog, CategoryValidationChain, this.postCategory);
-    this.router.patch(`${this.path}/:catid`, CheckJWT, ScopeWriteCatalog, EditCategoryValidationChain, this.patchCategory);
-    this.router.delete(`${this.path}/:catid`, CheckJWT, ScopeDeleteCatalog, CategoryByIdValidationChain, this.deleteCategory);
+    this.router.post(`${this.path}`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(CategoryValidationChain), this.postCategory);
+    this.router.patch(`${this.path}/:catid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(EditCategoryValidationChain), this.patchCategory);
+    this.router.delete(`${this.path}/:catid`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware(CategoryByIdValidationChain), this.deleteCategory);
   };
   private postCategory = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(422).json({ errors: errors.array() });
-      }
       const newcategory = await CatalogProviderInstance.CreateCategory({
         name: req.body.name,
         ordinal: req.body.ordinal,
@@ -65,10 +63,6 @@ export class CategoryController implements IExpressController {
 
   private patchCategory = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(422).json({ errors: errors.array() });
-      }
       const doc = await CatalogProviderInstance.UpdateCategory(
         req.params.catid,
         {
@@ -93,10 +87,6 @@ export class CategoryController implements IExpressController {
 
   private deleteCategory = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(422).json({ errors: errors.array() });
-      }
       const doc = await CatalogProviderInstance.DeleteCategory(req.params.catid);
       if (!doc) {
         logger.info(`Unable to delete category: ${req.params.catid}`);

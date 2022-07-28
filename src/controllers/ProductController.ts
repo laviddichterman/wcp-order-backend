@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { body, param, validationResult } from 'express-validator';
 import { OptionPlacement, OptionQualifier, PriceDisplay } from '@wcp/wcpshared';
-
+import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
 import logger from '../logging';
 
 import IExpressController from '../types/IExpressController';
@@ -94,19 +94,15 @@ export class ProductController implements IExpressController {
   }
 
   private initializeRoutes() {
-    this.router.post(`${this.path}`, CheckJWT, ScopeWriteCatalog, AddProductClassValidationChain, this.postProductClass);
-    this.router.patch(`${this.path}/:pid`, CheckJWT, ScopeWriteCatalog, EditProductClassValidationChain, this.patchProductClass);
-    this.router.delete(`${this.path}/:pid`, CheckJWT, ScopeDeleteCatalog, ProductClassByIdValidationChain, this.deleteProductClass);
-    this.router.post(`${this.path}:pid/`, CheckJWT, ScopeWriteCatalog, ProductInstanceValidationChain, this.postProductInstance);
-    this.router.patch(`${this.path}/:pid/:piid`, CheckJWT, ScopeWriteCatalog, EditProductInstanceValidationChain, this.patchProductInstance);
-    this.router.delete(`${this.path}/:pid/:piid`, CheckJWT, ScopeDeleteCatalog, ProductClassByIdValidationChain, ProductInstanceByIdValidationChain, this.deleteProductInstance);
+    this.router.post(`${this.path}`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(AddProductClassValidationChain), this.postProductClass);
+    this.router.patch(`${this.path}/:pid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(EditProductClassValidationChain), this.patchProductClass);
+    this.router.delete(`${this.path}/:pid`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware(ProductClassByIdValidationChain), this.deleteProductClass);
+    this.router.post(`${this.path}:pid/`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(ProductInstanceValidationChain), this.postProductInstance);
+    this.router.patch(`${this.path}/:pid/:piid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(EditProductInstanceValidationChain), this.patchProductInstance);
+    this.router.delete(`${this.path}/:pid/:piid`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware([...ProductClassByIdValidationChain, ...ProductInstanceByIdValidationChain]), this.deleteProductInstance);
   };
   private postProductClass = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(422).json({ errors: errors.array() });
-      }
       const newproduct = await CatalogProviderInstance.CreateProduct({
         price: req.body.price,
         disabled: req.body.disabled ? req.body.disabled : null, 
@@ -174,10 +170,6 @@ export class ProductController implements IExpressController {
 
   private patchProductClass = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(422).json({ errors: errors.array() });
-      }
       const doc = await CatalogProviderInstance.UpdateProduct(req.params.pid, {
         price: req.body.price,
         disabled: req.body.disabled ? req.body.disabled : null, 
@@ -203,10 +195,6 @@ export class ProductController implements IExpressController {
 
   private deleteProductClass = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(422).json({ errors: errors.array() });
-      }
       const doc = await CatalogProviderInstance.DeleteProduct(req.params.pid);
       if (!doc) {
         logger.info(`Unable to delete Product: ${req.params.p_id}`);
@@ -221,10 +209,6 @@ export class ProductController implements IExpressController {
 
   private postProductInstance = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(422).json({ errors: errors.array() });
-      }
       const doc = await CatalogProviderInstance.CreateProductInstance(req.params.pid, {
         description: req.body.description,
         display_name: req.body.display_name,
@@ -252,10 +236,6 @@ export class ProductController implements IExpressController {
 
   private patchProductInstance = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(422).json({ errors: errors.array() });
-      }
       const doc = await CatalogProviderInstance.UpdateProductInstance(req.params.pid, req.params.piid, {
         description: req.body.description,
         display_name: req.body.display_name,
@@ -282,10 +262,6 @@ export class ProductController implements IExpressController {
 
   private deleteProductInstance = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(422).json({ errors: errors.array() });
-      }
       const doc = await CatalogProviderInstance.DeleteProductInstance(req.params.piid);
       if (!doc) {
         logger.info(`Unable to delete ProductInstance Type: ${req.params.piid}`);

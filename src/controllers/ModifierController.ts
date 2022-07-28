@@ -1,9 +1,9 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { body, param, validationResult } from 'express-validator';
+import { body, param } from 'express-validator';
 import { DISPLAY_AS, MODIFIER_CLASS } from '@wcp/wcpshared';
 
 import logger from '../logging';
-
+import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
 import IExpressController from '../types/IExpressController';
 import { CheckJWT, ScopeDeleteCatalog, ScopeWriteCatalog } from '../config/authorization';
 import CatalogProviderInstance from '../config/catalog_provider';
@@ -78,19 +78,15 @@ export class ModifierController implements IExpressController {
 
   private initializeRoutes() {
     // this.router.get(`${this.path}/:mtid`, CheckJWT, ScopeReadKVStore, this.getModifierType);
-    this.router.post(`${this.path}`, CheckJWT, ScopeWriteCatalog, ModifierTypeValidationChain, this.postModifierType);
-    this.router.patch(`${this.path}/:mtid`, CheckJWT, ScopeWriteCatalog, EditModifierTypeValidationChain, this.patchModifierType);
-    this.router.delete(`${this.path}/:mtid`, CheckJWT, ScopeDeleteCatalog, ModifierTypeByIdValidationChain, this.deleteModifierType);
-    this.router.post(`${this.path}:mtid/`, CheckJWT, ScopeWriteCatalog, ModifierOptionValidationChain, this.postModifierOption);
-    this.router.patch(`${this.path}/:mtid/:moid`, CheckJWT, ScopeWriteCatalog, EditModifierOptionValidationChain, this.patchModifierOption);
-    this.router.delete(`${this.path}/:mtid/:moid`, CheckJWT, ScopeDeleteCatalog, ModifierTypeByIdValidationChain, ModifierOptionByIdValidationChain, this.deleteModifierOption);
+    this.router.post(`${this.path}`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(ModifierTypeValidationChain), this.postModifierType);
+    this.router.patch(`${this.path}/:mtid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(EditModifierTypeValidationChain), this.patchModifierType);
+    this.router.delete(`${this.path}/:mtid`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware(ModifierTypeByIdValidationChain), this.deleteModifierType);
+    this.router.post(`${this.path}:mtid/`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(ModifierOptionValidationChain), this.postModifierOption);
+    this.router.patch(`${this.path}/:mtid/:moid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(EditModifierOptionValidationChain), this.patchModifierOption);
+    this.router.delete(`${this.path}/:mtid/:moid`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware([...ModifierTypeByIdValidationChain, ...ModifierOptionByIdValidationChain]), this.deleteModifierOption);
   };
   private postModifierType = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(422).json({ errors: errors.array() });
-      }
       const doc = await CatalogProviderInstance.CreateModifierType({
         name: req.body.name,
         display_name: req.body.display_name,
@@ -113,10 +109,6 @@ export class ModifierController implements IExpressController {
 
   private patchModifierType = async (request: Request, response: Response, next: NextFunction) => {
     try {
-      const errors = validationResult(request);
-      if (!errors.isEmpty()) {
-        return response.status(422).json({ errors: errors.array() });
-      }
       const doc = await CatalogProviderInstance.UpdateModifierType(
         request.params.mtid,
         {
@@ -145,10 +137,6 @@ export class ModifierController implements IExpressController {
 
   private deleteModifierType = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(422).json({ errors: errors.array() });
-      }
       const doc = await CatalogProviderInstance.DeleteModifierType(req.params.mtid);
       if (!doc) {
         logger.info(`Unable to delete Modifier Type: ${req.params.mt_id}`);
@@ -163,10 +151,6 @@ export class ModifierController implements IExpressController {
 
   private postModifierOption = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(422).json({ errors: errors.array() });
-      }
       const new_option = await CatalogProviderInstance.CreateOption({
         price: req.body.price,
         description: req.body.description,
@@ -201,10 +185,6 @@ export class ModifierController implements IExpressController {
 
   private patchModifierOption = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(422).json({ errors: errors.array() });
-      }
       const doc = await CatalogProviderInstance.UpdateModifierOption(req.params.moid, {
         display_name: req.body.display_name, 
         description: req.body.description, 
@@ -237,10 +217,6 @@ export class ModifierController implements IExpressController {
 
   private deleteModifierOption = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(422).json({ errors: errors.array() });
-      }
       const doc = await CatalogProviderInstance.DeleteModifierOption(req.params.moid);
       if (!doc) {
         logger.info(`Unable to delete Modifier Option: ${req.params.moid}`);

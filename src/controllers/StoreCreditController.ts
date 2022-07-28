@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { body, query, validationResult } from 'express-validator';
+import { body, query } from 'express-validator';
+import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
 import logger from '../logging';
 
 import DataProviderInstance from '../config/dataprovider';
@@ -119,19 +120,15 @@ export class StoreCreditController implements IExpressController {
 
   private initializeRoutes() {
     // todo: move /validate endpoint to ./
-    this.router.get(`${this.path}/validate`, CreditCodeValidationChain, this.getValidateCredit);
-    this.router.post(`${this.path}/spend`, SpendStoreCreditValidationChain, this.postSpendCredit);
-    this.router.post(`${this.path}/stopgap`, PurchaseStoreCreditValidationChain, this.postPurchaseCredit);
-    this.router.post(`${this.path}/discount`, CheckJWT, ScopeEditCredit, IssueStoreCreditValidationChain, this.postIssueCredit);
+    this.router.get(`${this.path}/validate`, expressValidationMiddleware(CreditCodeValidationChain), this.getValidateCredit);
+    this.router.post(`${this.path}/spend`, expressValidationMiddleware(SpendStoreCreditValidationChain), this.postSpendCredit);
+    this.router.post(`${this.path}/stopgap`, expressValidationMiddleware(PurchaseStoreCreditValidationChain), this.postPurchaseCredit);
+    this.router.post(`${this.path}/discount`, CheckJWT, ScopeEditCredit, expressValidationMiddleware(IssueStoreCreditValidationChain), this.postIssueCredit);
   };
 
   private getValidateCredit = async (req: Request, res: Response, next: NextFunction) => {
     const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
     try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(422).json({ errors: errors.array() });
-      }
       const credit_code = req.query.code as string;
       const validate_response = await StoreCreditProviderInstance.ValidateAndLockCode(credit_code);
       if (validate_response.valid) {
@@ -156,10 +153,6 @@ export class StoreCreditController implements IExpressController {
   private postSpendCredit = async (req: Request, res: Response, next: NextFunction) => {
     const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
     try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(422).json({ errors: errors.array() });
-      }
       const typedRequest : ValidateLockAndSpendRequest = req.body; 
       const spending_result = await StoreCreditProviderInstance.ValidateLockAndSpend(typedRequest);
       if (!spending_result.success) {
@@ -181,16 +174,6 @@ export class StoreCreditController implements IExpressController {
     const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
     const STORE_NAME = DataProviderInstance.KeyValueConfig.STORE_NAME;
     try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        GoogleProviderInstance.SendEmail(
-          EMAIL_ADDRESS,
-          { name: EMAIL_ADDRESS, address: "dave@windycitypie.com" },
-          "ERROR IN GIFT CARD PROCESSING. CONTACT DAVE IMMEDIATELY",
-          "dave@windycitypie.com",
-          `<p>Order request: ${BigIntStringify(req.body)}</p><p>Error info:${BigIntStringify(errors.array())}</p>`);
-        return res.status(422).json({ errors: errors.array() });
-      }
       const reference_id = Date.now().toString(36).toUpperCase();
       const amount_money = BigInt(Math.round(req.body.credit_amount * 100));
       const sender_name = req.body.sender_name.replace("&", "and").replace("<", "").replace(">", "");
@@ -250,10 +233,6 @@ export class StoreCreditController implements IExpressController {
     const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
     const STORE_NAME = DataProviderInstance.KeyValueConfig.STORE_NAME;
     try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(422).json({ errors: errors.array() });
-      }
       const amountAsString = Number(req.body.amount).toFixed(2);
       const expiration = req.body.expiration ? parse(req.body.expiration, WDateUtils.DATE_STRING_INTERNAL_FORMAT, Date.now()) : null
       const added_by = req.body.added_by;
