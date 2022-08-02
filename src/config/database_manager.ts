@@ -1,7 +1,7 @@
 import logger from '../logging';
 import { WProvider } from '../types/WProvider';
 import PACKAGE_JSON from '../../package.json';
-import { IAbstractExpression, IConstLiteralExpression, IHasAnyOfModifierExpression, IIfElseExpression, ILogicalExpression, IModifierPlacementExpression, ProductInstanceFunctionType, SEMVER } from '@wcp/wcpshared';
+import { ConstLiteralDiscriminator, IAbstractExpression, IConstLiteralExpression, IHasAnyOfModifierExpression, IIfElseExpression, ILogicalExpression, IModifierPlacementExpression, ProductInstanceFunctionType, SEMVER } from '@wcp/wcpshared';
 import DBVersionModel from '../models/DBVersionSchema';
 import mongoose, { Schema } from "mongoose";
 
@@ -178,6 +178,97 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
   "0.3.3": [{ major: 0, minor: 3, patch: 4 }, async () => {
   }],
   "0.3.4": [{ major: 0, minor: 3, patch: 5 }, async () => {
+  }],
+  "0.3.5": [{ major: 0, minor: 3, patch: 6 }, async () => {
+    // convert all ConstLiteralExpressions to the discriminator versions
+    {
+      var promises: Promise<any>[] = [];
+      const WProductInstanceFunctionModel = mongoose.model('WProductinstancefunction', new Schema({
+        name: { type: String, required: true },
+        expression: {
+          required: true,
+          type: {
+            expr: Schema.Types.Mixed,
+            discriminator: { type: String, enum: ProductInstanceFunctionType, required: true },
+          }
+        }
+      }));
+      const res = await WProductInstanceFunctionModel.find();
+      const convertRecursive = function (e: IAbstractExpression): IAbstractExpression {
+        switch (e.discriminator) {
+          case ProductInstanceFunctionType.ConstLiteral:
+            // @ts-ignore
+            return { discriminator: ProductInstanceFunctionType.ConstLiteral, expr: { discriminator: ConstLiteralDiscriminator.NUMBER, value: e.expr.value }};
+            case ProductInstanceFunctionType.HasAnyOfModifierType:
+              return e;
+            case ProductInstanceFunctionType.IfElse:
+              return {
+                discriminator: ProductInstanceFunctionType.IfElse,
+                expr: {
+                  test: convertRecursive(e.expr.test),
+                  true_branch: convertRecursive(e.expr.true_branch),
+                  false_branch: convertRecursive(e.expr.false_branch)
+                }
+              };
+            case ProductInstanceFunctionType.Logical:
+              return {
+                discriminator: ProductInstanceFunctionType.Logical,
+                expr: {
+                  operandA: convertRecursive(e.expr.operandA),
+                  operandB: e.expr.operandB ? convertRecursive(e.expr.operandB) : undefined,
+                  operator: e.expr.operator
+                }
+              };
+            case ProductInstanceFunctionType.ModifierPlacement:
+              return e;
+        }
+      }
+      res.forEach(
+        e => {
+          // @ts-ignore
+          e.expression = convertRecursive(e.expression);
+          promises.push(e.save({}).then(() => {
+            logger.debug(`Updated WProductInstanceFunction ${e.id} with discriminator based ConstLiteral expression: ${JSON.stringify(e.expression)}`);
+          }).catch((err) => {
+            logger.error(`Unable to update WProductInstanceFunction ${e.id}. Got error: ${JSON.stringify(err)}`);
+          }));
+        }
+      );
+      await Promise.all(promises);
+    }
+    {
+      // assign empty service_disable to all ProductModifierSchema in WProductSchema
+      // assign empty warnings and suggestions function lists to order_guide in WProductSchema
+      var promises: Promise<any>[] = [];
+      const WProductModel = mongoose.model('wproductschema', new Schema({
+        modifiers: [{ mtid: String, enable: String, service_disable: Schema.Types.Mixed }],
+        display_flags: {
+          flavor_max: Number,
+          bake_max: Number,
+          bake_differential: Number,
+          show_name_of_base_product: Boolean,
+          singular_noun: String,
+          order_guide: {
+            warnings: Schema.Types.Mixed,
+            suggestions: Schema.Types.Mixed
+          }
+        },
+      }));
+      const elts = await WProductModel.find();
+      elts.forEach(
+        o => {
+          //@ts-ignore
+          o.modifiers = o.modifiers.map(mod => ({ mtid: mod.mtid, enable: mod.enable ? String(mod.enable) : null, service_disable: [] }));
+          //@ts-ignore
+          o.display_flags.order_guide = { warnings: [], suggestions: [] };
+          promises.push(o.save({}).then(() => {
+            logger.debug(`Updated WProductModel ${o.id} with empty service_disable modifiers ${JSON.stringify(o.modifiers)} and empty order guide, categoryIds: ${JSON.stringify(o.display_flags.order_guide)}.`);
+          }).catch((err) => {
+            logger.error(`Unable to update WProductModel ${o.id}. Got error: ${JSON.stringify(err)}`);
+          }));
+        });
+      await Promise.all(promises);
+    }
   }],
 
 }

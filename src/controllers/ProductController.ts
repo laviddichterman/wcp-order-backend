@@ -34,11 +34,14 @@ const ProductClassValidationChain = [
   // TODO: ensure show_name_of_base_product is TRUE if modifier list length === 0
   body('display_flags.show_name_of_base_product').toBoolean(true),
   body('display_flags.singular_noun').trim(),
+  body('display_flags.order_guide.warnings.*').trim().escape().exists().isMongoId(), 
+  body('display_flags.order_guide.suggestions.*').trim().escape().exists().isMongoId(), 
   body('ordinal').optional({nullable: true}).isInt({min: 0}),
   body('price.amount').isInt({ min: 0 }).exists(),
   body('price.currency').exists().isLength({ min: 3, max: 3 }).isIn(['USD']),
   body('modifiers.*.mtid').trim().escape().exists().isMongoId(),
   body('modifiers.*.enable').optional({nullable: true}).isMongoId(),
+  body('modifiers.*.service_disable.*').isInt({min:0}),
   body('category_ids.*').trim().escape().exists().isMongoId(),
 ];
 
