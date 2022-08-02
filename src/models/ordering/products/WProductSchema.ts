@@ -9,7 +9,9 @@ export const ProductModifierSchema = new Schema({
   mtid: { type: Schema.Types.String, ref: 'WOptionTypeSchema', required: true }, 
   // optional function object that operates on a product instance
   // and returns true if the option type should be enabled.
-  enable: { type: Schema.Types.String, ref: 'WProductInstanceFunction' } 
+  enable: { type: Schema.Types.String, ref: 'WProductInstanceFunction' },
+  // service_disable in this case really only exists for slicing. FML
+  service_disable: [Number]
 }, { _id: false });
 
 
@@ -45,7 +47,11 @@ const WProductSchema = new Schema<MT>({
     bake_max: Number,
     bake_differential: Number,
     show_name_of_base_product: Boolean,
-    singular_noun: String
+    singular_noun: String,
+    order_guide: {
+      warnings: [String],
+      suggestions: [String]
+    }
   },
 
   // TODO: implement timing information across products and modifier options that

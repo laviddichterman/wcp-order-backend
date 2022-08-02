@@ -1,10 +1,9 @@
-import { GenerateMenu, 
+import { 
   ICatalog, 
   SEMVER, 
   ICatalogCategories, 
   ICatalogModifiers, 
   ICategory, 
-  IMenu, 
   IOption, 
   IOptionType, 
   IProduct, 
@@ -152,7 +151,6 @@ export class CatalogProvider implements WProvider {
   #product_instances: IProductInstance[];
   #product_instance_functions: IProductInstanceFunction[];
   #catalog: ICatalog;
-  #menu: IMenu;
   #apiver: SEMVER;
   constructor() {
   }
@@ -183,10 +181,6 @@ export class CatalogProvider implements WProvider {
 
   get Catalog() {
     return this.#catalog;
-  }
-
-  get Menu() {
-    return this.#menu;
   }
 
   SyncCategories = async () => {
@@ -268,7 +262,6 @@ export class CatalogProvider implements WProvider {
 
   RecomputeCatalog = () => {
     this.#catalog = CatalogGenerator(this.#categories, this.#modifier_types, this.#options, this.#products, this.#product_instances, this.#product_instance_functions, this.#apiver);
-    this.#menu = GenerateMenu(this.#catalog, new Date());
   }
 
   Bootstrap = async (app : WApp) => {

@@ -1,7 +1,6 @@
-import { AbstractExpressionConstLiteral, AbstractExpressionHasAnyOfModifierExpression, AbstractExpressionIfElseExpression, AbstractExpressionLogicalExpression, AbstractExpressionModifierPlacementExpression, IAbstractExpression, IConstLiteralExpression, IHasAnyOfModifierExpression, IIfElseExpression, ILogicalExpression, IModifierPlacementExpression, ProductInstanceFunctionType } from "@wcp/wcpshared";
+import { AbstractExpressionConstLiteral, AbstractExpressionHasAnyOfModifierExpression, AbstractExpressionIfElseExpression, AbstractExpressionLogicalExpression, AbstractExpressionModifierPlacementExpression, AbstractExpressionProductMetadata, IAbstractExpression, IConstLiteralExpression, IHasAnyOfModifierExpression, IIfElseExpression, ILogicalExpression, IModifierPlacementExpression, ProductInstanceFunctionType, ProductMetadataExpression } from "@wcp/wcpshared";
 import mongoose, { Schema } from "mongoose";
 import path from 'path';
-import { WConstLiteral } from "./WConstLiteral";
 
 export const WAbstractExpression = new Schema<IAbstractExpression>({
   //expr: Schema.Types.Mixed,
@@ -32,5 +31,9 @@ export const WLogicalExpressionModel = WAbstractExpressionModel.discriminator<Ab
 }, {_id: false}));
 export const WModifierPlacementExpressionModel = WAbstractExpressionModel.discriminator<AbstractExpressionModifierPlacementExpression>(ProductInstanceFunctionType.ModifierPlacement, 
   new Schema<{ expr: IModifierPlacementExpression }>({
+  expr: { value: Schema.Types.Mixed }
+}, {_id: false}));
+export const WProductMetadataExpressionModel = WAbstractExpressionModel.discriminator<AbstractExpressionProductMetadata>(ProductInstanceFunctionType.ProductMetadata, 
+  new Schema<{ expr: ProductMetadataExpression }>({
   expr: { value: Schema.Types.Mixed }
 }, {_id: false}));

@@ -1,4 +1,4 @@
-import { ComputeCartSubTotal, CategorizedRebuiltCart, PRODUCT_LOCATION, WProduct, SERVICE_DATE_DISPLAY_FORMAT, WCPProductV2Dto, CreateProductWithMetadataFromV2Dto, CreateOrderRequestV2, FulfillmentDto, DeliveryInfoDto, MetricsDto, FilterWCPProduct, CoreCartEntry, ValidateAndLockCreditResponse, ComputeDiscountApplied, ComputeTaxAmount, ComputeTipBasis, ComputeTipValue, TotalsV2, ComputeTotal, ComputeGiftCardApplied, ComputeBalanceAfterCredits, JSFECreditV2, CreateOrderResponse, RoundToTwoDecimalPlaces } from "@wcp/wcpshared";
+import { ComputeCartSubTotal, CategorizedRebuiltCart, PRODUCT_LOCATION, WProduct, SERVICE_DATE_DISPLAY_FORMAT, WCPProductV2Dto, CreateProductWithMetadataFromV2Dto, CreateOrderRequestV2, FulfillmentDto, DeliveryInfoDto, MetricsDto, FilterWCPProduct, CoreCartEntry, ValidateAndLockCreditResponse, ComputeDiscountApplied, ComputeTaxAmount, ComputeTipBasis, ComputeTipValue, TotalsV2, ComputeTotal, ComputeGiftCardApplied, ComputeBalanceAfterCredits, JSFECreditV2, CreateOrderResponse, RoundToTwoDecimalPlaces, WDateUtils, GenerateMenu, IMenu } from "@wcp/wcpshared";
 import { Error as SquareError} from 'square';
 
 import { WProvider } from '../types/WProvider';
@@ -47,8 +47,8 @@ export interface RecomputeTotalsResult {
   tipAmount: number;
 }
 
-const GenerateShortCode = function (p: WProduct) {
-  const pInstances = CatalogProviderInstance.Menu.product_classes[p.p.PRODUCT_CLASS.id].instances;
+const GenerateShortCode = function (menu: IMenu, p: WProduct) {
+  const pInstances = menu.product_classes[p.p.PRODUCT_CLASS.id].instances;
   return p.m.is_split && String(p.m.pi[PRODUCT_LOCATION.LEFT]) !== String(p.m.pi[PRODUCT_LOCATION.RIGHT]) ?
     `${pInstances[p.m.pi[PRODUCT_LOCATION.LEFT]].item.shortcode}|${pInstances[p.m.pi[PRODUCT_LOCATION.RIGHT]].item.shortcode}` :
     pInstances[p.m.pi[PRODUCT_LOCATION.LEFT]].item.shortcode;
@@ -130,7 +130,7 @@ const GenerateDeliverySection = (delivery_info: DeliveryInfoDto | null, ishtml: 
   return `${ishtml ? "<p><strong>" : "\n"}Delivery Address:${ishtml ? "</strong>" : ""} ${delivery_info.validation.validated_address}${delivery_unit_info}${delivery_instructions}${ishtml ? "</p>" : ""}`;
 }
 
-const EventTitleStringBuilder = (service: number, customer: string, number_guests: number, cart: CategorizedRebuiltCart, special_instructions: string, sliced: boolean, ispaid: boolean) => {
+const EventTitleStringBuilder = (menu: IMenu, service: number, customer: string, number_guests: number, cart: CategorizedRebuiltCart, special_instructions: string, sliced: boolean, ispaid: boolean) => {
   const SERVICE_SHORTHAND = ["P", "DINE", "DELIVER"]; // TODO: move to DB
   const service_string = SERVICE_SHORTHAND[service];
   const catalogCategories = CatalogProviderInstance.Catalog.categories;
@@ -148,12 +148,12 @@ const EventTitleStringBuilder = (service: number, customer: string, number_guest
         var product_shortcodes: string[] = [];
         category_cart.forEach(item => {
           total += item.quantity;
-          product_shortcodes = product_shortcodes.concat(Array(item.quantity).fill(GenerateShortCode(item.product)));
+          product_shortcodes = product_shortcodes.concat(Array(item.quantity).fill(GenerateShortCode(menu, item.product)));
         });
         titles.push(`${total.toString(10)}x ${call_line_category_name_with_space}${product_shortcodes.join(" ")}`);
         break;
       default: //SHORTNAME
-        var product_shortcodes: string[] = category_cart.map(item => `${item.quantity}x${GenerateShortCode(item.product)}`);
+        var product_shortcodes: string[] = category_cart.map(item => `${item.quantity}x${GenerateShortCode(menu, item.product)}`);
         titles.push(`${call_line_category_name_with_space}${product_shortcodes.join(" ")}`);
         break;
     }
@@ -188,15 +188,15 @@ const GenerateShortCartFromFullCart = (cart: CategorizedRebuiltCart, sliced: boo
   })
 }
 
-const RebuildOrderState = function (cart: CoreCartEntry<WCPProductV2Dto>[], service_time: Date | number) {
-  const menu = CatalogProviderInstance.Menu;
-  const catalogCategories = CatalogProviderInstance.Catalog.categories;
+const RebuildOrderState = function (menu: IMenu, cart: CoreCartEntry<WCPProductV2Dto>[], service_time: Date | number, fulfillmentType: number) {
+  const catalog = CatalogProviderInstance.Catalog;
+  const catalogCategories = catalog.categories;
   const noLongerAvailable: CoreCartEntry<WCPProductV2Dto>[] = [];
 
   const rebuiltCart: CategorizedRebuiltCart = cart.reduce(
     (acc, entry) => {
-      const product = CreateProductWithMetadataFromV2Dto(entry.product, menu, service_time);
-      if (!FilterWCPProduct(product.p, menu, service_time) || !Object.hasOwn(catalogCategories, entry.categoryId)) {
+      const product = CreateProductWithMetadataFromV2Dto(entry.product, catalog, menu, service_time, fulfillmentType);
+      if (!FilterWCPProduct(product.p, catalog, menu, service_time, fulfillmentType) || !Object.hasOwn(catalogCategories, entry.categoryId)) {
         noLongerAvailable.push(entry);
       }
       const rebuiltEntry: CoreCartEntry<WProduct> = { ...entry, product };
@@ -356,6 +356,7 @@ ${location_section}We thank you for your support!`;
 }
 
 const CreateOrderEvent = async (
+  menu: IMenu,
   service_option_enum: number,
   customer_name: string,
   number_guests: number,
@@ -370,7 +371,7 @@ const CreateOrderEvent = async (
   payment_info: CreatePaymentResponse | null,
   store_credit: JSFECreditV2 | null) => {
   const shortcart = GenerateShortCartFromFullCart(cart, sliced);
-  const calendar_event_title = EventTitleStringBuilder(service_option_enum, customer_name, number_guests, cart, special_instructions, sliced, isPaid);
+  const calendar_event_title = EventTitleStringBuilder(menu, service_option_enum, customer_name, number_guests, cart, special_instructions, sliced, isPaid);
   const special_instructions_section = special_instructions && special_instructions.length > 0 ? "\nSpecial Instructions: " + special_instructions : "";
   const number_guests_section = number_guests > 1 ? `Number Guests: ${number_guests}\n` : "";
   const payment_section = isPaid ? "\n" + GeneratePaymentSection(totals, payment_info, store_credit, false) : "";
@@ -426,15 +427,19 @@ export class OrderManager implements WProvider {
     store_credit,
     metrics }: CreateOrderRequestV2, ipAddress: string ) : Promise<CreateOrderResponse & { status: number }> => {
     
+    const requestTime = Date.now();
     const STORE_NAME = DataProviderInstance.KeyValueConfig.STORE_NAME;
-    const reference_id = Date.now().toString(36).toUpperCase();
+    const reference_id = requestTime.toString(36).toUpperCase();
     const service_date = startOfDay(fulfillmentDto.selectedDate);
     const service_option_display_string = DataProviderInstance.Services[fulfillmentDto.selectedService];
     const customer_name = [customerInfo.givenName, customerInfo.familyName].join(" ");
     const date_time_interval = DateTimeIntervalBuilder(fulfillmentDto);
-    const { noLongerAvailable, rebuiltCart } = RebuildOrderState(cart, date_time_interval.start);
+
+    const menu = GenerateMenu(CatalogProviderInstance.Catalog, date_time_interval.start, fulfillmentDto.selectedService);
+
+    const { noLongerAvailable, rebuiltCart } = RebuildOrderState(menu, cart, date_time_interval.start, fulfillmentDto.selectedService);
     if (noLongerAvailable.length > 0) {
-      return { status: 404, success: false, result: { errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'GONE', detail: "Unable to rebuild order from current catalog data." }] } };
+      return { status: 410, success: false, result: { errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'GONE', detail: "Unable to rebuild order from current catalog data." }] } };
     }
     const recomputedTotals = RecomputeTotals({ cart: rebuiltCart, creditResponse: store_credit?.validation ?? null, fulfillment: fulfillmentDto, totals });
     if (totals.balance !== recomputedTotals.balanceAfterCredits) {
@@ -442,10 +447,19 @@ export class OrderManager implements WProvider {
       logger.error(errorDetail)
       return { status: 500, success: false, result: { errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'INSUFFICIENT_FUNDS', detail : errorDetail }]}};
     }
-    if (totals.tip < recomputedTotals.tipMinimum) {
+    // we've only set the tip if we've proceeded to checkout with CC, so no need to check tip fudging if not closing out here
+    if (nonce && totals.tip < recomputedTotals.tipMinimum) {
       const errorDetail = `Computed tip below minimum of ${recomputedTotals.tipMinimum} vs sent: ${totals.tip}`;
       logger.error(errorDetail)
       return { status: 500, success: false, result: { errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'INSUFFICIENT_FUNDS', detail : errorDetail }]}};
+    }
+    const availabilityMap = WDateUtils.GetInfoMapForAvailabilityComputation(DataProviderInstance.BlockedOff, DataProviderInstance.Settings, DataProviderInstance.LeadTimes, service_date, { [fulfillmentDto.selectedService]: true }, {cart_based_lead_time: 0, size: recomputedTotals.mainCategoryProductCount});
+    const optionsForSelectedDate = WDateUtils.GetOptionsForDate(availabilityMap, service_date, requestTime)
+    const foundTimeOptionIndex = optionsForSelectedDate.findIndex(x => x.value === fulfillmentDto.selectedTime);
+    if (foundTimeOptionIndex === -1 || optionsForSelectedDate[foundTimeOptionIndex].disabled) { 
+      const errorDetail = `Requested fulfillment time (${service_option_display_string}) no longer valid. ${optionsForSelectedDate.length > 0 ? `Next available time for date selected was ${WDateUtils.MinutesToPrintTime(optionsForSelectedDate[0].value)}` : 'No times left for selected date'}`;
+      logger.error(errorDetail)
+      return { status: 410, success: false, result: { errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'GONE', detail : errorDetail }]}};
     }
     const numGuests = fulfillmentDto.dineInInfo?.partySize ?? 1;
     const service_title = ServiceTitleBuilder(service_option_display_string, customer_name, numGuests, service_date, date_time_interval);
@@ -533,6 +547,7 @@ export class OrderManager implements WProvider {
         ipAddress
       ));
       service_calls.push(CreateOrderEvent(
+        menu,
         fulfillmentDto.selectedService,
         customer_name,
         numGuests,

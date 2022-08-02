@@ -29,7 +29,11 @@ export const SettingsSchema = new Schema<IWSettings>({
     MAX_PARTY_SIZE: Number,
     DELIVERY_LINK: String,
     DELIVERY_FEE: Number,
-    AUTOGRAT_THRESHOLD: Number
+    AUTOGRAT_THRESHOLD: Number,
+    MESSAGE_REQUEST_VEGAN: String,
+    MESSAGE_REQUEST_HALF: String,
+    MESSAGE_REQUEST_WELLDONE: String,
+    MESSAGE_REQUEST_SLICING: String
   },
   pipeline_info: PipelineSchema,
   operating_hours: [[[[Number]]]]
