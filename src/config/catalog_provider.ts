@@ -21,7 +21,7 @@ import WProductInstanceModel from '../models/ordering/products/WProductInstanceS
 import WProductModel from '../models/ordering/products/WProductSchema';
 import WOptionModel from '../models/ordering/options/WOptionSchema';
 import WOptionTypeModel from '../models/ordering/options/WOptionTypeSchema';
-import WProductInstanceFunctionModel from '../models/query/WProductInstanceFunction';
+import { WProductInstanceFunctionModel } from '../models/query/WProductInstanceFunction';
 import socketIo from "socket.io";
 import logger from '../logging';
 import { WProvider } from "../types/WProvider";

@@ -1,9 +1,11 @@
 import logger from '../logging';
 import { WProvider } from '../types/WProvider';
 import PACKAGE_JSON from '../../package.json';
-import { ConstLiteralDiscriminator, IAbstractExpression, IConstLiteralExpression, IHasAnyOfModifierExpression, IIfElseExpression, ILogicalExpression, IModifierPlacementExpression, ProductInstanceFunctionType, SEMVER } from '@wcp/wcpshared';
+import { ConstLiteralDiscriminator, IAbstractExpression, IConstLiteralExpression, IHasAnyOfModifierExpression, IIfElseExpression, ILogicalExpression, IModifierPlacementExpression, ProductInstanceFunctionType, SEMVER, WFunctional } from '@wcp/wcpshared';
 import DBVersionModel from '../models/DBVersionSchema';
+import { WProductInstanceFunctionModel as WProductInstanceFunctionModelACTUAL } from '../models/query/WProductInstanceFunction';
 import mongoose, { Schema } from "mongoose";
+import { ExpressionToMongooseModel } from '../models/query/WAbstractExpression';
 
 const SetVersion = async (new_version: SEMVER) => {
   return await DBVersionModel.findOneAndUpdate({}, new_version, { new: true, upsert: true });
@@ -81,7 +83,7 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
         const cats = await WCategoryModel.find();
         cats.forEach(
           c => {
-            if (c.parent_id === undefined || c.parent_id === null || String(c.parent_id) === "" ) {
+            if (c.parent_id === undefined || c.parent_id === null || String(c.parent_id) === "") {
               c.parent_id = null;
             }
             else {
@@ -188,7 +190,7 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
         expression: {
           required: true,
           type: {
-            expr: Schema.Types.Mixed,
+            expr: { type: Schema.Types.Mixed, required: true },
             discriminator: { type: String, enum: ProductInstanceFunctionType, required: true },
           }
         }
@@ -198,38 +200,47 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
         switch (e.discriminator) {
           case ProductInstanceFunctionType.ConstLiteral:
             // @ts-ignore
-            return { discriminator: ProductInstanceFunctionType.ConstLiteral, expr: { discriminator: ConstLiteralDiscriminator.NUMBER, value: e.expr.value }};
-            case ProductInstanceFunctionType.HasAnyOfModifierType:
-              return e;
-            case ProductInstanceFunctionType.IfElse:
-              return {
-                discriminator: ProductInstanceFunctionType.IfElse,
-                expr: {
-                  test: convertRecursive(e.expr.test),
-                  true_branch: convertRecursive(e.expr.true_branch),
-                  false_branch: convertRecursive(e.expr.false_branch)
-                }
-              };
-            case ProductInstanceFunctionType.Logical:
-              return {
-                discriminator: ProductInstanceFunctionType.Logical,
-                expr: {
-                  operandA: convertRecursive(e.expr.operandA),
-                  operandB: e.expr.operandB ? convertRecursive(e.expr.operandB) : undefined,
-                  operator: e.expr.operator
-                }
-              };
-            case ProductInstanceFunctionType.ModifierPlacement:
-              return e;
+            return { discriminator: ProductInstanceFunctionType.ConstLiteral, expr: { discriminator: ConstLiteralDiscriminator.NUMBER, value: e.expr.value } };
+          case ProductInstanceFunctionType.HasAnyOfModifierType:
+            return { discriminator: ProductInstanceFunctionType.HasAnyOfModifierType, expr: { mtid: e.expr.mtid } };
+          case ProductInstanceFunctionType.IfElse:
+            return {
+              discriminator: ProductInstanceFunctionType.IfElse,
+              expr: {
+                test: convertRecursive(e.expr.test),
+                true_branch: convertRecursive(e.expr.true_branch),
+                false_branch: convertRecursive(e.expr.false_branch)
+              }
+            };
+          case ProductInstanceFunctionType.Logical:
+            return {
+              discriminator: ProductInstanceFunctionType.Logical,
+              expr: {
+                operandA: convertRecursive(e.expr.operandA),
+                operandB: e.expr.operandB ? convertRecursive(e.expr.operandB) : undefined,
+                operator: e.expr.operator
+              }
+            };
+          case ProductInstanceFunctionType.ModifierPlacement:
+            return { discriminator: ProductInstanceFunctionType.ModifierPlacement, expr: { mtid: e.expr.mtid, moid: e.expr.moid } };
         }
       }
       res.forEach(
         e => {
           // @ts-ignore
-          e.expression = convertRecursive(e.expression);
-          promises.push(e.save({}).then(() => {
-            logger.debug(`Updated WProductInstanceFunction ${e.id} with discriminator based ConstLiteral expression: ${JSON.stringify(e.expression)}`);
-          }).catch((err) => {
+          const convertedExpression = convertRecursive(e.expression);
+          //const goosed = ExpressionToMongooseModel(convertedExpression);
+          //logger.debug(`Converted expression string: ${JSON.stringify(goosed)}`);
+          promises.push(WProductInstanceFunctionModelACTUAL.findByIdAndUpdate(
+            e.id,
+            {
+              name: e.name,
+              expression: convertedExpression
+            },
+            { new: true }
+          ).then((updated: any) => {
+            logger.debug(`Updated WProductInstanceFunction ${e.id} with discriminator based ConstLiteral expression: ${JSON.stringify(updated)}`);
+          }).catch((err: any) => {
             logger.error(`Unable to update WProductInstanceFunction ${e.id}. Got error: ${JSON.stringify(err)}`);
           }));
         }

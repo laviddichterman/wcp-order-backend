@@ -1,11 +1,12 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { body, param } from 'express-validator';
-import { IAbstractExpression } from '@wcp/wcpshared';
+import { IAbstractExpression, WFunctional } from '@wcp/wcpshared';
 import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
 
 import logger from '../logging';
 
 import IExpressController from '../types/IExpressController';
+import HttpException from '../types/HttpException';
 import { CheckJWT, ScopeDeleteCatalog, ScopeWriteCatalog } from '../config/authorization';
 import CatalogProviderInstance from '../config/catalog_provider';
 const PIFByIdValidationChain = [
@@ -37,6 +38,13 @@ export class ProductInstanceFunctionController implements IExpressController {
   };
   private postPIF = async (req: Request, res: Response, next: NextFunction) => {
     try {
+      try {
+        const stringified = WFunctional.AbstractExpressionStatementToString(req.body.expression, CatalogProviderInstance.Catalog.modifiers)
+        logger.info(`Creating expression with ${stringified}`);
+      }
+      catch (e) {
+        next(new HttpException(400, "Expression invalid"));
+      }
       const doc = await CatalogProviderInstance.CreateProductInstanceFunction({
         name: req.body.name as string,
         expression: req.body.expression as IAbstractExpression
@@ -55,6 +63,13 @@ export class ProductInstanceFunctionController implements IExpressController {
 
   private patchPIF = async (req: Request, res: Response, next: NextFunction) => {
     try {
+      try {
+        const stringified = WFunctional.AbstractExpressionStatementToString(req.body.expression, CatalogProviderInstance.Catalog.modifiers)
+        logger.info(`Updating expression with ${stringified}`);
+      }
+      catch (e) {
+        next(new HttpException(400, "Expression invalid"));
+      }
       const doc = await CatalogProviderInstance.UpdateProductInstanceFunction(req.params.fxnid, {
         name: req.body.name as string,
         expression: req.body.expression as IAbstractExpression
