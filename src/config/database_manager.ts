@@ -5,7 +5,6 @@ import { ConstLiteralDiscriminator, IAbstractExpression, IConstLiteralExpression
 import DBVersionModel from '../models/DBVersionSchema';
 import { WProductInstanceFunctionModel as WProductInstanceFunctionModelACTUAL } from '../models/query/WProductInstanceFunction';
 import mongoose, { Schema } from "mongoose";
-import { ExpressionToMongooseModel } from '../models/query/WAbstractExpression';
 
 const SetVersion = async (new_version: SEMVER) => {
   return await DBVersionModel.findOneAndUpdate({}, new_version, { new: true, upsert: true });
@@ -20,7 +19,7 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
       // re-assign each option_type_id and enable_function in every ModifierOption
       {
         var promises: Promise<any>[] = [];
-        const WOptionModel = mongoose.model('woptionschema', new Schema({ option_type_id: Schema.Types.Mixed, enable_function: Schema.Types.Mixed }));
+        const WOptionModel = mongoose.model('woptioNschema', new Schema({ option_type_id: Schema.Types.Mixed, enable_function: Schema.Types.Mixed }));
         const options = await WOptionModel.find();
         options.forEach(
           o => {
@@ -42,7 +41,7 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
       }
       {
         var promises: Promise<any>[] = [];
-        const WProductModel = mongoose.model('wproductschema', new Schema({
+        const WProductModel = mongoose.model('wproductsChema', new Schema({
           modifiers: [{ mtid: Schema.Types.Mixed, enable: Schema.Types.Mixed }],
           category_ids: [Schema.Types.Mixed],
         }));
@@ -63,7 +62,7 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
       }
       {
         var promises: Promise<any>[] = [];
-        const WProductInstanceModel = mongoose.model('wproductinstanceschema', new Schema({ product_id: Schema.Types.Mixed }));
+        const WProductInstanceModel = mongoose.model('wproductinstanceSchema', new Schema({ product_id: Schema.Types.Mixed }));
         const elts = await WProductInstanceModel.find();
         elts.forEach(
           o => {
@@ -109,7 +108,7 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
         };
 
         var promises: Promise<any>[] = [];
-        const WProductInstanceFunctionModel = mongoose.model('WProductinstancefunction', new Schema({
+        const WProductInstanceFunctionModel = mongoose.model('WProductinStancefunction', new Schema({
           name: { type: String, required: true },
           expression: {
             required: true,
@@ -185,7 +184,7 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
     // convert all ConstLiteralExpressions to the discriminator versions
     {
       var promises: Promise<any>[] = [];
-      const WProductInstanceFunctionModel = mongoose.model('WProductinstancefunction', new Schema({
+      const WProductInstanceFunctionModel = mongoose.model('wproductinstancefunction', new Schema({
         name: { type: String, required: true },
         expression: {
           required: true,
@@ -280,6 +279,8 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
         });
       await Promise.all(promises);
     }
+  }],
+  "0.3.6": [{ major: 0, minor: 3, patch: 7 }, async () => {
   }],
 
 }

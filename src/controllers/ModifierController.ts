@@ -81,7 +81,7 @@ export class ModifierController implements IExpressController {
     this.router.post(`${this.path}`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(ModifierTypeValidationChain), this.postModifierType);
     this.router.patch(`${this.path}/:mtid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(EditModifierTypeValidationChain), this.patchModifierType);
     this.router.delete(`${this.path}/:mtid`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware(ModifierTypeByIdValidationChain), this.deleteModifierType);
-    this.router.post(`${this.path}:mtid/`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(ModifierOptionValidationChain), this.postModifierOption);
+    this.router.post(`${this.path}/:mtid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(ModifierOptionValidationChain), this.postModifierOption);
     this.router.patch(`${this.path}/:mtid/:moid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(EditModifierOptionValidationChain), this.patchModifierOption);
     this.router.delete(`${this.path}/:mtid/:moid`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware([...ModifierTypeByIdValidationChain, ...ModifierOptionByIdValidationChain]), this.deleteModifierOption);
   };
