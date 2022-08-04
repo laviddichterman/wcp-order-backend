@@ -1,6 +1,6 @@
 {
   "name": "@wcp/wcp-order-backend",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "main": "dist/src/server.js",
   "files": [
     "dist",
@@ -31,7 +31,7 @@
     "@googlemaps/google-maps-services-js": "^3.3.16",
     "@turf/invariant": "^6.5.0",
     "@turf/turf": "^6.5.0",
-    "@wcp/wcpshared": "^4.0.4",
+    "@wcp/wcpshared": "^4.0.6",
     "bluebird": "^3.7.2",
     "body-parser": "^1.20.0",
     "class-transformer": "^0.5.1",
@@ -50,7 +50,7 @@
     "jsonwebtoken": "^8.5.1",
     "jwks-rsa": "^2.1.4",
     "mjml": "^4.13.0",
-    "mongoose": "6.5.0",
+    "mongoose": "6.5.1",
     "nodemailer": "^6.7.7",
     "qrcode": "^1.5.1",
     "reflect-metadata": "^0.1.13",

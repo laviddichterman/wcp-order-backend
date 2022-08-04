@@ -1,10 +1,10 @@
-import { ComputeCartSubTotal, CategorizedRebuiltCart, PRODUCT_LOCATION, WProduct, SERVICE_DATE_DISPLAY_FORMAT, WCPProductV2Dto, CreateProductWithMetadataFromV2Dto, CreateOrderRequestV2, FulfillmentDto, DeliveryInfoDto, MetricsDto, FilterWCPProduct, CoreCartEntry, ValidateAndLockCreditResponse, ComputeDiscountApplied, ComputeTaxAmount, ComputeTipBasis, ComputeTipValue, TotalsV2, ComputeTotal, ComputeGiftCardApplied, ComputeBalanceAfterCredits, JSFECreditV2, CreateOrderResponse, RoundToTwoDecimalPlaces, WDateUtils, GenerateMenu, IMenu } from "@wcp/wcpshared";
+import { ComputeCartSubTotal, CategorizedRebuiltCart, PRODUCT_LOCATION, WProduct, SERVICE_DATE_DISPLAY_FORMAT, WCPProductV2Dto, CreateProductWithMetadataFromV2Dto, CreateOrderRequestV2, FulfillmentDto, DeliveryInfoDto, MetricsDto, FilterWCPProduct, CoreCartEntry, ValidateAndLockCreditResponse, ComputeDiscountApplied, ComputeTaxAmount, ComputeTipBasis, ComputeTipValue, TotalsV2, ComputeTotal, ComputeGiftCardApplied, ComputeBalanceAfterCredits, JSFECreditV2, CreateOrderResponse, RoundToTwoDecimalPlaces, WDateUtils, GenerateMenu, IMenu, ComputeSubtotalPreDiscount, ComputeSubtotalAfterDiscount } from "@wcp/wcpshared";
 import { Error as SquareError} from 'square';
 
 import { WProvider } from '../types/WProvider';
 
 import { CreatePaymentResponse } from 'square';
-import { formatRFC3339, format, parse, Interval, addDays, subMinutes, addMinutes, startOfDay, isSameMinute, isSameDay } from 'date-fns';
+import { formatRFC3339, format, parse, Interval, addDays, subMinutes, addMinutes, startOfDay, isSameMinute, isSameDay, formatDuration } from 'date-fns';
 import GoogleProvider from "./google";
 import SquareProvider from "./square";
 import StoreCreditProvider from "./store_credit_provider";
@@ -24,6 +24,9 @@ const MI_AREA_CODES = ["231", "248", "269", "313", "517", "586", "616", "734", "
 const BTP_AREA_CODES = IL_AREA_CODES.concat(MI_AREA_CODES);
 const WCP_AREA_CODES = IL_AREA_CODES;
 
+const FormatDurationHelper = (milliseconds : number) =>
+  formatDuration({seconds: milliseconds / 1000}, { format: ['hours', 'minutes', 'seconds'] });
+
 interface RecomputeTotalsArgs {
   cart: CategorizedRebuiltCart;
   creditResponse: ValidateAndLockCreditResponse | null;
@@ -35,7 +38,7 @@ export interface RecomputeTotalsResult {
   mainCategoryProductCount: number;
   cartSubtotal: number;
   deliveryFee: number;
-  subtotalBeforeDiscount: number;
+  subtotalPreDiscount: number;
   subtotalAfterDiscount: number;
   discountApplied: number;
   taxAmount: number;
@@ -97,10 +100,10 @@ const GenerateAutoResponseBodyEscaped = function (
 }
 
 const GeneratePaymentSection = (totals: RecomputeTotalsResult, payment_info: CreatePaymentResponse | null, store_credit: JSFECreditV2 | null, ishtml: boolean) => {
-  // TODO: check that these roundings are working properly and we don't need to switch to Math.round
   const discount = totals.discountApplied > 0 ? `\$${Number(totals.discountApplied).toFixed(2)}` : "";
   const tip_amount = `\$${Number(totals.tipAmount).toFixed(2)}`;
   const subtotal = `\$${Number(totals.subtotalAfterDiscount).toFixed(2)}`;
+  const totalAfterTaxBeforeTip = `\$${Number(totals.subtotalAfterDiscount + totals.taxAmount).toFixed(2)}`;
   const total_amount = "$" + Number(totals.total).toFixed(2);
   const store_credit_money_amount = totals.giftCartApplied > 0 ? `\$${Number(totals.giftCartApplied).toFixed(2)}` : "";
   const paid_by_credit_card = payment_info && payment_info.payment.totalMoney.amount ? "$" + Number(payment_info.payment.totalMoney.amount) / 100 : ""
@@ -111,11 +114,13 @@ const GeneratePaymentSection = (totals: RecomputeTotalsResult, payment_info: Cre
   return ishtml ? `${discount_section}
   <p>Received payment of: <strong>${total_amount}</strong></p>
   <p>Pre-tax Amount: <strong>${subtotal}</strong><br />
-  Tip Amount: <strong>${tip_amount}</strong><br />
+  Post-tax Amount: <strong>${totalAfterTaxBeforeTip}</strong>(verify this with payment)<br />
+  Tip Amount: <strong>${tip_amount}</strong><br /></p>
   Confirm the above values in the <a href="${receipt_url}">receipt</a></p>${store_credit_money_section}${card_payment_section}` :
     `${discount_section}
   Received payment of: ${total_amount}
   Pre-tax Amount: ${subtotal}
+  Post-tax Amount: ${totalAfterTaxBeforeTip}
   Tip Amount: ${tip_amount}
   Receipt: ${receipt_url}
   ${store_credit_money_section}${card_payment_section}`;
@@ -220,21 +225,21 @@ const RecomputeTotals = function ({ cart, creditResponse, fulfillment, totals }:
   const mainCategoryProductCount = Object.hasOwn(cart, MAIN_CATID) ? cart[MAIN_CATID].reduce((acc, e) => acc + e.quantity, 0) : 0;
   const cartSubtotal = Object.values(cart).reduce((acc, c) => acc + ComputeCartSubTotal(c), 0);
   const deliveryFee = fulfillment.deliveryInfo !== null && fulfillment.deliveryInfo.validation.validated_address ? DELIVERY_FEE : 0;
-  const subtotalBeforeDiscount = cartSubtotal + deliveryFee;
-  const discountApplied = ComputeDiscountApplied(subtotalBeforeDiscount, creditResponse);
-  const taxAmount = ComputeTaxAmount(subtotalBeforeDiscount, TAX_RATE, discountApplied);
-  const tipBasis = ComputeTipBasis(subtotalBeforeDiscount, taxAmount);
-  const subtotalAfterDiscount = RoundToTwoDecimalPlaces(subtotalBeforeDiscount - discountApplied);
+  const subtotalPreDiscount = ComputeSubtotalPreDiscount(cartSubtotal, deliveryFee);
+  const discountApplied = ComputeDiscountApplied(subtotalPreDiscount, creditResponse);
+  const subtotalAfterDiscount = ComputeSubtotalAfterDiscount(subtotalPreDiscount, discountApplied);
+  const taxAmount = ComputeTaxAmount(subtotalAfterDiscount, TAX_RATE);
+  const tipBasis = ComputeTipBasis(subtotalPreDiscount, taxAmount);
   const tipMinimum = mainCategoryProductCount >= AUTOGRAT_THRESHOLD ? ComputeTipValue({ isPercentage: true, isSuggestion: true, value: .2 }, tipBasis) : 0;
   const tipAmount = totals.tip;
-  const total = ComputeTotal(subtotalBeforeDiscount, discountApplied, taxAmount, tipAmount);
+  const total = ComputeTotal(subtotalAfterDiscount, taxAmount, tipAmount);
   const giftCartApplied = ComputeGiftCardApplied(total, creditResponse);
   const balanceAfterCredits = ComputeBalanceAfterCredits(total, giftCartApplied);
   return {
     mainCategoryProductCount,
     cartSubtotal,
     deliveryFee,
-    subtotalBeforeDiscount,
+    subtotalPreDiscount,
     subtotalAfterDiscount,
     discountApplied,
     taxAmount,
@@ -289,9 +294,11 @@ ${delivery_section}
 ${payment_section}
 
 <p>Debug info:<br />
-Load: ${website_metrics.pageLoadTime}<br />
-Time select: ${website_metrics.timeToServiceTime}<br />
-Submit: ${website_metrics.submitTime}<br />
+Load: ${formatRFC3339(website_metrics.pageLoadTime)}<br />
+Time select: ${FormatDurationHelper(website_metrics.timeToServiceTime)}<br />
+Submit: ${FormatDurationHelper(website_metrics.submitTime)}<br />
+Stages: ${website_metrics.timeToStage.map((t, i) => `S${i}: ${FormatDurationHelper(t)}`).join(", ")}<br />
+Time Bumps: ${website_metrics.numTimeBumps}<br />
 User IP: ${ipAddress}<br />
 <p>Useragent: ${website_metrics.useragent}</p>`;
   await GoogleProvider.SendEmail(
