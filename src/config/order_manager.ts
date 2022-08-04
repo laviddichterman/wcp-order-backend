@@ -24,8 +24,15 @@ const MI_AREA_CODES = ["231", "248", "269", "313", "517", "586", "616", "734", "
 const BTP_AREA_CODES = IL_AREA_CODES.concat(MI_AREA_CODES);
 const WCP_AREA_CODES = IL_AREA_CODES;
 
-const FormatDurationHelper = (milliseconds : number) =>
-  formatDuration({seconds: milliseconds / 1000}, { format: ['hours', 'minutes', 'seconds'] });
+const FormatDurationHelper = function(milliseconds : number) {
+  const seconds = Math.floor(milliseconds / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const dSec = seconds - (60*minutes);
+  const hours = Math.floor(minutes / 60);
+  const dMin = minutes - (60*hours);
+  return `${hours > 0 ? `${hours}H` : ""}${dMin > 0 ? `${dMin}M` : ""}${dSec > 0 ? `${dSec}S` : ""}`;
+}
+  
 
 interface RecomputeTotalsArgs {
   cart: CategorizedRebuiltCart;
@@ -114,9 +121,9 @@ const GeneratePaymentSection = (totals: RecomputeTotalsResult, payment_info: Cre
   return ishtml ? `${discount_section}
   <p>Received payment of: <strong>${total_amount}</strong></p>
   <p>Pre-tax Amount: <strong>${subtotal}</strong><br />
-  Post-tax Amount: <strong>${totalAfterTaxBeforeTip}</strong>(verify this with payment)<br />
-  Tip Amount: <strong>${tip_amount}</strong><br /></p>
-  Confirm the above values in the <a href="${receipt_url}">receipt</a></p>${store_credit_money_section}${card_payment_section}` :
+  Post-tax Amount: <strong>${totalAfterTaxBeforeTip}</strong> (verify this with payment)<br />
+  Tip Amount: <strong>${tip_amount}</strong><br />
+  ${receipt_url ? `Confirm the above values in the <a href="${receipt_url}">receipt</a>` : ""}</p>${store_credit_money_section}${card_payment_section}` :
     `${discount_section}
   Received payment of: ${total_amount}
   Pre-tax Amount: ${subtotal}
