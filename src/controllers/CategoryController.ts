@@ -82,7 +82,7 @@ export class CategoryController implements IExpressController {
         logger.info(`Unable to update category: ${req.params.catid}`);
         return res.status(404).send(`Unable to update category: ${req.params.catid}`);
       }
-      logger.info(`Successfully updated ${doc}`);
+      logger.info(`Successfully updated ${JSON.stringify(doc)}`);
       return res.status(200).send(doc);
     } catch (error) {
       next(error)
@@ -96,7 +96,7 @@ export class CategoryController implements IExpressController {
         logger.info(`Unable to delete category: ${req.params.catid}`);
         return res.status(404).send(`Unable to delete category: ${req.params.catid}`);
       }
-      logger.info(`Successfully deleted ${doc}`);
+      logger.info(`Successfully deleted ${JSON.stringify(doc)}`);
       return res.status(200).send(doc);
     } catch (error) {
       next(error)
