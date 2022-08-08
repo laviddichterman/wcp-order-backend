@@ -68,4 +68,4 @@ const WProductSchema = new Schema<MT>({
   category_ids: [{ type: String, ref: 'WCategorySchema', _id: false }],
 }, {id: true, toJSON: {virtuals: true}, toObject: { virtuals: true}});
 
-export default mongoose.model<IProduct>(path.basename(__filename).replace(path.extname(__filename), ''), WProductSchema);
+export const WProductModel = mongoose.model<IProduct>(path.basename(__filename).replace(path.extname(__filename), ''), WProductSchema);

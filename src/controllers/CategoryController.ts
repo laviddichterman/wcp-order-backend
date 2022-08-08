@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { body, param } from 'express-validator';
-import { CALL_LINE_DISPLAY } from '@wcp/wcpshared';
+import { CALL_LINE_DISPLAY, CategoryDisplay } from '@wcp/wcpshared';
 
 import logger from '../logging';
 
@@ -21,7 +21,9 @@ const CategoryValidationChain = [
   body('ordinal').exists().isInt({ min: 0 }),
   body('parent_id').trim().escape().isMongoId().optional({ nullable: true }),
   body('display_flags.call_line_name').trim().escape(),
-  body('display_flags.call_line_display').isIn(Object.keys(CALL_LINE_DISPLAY))
+  body('display_flags.call_line_display').isIn(Object.keys(CALL_LINE_DISPLAY)),
+  body('display_flags.nesting').isIn(Object.keys(CategoryDisplay)),
+  body('serviceDisable.*').isInt({min:0})
 ];
 
 const EditCategoryValidationChain = [
@@ -51,7 +53,8 @@ export class CategoryController implements IExpressController {
         subheading: req.body.subheading,
         footnotes: req.body.footnotes,
         parent_id: req.body.parent_id,
-        display_flags: req.body.display_flags
+        display_flags: req.body.display_flags,
+        serviceDisable: req.body.serviceDisable
       });
       const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/${newcategory.id}`;
       res.setHeader('Location', location);
@@ -72,7 +75,8 @@ export class CategoryController implements IExpressController {
           subheading: req.body.subheading,
           footnotes: req.body.footnotes,
           parent_id: req.body.parent_id,
-          display_flags: req.body.display_flags
+          display_flags: req.body.display_flags,
+          serviceDisable: req.body.serviceDisable
         });
       if (!doc) {
         logger.info(`Unable to update category: ${req.params.catid}`);

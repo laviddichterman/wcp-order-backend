@@ -1,4 +1,4 @@
-import { ComputeCartSubTotal, CategorizedRebuiltCart, PRODUCT_LOCATION, WProduct, SERVICE_DATE_DISPLAY_FORMAT, WCPProductV2Dto, CreateProductWithMetadataFromV2Dto, CreateOrderRequestV2, FulfillmentDto, DeliveryInfoDto, MetricsDto, FilterWCPProduct, CoreCartEntry, ValidateAndLockCreditResponse, ComputeDiscountApplied, ComputeTaxAmount, ComputeTipBasis, ComputeTipValue, TotalsV2, ComputeTotal, ComputeGiftCardApplied, ComputeBalanceAfterCredits, JSFECreditV2, CreateOrderResponse, RoundToTwoDecimalPlaces, WDateUtils, GenerateMenu, IMenu, ComputeSubtotalPreDiscount, ComputeSubtotalAfterDiscount } from "@wcp/wcpshared";
+import { CanThisBeOrderedAtThisTimeAndFulfillment, ComputeCartSubTotal, CategorizedRebuiltCart, PRODUCT_LOCATION, WProduct, SERVICE_DATE_DISPLAY_FORMAT, WCPProductV2Dto, CreateProductWithMetadataFromV2Dto, CreateOrderRequestV2, FulfillmentDto, DeliveryInfoDto, MetricsDto, FilterWCPProduct, CoreCartEntry, ValidateAndLockCreditResponse, ComputeDiscountApplied, ComputeTaxAmount, ComputeTipBasis, ComputeTipValue, TotalsV2, ComputeTotal, ComputeGiftCardApplied, ComputeBalanceAfterCredits, JSFECreditV2, CreateOrderResponse, WDateUtils, GenerateMenu, IMenu, ComputeSubtotalPreDiscount, ComputeSubtotalAfterDiscount } from "@wcp/wcpshared";
 import { Error as SquareError} from 'square';
 
 import { WProvider } from '../types/WProvider';
@@ -114,7 +114,7 @@ const GeneratePaymentSection = (totals: RecomputeTotalsResult, payment_info: Cre
   const total_amount = "$" + Number(totals.total).toFixed(2);
   const store_credit_money_amount = totals.giftCartApplied > 0 ? `\$${Number(totals.giftCartApplied).toFixed(2)}` : "";
   const paid_by_credit_card = payment_info && payment_info.payment.totalMoney.amount ? "$" + Number(payment_info.payment.totalMoney.amount) / 100 : ""
-  const receipt_url = payment_info ? payment_info.payment.receiptUrl : "";
+  const receipt_url = payment_info ? payment_info.payment.receiptUrl : null;
   const discount_section = totals.discountApplied > 0 ? `NOTE BEFORE CLOSING OUT: Apply discount of ${discount}, pre-tax. Credit code used: ${store_credit.code}.${ishtml ? "<br />" : "\n"}` : "";
   const store_credit_money_section = store_credit_money_amount ? `Applied store credit value ${store_credit_money_amount} using code ${store_credit.code}.${ishtml ? "<br />" : "\n"}` : "";
   const card_payment_section = paid_by_credit_card ? `Paid ${paid_by_credit_card} by card ending in ${payment_info.payment.cardDetails.card.last4}.${ishtml ? "<br />" : "\n"}` : "";
@@ -142,7 +142,7 @@ const GenerateDeliverySection = (delivery_info: DeliveryInfoDto | null, ishtml: 
   return `${ishtml ? "<p><strong>" : "\n"}Delivery Address:${ishtml ? "</strong>" : ""} ${delivery_info.validation.validated_address}${delivery_unit_info}${delivery_instructions}${ishtml ? "</p>" : ""}`;
 }
 
-const EventTitleStringBuilder = (menu: IMenu, service: number, customer: string, number_guests: number, cart: CategorizedRebuiltCart, special_instructions: string, sliced: boolean, ispaid: boolean) => {
+const EventTitleStringBuilder = (menu: IMenu, service: number, customer: string, number_guests: number, cart: CategorizedRebuiltCart, special_instructions: string, ispaid: boolean) => {
   const SERVICE_SHORTHAND = ["P", "DINE", "DELIVER"]; // TODO: move to DB
   const service_string = SERVICE_SHORTHAND[service];
   const catalogCategories = CatalogProviderInstance.Catalog.categories;
@@ -170,7 +170,7 @@ const EventTitleStringBuilder = (menu: IMenu, service: number, customer: string,
         break;
     }
   });
-  return `${service_string}${sliced ? " SLICED" : ""} ${customer}${number_guests > 1 ? `+${number_guests - 1}` : ""} ${titles.join(" ")}${has_special_instructions ? " *" : ""}${ispaid ? " PAID" : " UNPAID"}`;
+  return `${service_string} ${customer}${number_guests > 1 ? `+${number_guests - 1}` : ""} ${titles.join(" ")}${has_special_instructions ? " *" : ""}${ispaid ? " PAID" : " UNPAID"}`;
 };
 
 const ServiceTitleBuilder = (service_option_display_string: string, customer_name: string, number_guests: number, service_date: Date | number, service_time_interval: Interval) => {
@@ -188,13 +188,13 @@ const GenerateDisplayCartStringListFromProducts = (cart: CategorizedRebuiltCart)
   return display_cart_string_list;
 }
 
-const GenerateShortCartFromFullCart = (cart: CategorizedRebuiltCart, sliced: boolean) => {
+const GenerateShortCartFromFullCart = (cart: CategorizedRebuiltCart) => {
   // TODO: the sliced part of this is a hack. need to move to a modifier that takes into account the service type
   const catalogCategories = CatalogProviderInstance.Catalog.categories;
   return Object.entries(cart).map(([catid, category_cart]) => {
     if (category_cart.length > 0) {
       const category_name = catalogCategories[catid].category.name;
-      const category_shortcart = { category_name: category_name, products: category_cart.map(x => `${x.quantity}x: ${x.product.m.shortname}${sliced && category_name === "Pizza" ? " SLICED" : ""}`) };
+      const category_shortcart = { category_name: category_name, products: category_cart.map(x => `${x.quantity}x: ${x.product.m.shortname}`) };
       return category_shortcart;
     }
   })
@@ -208,7 +208,7 @@ const RebuildOrderState = function (menu: IMenu, cart: CoreCartEntry<WCPProductV
   const rebuiltCart: CategorizedRebuiltCart = cart.reduce(
     (acc, entry) => {
       const product = CreateProductWithMetadataFromV2Dto(entry.product, catalog, menu, service_time, fulfillmentType);
-      if (!FilterWCPProduct(product.p, catalog, menu, service_time, fulfillmentType) || !Object.hasOwn(catalogCategories, entry.categoryId)) {
+      if (!CanThisBeOrderedAtThisTimeAndFulfillment(product.p, menu, catalog, service_time, fulfillmentType) || !Object.hasOwn(catalogCategories, entry.categoryId)) {
         noLongerAvailable.push(entry);
       }
       const rebuiltEntry: CoreCartEntry<WProduct> = { ...entry, product };
@@ -269,7 +269,6 @@ const CreateInternalEmail = async (
   user_email: string,
   delivery_info: DeliveryInfoDto | null,
   cart: CategorizedRebuiltCart,
-  sliced: boolean,
   referral: string,
   special_instructions: string,
   website_metrics: MetricsDto,
@@ -285,7 +284,7 @@ const CreateInternalEmail = async (
   const confirmation_subject_escaped = encodeURIComponent(service_title);
   const payment_section = isPaid ? GeneratePaymentSection(totals, payment_info, store_credit, true) : "";
   const delivery_section = GenerateDeliverySection(delivery_info, true);
-  const shortcart = GenerateShortCartFromFullCart(cart, sliced);
+  const shortcart = GenerateShortCartFromFullCart(cart);
   const special_instructions_section = special_instructions && special_instructions.length > 0 ? "<br />Special Instructions: " + special_instructions : "";
   const emailbody = `<p>From: ${customer_name} ${user_email}</p>${number_guests > 1 ? `<strong>Number Guests:</strong> ${number_guests}<br \>` : ""}
 <p>${shortcart.map(x => `<strong>${x.category_name}:</strong><br />${x.products.join("<br />")}`).join("<br />")}
@@ -377,15 +376,14 @@ const CreateOrderEvent = async (
   phone_number: string,
   cart: CategorizedRebuiltCart,
   special_instructions: string,
-  sliced: boolean,
   service_time_interval: Interval,
   delivery_info: DeliveryInfoDto | null,
   isPaid: boolean,
   totals: RecomputeTotalsResult,
   payment_info: CreatePaymentResponse | null,
   store_credit: JSFECreditV2 | null) => {
-  const shortcart = GenerateShortCartFromFullCart(cart, sliced);
-  const calendar_event_title = EventTitleStringBuilder(menu, service_option_enum, customer_name, number_guests, cart, special_instructions, sliced, isPaid);
+  const shortcart = GenerateShortCartFromFullCart(cart);
+  const calendar_event_title = EventTitleStringBuilder(menu, service_option_enum, customer_name, number_guests, cart, special_instructions, isPaid);
   const special_instructions_section = special_instructions && special_instructions.length > 0 ? "\nSpecial Instructions: " + special_instructions : "";
   const number_guests_section = number_guests > 1 ? `Number Guests: ${number_guests}\n` : "";
   const payment_section = isPaid ? "\n" + GeneratePaymentSection(totals, payment_info, store_credit, false) : "";
@@ -434,7 +432,6 @@ export class OrderManager implements WProvider {
     nonce,
     customerInfo,
     fulfillmentDto,
-    sliced,
     cart,
     special_instructions,
     totals,
@@ -550,7 +547,6 @@ export class OrderManager implements WProvider {
         customerInfo.email,
         fulfillmentDto.deliveryInfo,
         rebuiltCart,
-        sliced,
         customerInfo.referral,
         special_instructions,
         metrics,
@@ -568,7 +564,6 @@ export class OrderManager implements WProvider {
         customerInfo.mobileNum,
         rebuiltCart,
         special_instructions,
-        sliced,
         date_time_interval,
         fulfillmentDto.deliveryInfo,
         isPaid,

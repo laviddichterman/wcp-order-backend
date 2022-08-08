@@ -66,4 +66,4 @@ export const WProductInstanceSchema = new Schema<MT>({
   item: WCatalogItemSchema
 }, {id: true, toJSON: {virtuals: true}, toObject: { virtuals: true}});
 
-export default mongoose.model<IProductInstance>(path.basename(__filename).replace(path.extname(__filename), ''), WProductInstanceSchema);
+export const WProductInstanceModel = mongoose.model<IProductInstance>(path.basename(__filename).replace(path.extname(__filename), ''), WProductInstanceSchema);

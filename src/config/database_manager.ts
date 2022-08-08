@@ -4,6 +4,7 @@ import PACKAGE_JSON from '../../package.json';
 import { ConstLiteralDiscriminator, IAbstractExpression, IConstLiteralExpression, IHasAnyOfModifierExpression, IIfElseExpression, ILogicalExpression, IModifierPlacementExpression, ProductInstanceFunctionType, SEMVER, WFunctional } from '@wcp/wcpshared';
 import DBVersionModel from '../models/DBVersionSchema';
 import { WProductInstanceFunctionModel as WProductInstanceFunctionModelACTUAL } from '../models/query/WProductInstanceFunction';
+import { WCategoryModel } from '../models/ordering/category/WCategorySchema';
 import mongoose, { Schema } from "mongoose";
 
 const SetVersion = async (new_version: SEMVER) => {
@@ -285,6 +286,25 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
   "0.3.7": [{ major: 0, minor: 3, patch: 8 }, async () => {
   }],
   "0.3.8": [{ major: 0, minor: 3, patch: 9 }, async () => {
+  }],
+  "0.3.9": [{ major: 0, minor: 3, patch: 10 }, async () => {
+    {
+      // add props to Category
+      const category_update = await WCategoryModel.updateMany(
+        { },
+        {
+          $set: {
+            "display_flags.nesting": "TAB",
+            'serviceDisable': []
+          }
+        });
+      if (category_update.modifiedCount > 0) {
+        logger.debug(`Updated ${category_update.modifiedCount} Categories with nesting and serviceDisable props.`);
+      }
+      else {
+        logger.warn("No categories had nesting or serviceDisable added");
+      }
+    }
   }],
 
 }

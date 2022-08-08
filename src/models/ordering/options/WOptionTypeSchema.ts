@@ -66,4 +66,4 @@ export const WOptionTypeSchema = new Schema<MT>({
 
 }, {id: true, toJSON: {virtuals: true}, toObject: { virtuals: true}});
 
-export default mongoose.model<IOptionType>(path.basename(__filename).replace(path.extname(__filename), ''), WOptionTypeSchema);
+export const WOptionTypeModel = mongoose.model<IOptionType>(path.basename(__filename).replace(path.extname(__filename), ''), WOptionTypeSchema);

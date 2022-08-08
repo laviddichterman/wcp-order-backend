@@ -16,11 +16,11 @@ import {
   RecordProductInstanceFunctions, 
   AbstractExpressionModifierPlacementExpression } from "@wcp/wcpshared";
 import DBVersionModel from '../models/DBVersionSchema';
-import WCategoryModel from '../models/ordering/category/WCategorySchema';
-import WProductInstanceModel from '../models/ordering/products/WProductInstanceSchema';
-import WProductModel from '../models/ordering/products/WProductSchema';
-import WOptionModel from '../models/ordering/options/WOptionSchema';
-import WOptionTypeModel from '../models/ordering/options/WOptionTypeSchema';
+import { WCategoryModel } from '../models/ordering/category/WCategorySchema';
+import { WProductInstanceModel } from '../models/ordering/products/WProductInstanceSchema';
+import { WProductModel } from '../models/ordering/products/WProductSchema';
+import { WOptionModel } from '../models/ordering/options/WOptionSchema';
+import { WOptionTypeModel } from '../models/ordering/options/WOptionTypeSchema';
 import { WProductInstanceFunctionModel } from '../models/query/WProductInstanceFunction';
 import socketIo from "socket.io";
 import logger from '../logging';
@@ -297,7 +297,7 @@ export class CatalogProvider implements WProvider {
     return doc;
   };
 
-  UpdateCategory = async (category_id: string, { name, description, ordinal, subheading, footnotes, parent_id, display_flags }: Omit<ICategory, "id">) => {
+  UpdateCategory = async (category_id: string, category: Omit<ICategory, "id">) => {
     try {
       const category_id_map = ReduceArrayToMapByKey<ICategory, "id">(this.#categories, "id");
       if (!Object.hasOwn(category_id_map, category_id)) {
@@ -305,27 +305,20 @@ export class CatalogProvider implements WProvider {
         return null;
       }
       var cycle_update_promise = null;
-      if (category_id_map[category_id].parent_id !== parent_id && parent_id) {
+      if (category_id_map[category_id].parent_id !== category.parent_id && category.parent_id) {
         // need to check for potential cycle
-        var cur = parent_id;
+        var cur = category.parent_id;
         while (cur && category_id_map[cur].parent_id !== category_id) {
           cur = category_id_map[cur].parent_id;
         }
         // if the cursor is not empty/null/blank then we stopped because we found the cycle
         if (cur) {
-          logger.debug(`In changing ${category_id}'s parent_id to ${parent_id}, found cycle at ${cur}, blanking out ${cur}'s parent_id to prevent cycle.`);
+          logger.debug(`In changing ${category_id}'s parent_id to ${category.parent_id}, found cycle at ${cur}, blanking out ${cur}'s parent_id to prevent cycle.`);
           category_id_map[cur].parent_id = null;
           cycle_update_promise = WCategoryModel.findByIdAndUpdate(cur, { parent_id: null });
         }
       }
-      const response = await WCategoryModel.findByIdAndUpdate(category_id, { 
-        name, 
-        description, 
-        parent_id, 
-        ordinal, 
-        subheading, 
-        footnotes, 
-        display_flags });
+      const response = await WCategoryModel.findByIdAndUpdate(category_id, {...category});
       if (cycle_update_promise) {
         await cycle_update_promise;
       }

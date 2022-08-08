@@ -1,5 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
-import { ICategory, CALL_LINE_DISPLAY } from '@wcp/wcpshared';
+import { ICategory, CALL_LINE_DISPLAY, CategoryDisplay } from '@wcp/wcpshared';
 import path from 'path';
 
 type MT = Omit<ICategory, "id">;
@@ -32,8 +32,14 @@ export const WCategorySchema = new Schema<MT>({
       type: String,
       enum: CALL_LINE_DISPLAY,
       required: true
-    }
-  }
+    },
+    nesting: {
+      type: String,
+      enum: CategoryDisplay,
+      required: true
+    },    
+  },
+  serviceDisable: [Number],
 }, {id: true, toJSON: {virtuals: true}, toObject: { virtuals: true}});
 
-export default mongoose.model<ICategory>(path.basename(__filename).replace(path.extname(__filename), ''), WCategorySchema);
+export const WCategoryModel = mongoose.model<ICategory>(path.basename(__filename).replace(path.extname(__filename), ''), WCategorySchema);
