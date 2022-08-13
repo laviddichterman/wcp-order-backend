@@ -4,7 +4,7 @@ import { Error as SquareError} from 'square';
 import { WProvider } from '../types/WProvider';
 
 import { CreatePaymentResponse } from 'square';
-import { formatRFC3339, format, parse, Interval, addDays, subMinutes, addMinutes, startOfDay, isSameMinute, isSameDay, formatDuration } from 'date-fns';
+import { formatRFC3339, format, parseISO, Interval, addDays, subMinutes, addMinutes, isSameMinute, isSameDay, formatISO } from 'date-fns';
 import GoogleProvider from "./google";
 import SquareProvider from "./square";
 import StoreCreditProvider from "./store_credit_provider";
@@ -72,7 +72,7 @@ const IsNativeAreaCode = function (phone: string, area_codes: string[]) {
 
 const DateTimeIntervalBuilder = ({ selectedDate, selectedTime, selectedService }: Pick<FulfillmentDto, "selectedDate" | 'selectedService' | 'selectedTime'>) => {
   // hack for date computation on DST transition days since we're currently not open during the time jump
-  const date_lower = subMinutes(addDays(selectedDate, 1), 1440 - selectedTime);
+  const date_lower = subMinutes(addDays(parseISO(selectedDate), 1), 1440 - selectedTime);
   // TODO NEED DELIVERY constant
   const date_upper = addMinutes(date_lower, selectedService === 2 ? DELIVERY_INTERVAL_TIME : 0);
   return { start: date_lower, end: date_upper } as Interval;
@@ -173,9 +173,9 @@ const EventTitleStringBuilder = (menu: IMenu, service: number, customer: string,
   return `${service_string} ${customer}${number_guests > 1 ? `+${number_guests - 1}` : ""} ${titles.join(" ")}${has_special_instructions ? " *" : ""}${ispaid ? " PAID" : " UNPAID"}`;
 };
 
-const ServiceTitleBuilder = (service_option_display_string: string, customer_name: string, number_guests: number, service_date: Date | number, service_time_interval: Interval) => {
+const ServiceTitleBuilder = (service_option_display_string: string, customer_name: string, number_guests: number, service_date: string, service_time_interval: Interval) => {
   const display_service_time_interval = DateTimeIntervalToDisplayServiceInterval(service_time_interval);
-  return `${service_option_display_string} for ${customer_name}${number_guests > 1 ? `+${number_guests - 1}` : ""} on ${format(service_date, SERVICE_DATE_DISPLAY_FORMAT)} at ${display_service_time_interval}`;
+  return `${service_option_display_string} for ${customer_name}${number_guests > 1 ? `+${number_guests - 1}` : ""} on ${format(parseISO(service_date), SERVICE_DATE_DISPLAY_FORMAT)} at ${display_service_time_interval}`;
 }
 
 const GenerateDisplayCartStringListFromProducts = (cart: CategorizedRebuiltCart) => {
@@ -263,7 +263,7 @@ const CreateInternalEmail = async (
   service_title: string,
   customer_name: string,
   number_guests: number,
-  service_date: Date | number,
+  sameDayOrder: boolean,
   date_time_interval: Interval,
   phonenum: string,
   user_email: string,
@@ -290,7 +290,7 @@ const CreateInternalEmail = async (
 <p>${shortcart.map(x => `<strong>${x.category_name}:</strong><br />${x.products.join("<br />")}`).join("<br />")}
 ${special_instructions_section}<br />
 Phone: ${phonenum}</p>
-${isSameDay(Date.now(), service_date) ? "" : '<strong style="color: red;">DOUBLE CHECK THIS IS FOR TODAY BEFORE SENDING THE TICKET</strong> <br />'}
+${sameDayOrder ? "" : '<strong style="color: red;">DOUBLE CHECK THIS IS FOR TODAY BEFORE SENDING THE TICKET</strong> <br />'}
 Auto-respond: <a href="mailto:${user_email}?subject=${confirmation_subject_escaped}&body=${confirmation_body_escaped}">Confirmation link</a><br />
     
 <p>Referral Information: ${referral}</p>
@@ -395,11 +395,11 @@ const CreateOrderEvent = async (
     calendar_details,
     {
       dateTime: formatRFC3339(service_time_interval.start),
-      timeZone: "America/Los_Angeles"
+      timeZone: process.env.TZ
     },
     {
       dateTime: formatRFC3339(service_time_interval.end),
-      timeZone: "America/Los_Angeles"
+      timeZone: process.env.TZ
     });
 }
 
@@ -441,11 +441,10 @@ export class OrderManager implements WProvider {
     const requestTime = Date.now();
     const STORE_NAME = DataProviderInstance.KeyValueConfig.STORE_NAME;
     const reference_id = requestTime.toString(36).toUpperCase();
-    const service_date = startOfDay(fulfillmentDto.selectedDate);
     const service_option_display_string = DataProviderInstance.Services[fulfillmentDto.selectedService];
     const customer_name = [customerInfo.givenName, customerInfo.familyName].join(" ");
     const date_time_interval = DateTimeIntervalBuilder(fulfillmentDto);
-
+    const sameDayOrder = isSameDay(requestTime, date_time_interval.start);
     const menu = GenerateMenu(CatalogProviderInstance.Catalog, date_time_interval.start, fulfillmentDto.selectedService);
 
     const { noLongerAvailable, rebuiltCart } = RebuildOrderState(menu, cart, date_time_interval.start, fulfillmentDto.selectedService);
@@ -464,16 +463,18 @@ export class OrderManager implements WProvider {
       logger.error(errorDetail)
       return { status: 500, success: false, result: { errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'INSUFFICIENT_FUNDS', detail : errorDetail }]}};
     }
-    const availabilityMap = WDateUtils.GetInfoMapForAvailabilityComputation(DataProviderInstance.BlockedOff, DataProviderInstance.Settings, DataProviderInstance.LeadTimes, service_date, { [fulfillmentDto.selectedService]: true }, {cart_based_lead_time: 0, size: recomputedTotals.mainCategoryProductCount});
-    const optionsForSelectedDate = WDateUtils.GetOptionsForDate(availabilityMap, service_date, requestTime)
+    const availabilityMap = WDateUtils.GetInfoMapForAvailabilityComputation(DataProviderInstance.BlockedOff, DataProviderInstance.Settings, DataProviderInstance.LeadTimes, fulfillmentDto.selectedDate, { [fulfillmentDto.selectedService]: true }, {cart_based_lead_time: 0, size: recomputedTotals.mainCategoryProductCount});
+    const optionsForSelectedDate = WDateUtils.GetOptionsForDate(availabilityMap, fulfillmentDto.selectedDate, formatISO(requestTime))
     const foundTimeOptionIndex = optionsForSelectedDate.findIndex(x => x.value === fulfillmentDto.selectedTime);
     if (foundTimeOptionIndex === -1 || optionsForSelectedDate[foundTimeOptionIndex].disabled) { 
-      const errorDetail = `Requested fulfillment time (${service_option_display_string}) no longer valid. ${optionsForSelectedDate.length > 0 ? `Next available time for date selected was ${WDateUtils.MinutesToPrintTime(optionsForSelectedDate[0].value)}` : 'No times left for selected date'}`;
+      // TODO: FIX THIS MESSAGE, for some reason it shows as no other options available even if there are.
+      const display_time = DateTimeIntervalToDisplayServiceInterval(date_time_interval);
+      const errorDetail = `Requested fulfillment (${service_option_display_string}) at ${display_time} is no longer valid. ${optionsForSelectedDate.length > 0 ? `Next available time for date selected is ${WDateUtils.MinutesToPrintTime(optionsForSelectedDate[0].value)}` : 'No times left for selected date.'}`;
       logger.error(errorDetail)
       return { status: 410, success: false, result: { errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'GONE', detail : errorDetail }]}};
     }
     const numGuests = fulfillmentDto.dineInInfo?.partySize ?? 1;
-    const service_title = ServiceTitleBuilder(service_option_display_string, customer_name, numGuests, service_date, date_time_interval);
+    const service_title = ServiceTitleBuilder(service_option_display_string, customer_name, numGuests, fulfillmentDto.selectedDate, date_time_interval);
 
     let isPaid = false;
 
@@ -541,7 +542,7 @@ export class OrderManager implements WProvider {
         service_title,
         customer_name,
         numGuests,
-        service_date,
+        sameDayOrder,
         date_time_interval,
         customerInfo.mobileNum,
         customerInfo.email,

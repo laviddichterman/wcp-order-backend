@@ -18,6 +18,12 @@ import { StoreCreditController } from "./controllers/StoreCreditController";
 import { AccountingController } from "./controllers/AccountingController";
 import { OrderController } from "./controllers/OrderController";
 import WApp from './App';
+import logger from './logging';
+
+if (!process.env.TZ) {
+  logger.error("Missing config for TZ (timezone) ");
+  process.exit(1);
+}
 
 const app = new WApp(["nsRO"],
   [

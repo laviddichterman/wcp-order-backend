@@ -11,19 +11,18 @@ import { BigIntStringify } from '../utils';
 
 const V2OrderValidationChain = [
   body('fulfillmentDto.selectedService').isInt({ min: 0, max: 2 }).exists(),
-  body('fulfillmentDto.selectedDate').isInt({ min: 0 }).exists(),
+  body('fulfillmentDto.selectedDate').isISO8601().exists(),
   body('fulfillmentDto.selectedTime').isInt({ min: 0, max: 1440 }).exists(),
   body('customerInfo.givenName').trim().escape().exists(),
   body('customerInfo.familyName').trim().escape().exists(),
   body('customerInfo.mobileNum').trim().escape().exists(),
   body('customerInfo.email').isEmail().exists(),
   body('customerInfo.referral').trim().escape(),
-  body('sliced').isBoolean(),
   body('cart.*.categoryId').exists().isMongoId(),
   body('cart.*.quantity').exists().isInt({ min: 1 }),
   body('cart.*.quantity').exists().isInt({ min: 1 }),
   body('cart.*.product').exists(),
-  body('specialInstructions').trim().escape()
+  body('special_instructions').trim().escape()
 ];
 
 export class OrderController implements IExpressController {

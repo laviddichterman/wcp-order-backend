@@ -4,7 +4,8 @@ import { Namespace } from 'socket.io';
 import CatalogProviderInstance from './catalog_provider';
 import DataProviderInstance from './dataprovider';
 import WApp from '../App';
-import { formatDuration, intervalToDuration } from 'date-fns';
+import { format, intervalToDuration, formatDuration } from 'date-fns';
+import { zonedTimeToUtc } from 'date-fns-tz';
 
 
 export class SocketIoProvider implements WProvider {
@@ -17,12 +18,12 @@ export class SocketIoProvider implements WProvider {
     this.socketRO = app.getSocketIoNamespace('nsRO');
 
     this.socketRO.on('connect',(socket) => { 
-      const connect_time = new Date();
+      const connect_time = zonedTimeToUtc(Date.now(), process.env.TZ);
       socket.client.request.headers["x-real-ip"] ? 
         logger.info(`CONNECTION: Client at IP: ${socket.client.request.headers["x-real-ip"]}, UA: ${socket.client.request.headers['user-agent']}.`) : 
         logger.info(`CONNECTION: Client info: ${JSON.stringify(socket.client.request.headers)}.`);
       logger.info(`Num Connected: ${app.getSocketIoServer().engine.clientsCount}`);
-      socket.emit('WCP_SERVER_TIME', connect_time.valueOf());
+      socket.emit('WCP_SERVER_TIME', { time: format(connect_time, "yyyy-MM-dd'T'HH:mm:ss"), tz: process.env.TZ });
       socket.emit('WCP_SERVICES', DataProviderInstance.Services);
       socket.emit('WCP_LEAD_TIMES', DataProviderInstance.LeadTimes);
       socket.emit('WCP_BLOCKED_OFF', DataProviderInstance.BlockedOff);
@@ -30,7 +31,7 @@ export class SocketIoProvider implements WProvider {
       socket.emit('WCP_DELIVERY_AREA', DataProviderInstance.DeliveryArea);
       CatalogProviderInstance.EmitCatalog(socket);
       socket.on('disconnect', (reason : string) => {
-        const formattedDuration = formatDuration(intervalToDuration({ start: connect_time, end: new Date()}));
+        const formattedDuration = formatDuration(intervalToDuration({ start: connect_time, end: zonedTimeToUtc(Date.now(), process.env.TZ) }));
         
         socket.client.request.headers["x-real-ip"] ? 
           logger.info(`DISCONNECT: ${reason} after ${formattedDuration}. IP: ${socket.client.request.headers["x-real-ip"]}`) : 

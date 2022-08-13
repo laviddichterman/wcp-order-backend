@@ -115,9 +115,6 @@ export class WApp {
       this.app.use('/', controller.router);
     });
   }
-
-  private connectDb() {
-  }
 }
 
 export default WApp;
