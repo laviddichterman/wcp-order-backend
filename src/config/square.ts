@@ -210,7 +210,7 @@ export class SquareProvider implements WProvider {
       const { result, ...httpResponse } = await orders_api.updateOrder(square_order_id, request_body);
       return { success: true, response: result };
     } catch (error) {
-      logger.error(error);
+      logger.error(`Error in order state change: ${BigIntStringify(error)}`);
       return {
         success: false,
         response: error
@@ -243,7 +243,7 @@ export class SquareProvider implements WProvider {
       const { result, ...httpResponse } = await payments_api.createPayment(request_body);
       return { success: true, result: result, error: null };
     } catch (error) {
-      logger.error(error);
+      logger.error(`Error in payment request: ${BigIntStringify(error)}`);
       return {
         success: false,
         result: null,

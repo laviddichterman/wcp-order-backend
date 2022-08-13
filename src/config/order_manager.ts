@@ -420,7 +420,7 @@ const CreateSquareOrderAndCharge = async (reference_id: string, balance: number,
       return payment_response;
     }
   }
-  logger.error(create_order_response);
+  logger.error(`Got error in creating order ${BigIntStringify(create_order_response)}`);
   return create_order_response;
 }
 
