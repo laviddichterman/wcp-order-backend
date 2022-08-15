@@ -1,8 +1,8 @@
 import voucher_codes from 'voucher-code-generator';
-import { format, parse, startOfDay, isValid, isBefore } from 'date-fns';
+import { startOfDay, isValid, isBefore, parseISO } from 'date-fns';
 import qrcode from 'qrcode';
 import Stream from 'stream';
-import { ValidateLockAndSpendRequest, ValidateAndLockCreditResponse, WDateUtils } from "@wcp/wcpshared";
+import { ValidateLockAndSpendRequest, ValidateLockAndSpendSuccess, ValidateAndLockCreditResponse, WDateUtils } from "@wcp/wcpshared";
 import GoogleProviderInstance from "./google";
 import DataProviderInstance from './dataprovider';
 import aes256gcm from './crypto-aes-256-gcm';
@@ -65,7 +65,7 @@ export class StoreCreditProvider {
     generated_by: string,
     reason: string
   ) => {
-    const date_added = format(new Date(), WDateUtils.DATE_STRING_INTERNAL_FORMAT);
+    const date_added = WDateUtils.formatISODate(Date.now());
     const fields = [recipient, amount, credit_type, amount, date_added, generated_by, date_added, credit_code, expiration, reason, "", "", ""];
     return GoogleProviderInstance.AppendToSheet(DataProviderInstance.KeyValueConfig.STORE_CREDIT_SHEET, `${ACTIVE_SHEET}!A1:M1`, fields);
   }
@@ -77,7 +77,6 @@ export class StoreCreditProvider {
    * @returns {Promise<ValidateAndLockCreditResponse>}
    */
   ValidateAndLockCode = async (credit_code: string): Promise<ValidateAndLockCreditResponse> => {
-    const beginningOfToday = startOfDay(new Date());
     const values_promise = GoogleProviderInstance.GetValuesFromSheet(DataProviderInstance.KeyValueConfig.STORE_CREDIT_SHEET, ACTIVE_RANGE);
     // TODO: remove dashes from credit code
     const lock = aes256gcm.encrypt(credit_code);
@@ -89,14 +88,14 @@ export class StoreCreditProvider {
       return { valid: false, credit_type: "MONEY", lock: null, amount: 0 };
     }
     const entry = values.values[i];
-    const date_modified = format(new Date(), WDateUtils.DATE_STRING_INTERNAL_FORMAT);
+    const date_modified = WDateUtils.formatISODate(Date.now());
     const new_entry = [entry[0], entry[1], entry[2], entry[3], entry[4], entry[5], date_modified, entry[7], entry[8], entry[9], lock.enc, ivAsString, authAsString];
     const new_range = `${ACTIVE_SHEET}!${2 + i}:${2 + i}`;
     const update_promise = GoogleProviderInstance.UpdateValuesInSheet(DataProviderInstance.KeyValueConfig.STORE_CREDIT_SHEET, new_range, new_entry);
-    const expiration = entry[8] ? startOfDay(parse(entry[8], WDateUtils.DATE_STRING_INTERNAL_FORMAT, new Date())) : null;
+    const expiration = entry[8] ? startOfDay(parseISO(entry[8])) : null;
     await update_promise;
     const balance = parseFloat(Number(entry[3]).toFixed(2));
-    const valid = (expiration === null || !isValid(expiration) || !isBefore(expiration, beginningOfToday)) && balance > 0;
+    const valid = (expiration === null || !isValid(expiration) || !isBefore(expiration, startOfDay(Date.now()))) && balance > 0;
     return valid ? {
       valid: true,
       credit_type: entry[2] === 'MONEY' ? 'MONEY' : 'DISCOUNT',
@@ -106,8 +105,8 @@ export class StoreCreditProvider {
   }
 
   ValidateLockAndSpend = async ({ amount, code, lock, updatedBy } : ValidateLockAndSpendRequest) : 
-    Promise<{ success: false } | { success: true, entry: any[], index: number }> => {
-    const beginningOfToday = startOfDay(new Date());
+    Promise<{ success: false } | ValidateLockAndSpendSuccess> => {
+    const beginningOfToday = startOfDay(Date.now());
     const values = await GoogleProviderInstance.GetValuesFromSheet(DataProviderInstance.KeyValueConfig.STORE_CREDIT_SHEET, ACTIVE_RANGE);
     for (let i = 0; i < values.values.length; ++i) {
       const entry = values.values[i];
@@ -124,7 +123,7 @@ export class StoreCreditProvider {
           return { success: false };
         }
         if (entry[8]) {
-          const expiration = startOfDay(parse(entry[8], WDateUtils.DATE_STRING_INTERNAL_FORMAT, beginningOfToday));
+          const expiration = startOfDay(parseISO(entry[8]));
           if (isBefore(expiration, beginningOfToday)) {
             logger.error(`We have a cheater folks, store credit key ${entry[7]}, attempted to use after expiration of ${entry[8]}.`);
             return { success: false };
@@ -134,7 +133,7 @@ export class StoreCreditProvider {
         // do we want to update the lock?
         // const newLock = aes256gcm.encrypt(lock.auth);
         // const newLockAsString = { enc: newLock.enc, auth: newLock.auth.toString('hex'), iv: newLock.iv.toString('hex') };
-        const date_modified = format(beginningOfToday, WDateUtils.DATE_STRING_INTERNAL_FORMAT);
+        const date_modified = WDateUtils.formatISODate(beginningOfToday);
         const new_balance = credit_balance - amount;
         const new_entry = [entry[0], entry[1], entry[2], new_balance, entry[4], updatedBy, date_modified, entry[7], entry[8], entry[9], entry[10], entry[11], entry[12]];
         const new_range = `${ACTIVE_SHEET}!${2 + i}:${2 + i}`;

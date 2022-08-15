@@ -18,12 +18,13 @@ export const SettingsSchema = new Schema<IWSettings>({
     default: 15
   }],
   config: {
+    LOCATION_NAME: String,
     SQUARE_LOCATION: String,
+    SQUARE_APPLICATION_ID: String,
     MENU_CATID: String,
     MAIN_CATID: String,
     SUPP_CATID: String,
     TAX_RATE: Number,
-    SQUARE_APPLICATION_ID: String,
     ALLOW_ADVANCED: Boolean,
     MAX_PARTY_SIZE: Number,
     DELIVERY_LINK: String,

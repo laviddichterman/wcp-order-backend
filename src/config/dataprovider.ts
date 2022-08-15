@@ -1,5 +1,5 @@
 import { WProvider } from '../types/WProvider';
-import { IWBlockedOff, IWSettings, JSFEBlockedOff, WDateUtils } from '@wcp/wcpshared';
+import { FulfillmentConfig, IWBlockedOff, IWSettings, JSFEBlockedOff, WDateUtils } from '@wcp/wcpshared';
 import { HydratedDocument } from 'mongoose';
 import logger from '../logging';
 import DeliveryAreaModel from '../models/settings/DeliveryAreaSchema';
@@ -8,21 +8,22 @@ import LeadTimeModel from '../models/settings/LeadTimeSchema';
 import BlockedOffModel from '../models/settings/BlockedOffSchema';
 import StringListModel from '../models/settings/StringListSchema';
 import SettingsModel from '../models/settings/SettingsSchema';
-import DEFAULT_LEAD_TIMES from "../../data/leadtimeschemas.default.json";
-import DEFAULT_SETTINGS from "../../data/settingsschemas.default.json";
-import DEFAULT_SERVICES from "../../data/servicesschemas.default.json";
+import { FulfillmentModel } from '../models/settings/Fulfillment';
 import DEFAULT_DELIVERY_AREA from "../../data/deliveryareaschemas.default.json";
+import { Promise } from 'bluebird';
 
 
 export class DataProvider implements WProvider {
   #services: string[];
-  #settings : IWSettings;
-  #blocked_off : JSFEBlockedOff;
-  #leadtimes : number[];
-  #delivery_area : GeoJSON.Polygon; 
-  #keyvalueconfig : { [key:string]: string };
+  #settings: IWSettings;
+  #fulfillments: Record<string, FulfillmentConfig>;
+  #blocked_off: JSFEBlockedOff;
+  #leadtimes: number[];
+  #delivery_area: GeoJSON.Polygon;
+  #keyvalueconfig: { [key: string]: string };
   constructor() {
     this.#services = null;
+    this.#fulfillments = {};
     this.#settings = null;
     this.#blocked_off = [];
     this.#leadtimes = [];
@@ -35,10 +36,10 @@ export class DataProvider implements WProvider {
     // look for key value config area:
     const found_key_value_store = await KeyValueModel.findOne();
     if (!found_key_value_store) {
-        this.#keyvalueconfig = {};
-        let keyvalueconfig_document = new KeyValueModel({ settings: [] });
-        await keyvalueconfig_document.save();
-        logger.info("Added default (empty) key value config area");
+      this.#keyvalueconfig = {};
+      let keyvalueconfig_document = new KeyValueModel({ settings: [] });
+      await keyvalueconfig_document.save();
+      logger.info("Added default (empty) key value config area");
     }
     else {
       logger.debug("Found KeyValueSchema in database: ", found_key_value_store);
@@ -65,34 +66,15 @@ export class DataProvider implements WProvider {
 
     // look for services
     const found_services = await StringListModel.findOne();
-    if (!found_services || !found_services.services.length) {
-      this.#services = DEFAULT_SERVICES.services;
-      let services_document = new StringListModel(DEFAULT_SERVICES);
-      await services_document.save();
-      logger.info("Added default services list: %o", services_document);
-    }
-    else {
-      logger.debug("Found services in database: ", found_services.services);
-      this.#services = found_services.services;
-    }
+    logger.debug("Found services in database: ", found_services.services);
+    this.#services = found_services.services;
 
     // check for and populate lead times
     this.#leadtimes = Array<number>(this.#services.length).fill(null);
     const found_leadtimes = await LeadTimeModel.find();
-    if (!found_leadtimes || !found_leadtimes.length) {
-      logger.info("Intializing LeadTimes with defaults.");
-      for (var i in DEFAULT_LEAD_TIMES) {
-        this.#leadtimes[DEFAULT_LEAD_TIMES[i].service] = DEFAULT_LEAD_TIMES[i].lead;
-        let lt = new LeadTimeModel({ service: i, lead: DEFAULT_LEAD_TIMES[i].lead });
-        lt.save()
-          .then(x => { logger.debug("Saved lead time of %o", lt) })
-          .catch(err => { logger.error("Error saving lead time %o", err); });
-      }
-    }
-    else {
-      for (var i in found_leadtimes) {
-        this.#leadtimes[found_leadtimes[i].service] = found_leadtimes[i].lead;
-      }
+
+    for (var i in found_leadtimes) {
+      this.#leadtimes[found_leadtimes[i].service] = found_leadtimes[i].lead;
     }
     if (found_leadtimes.length != Object.keys(this.#services).length) {
       logger.error("we have a mismatch in service length and leadtimes stored in the DB");
@@ -113,40 +95,22 @@ export class DataProvider implements WProvider {
 
     // check for and populate settings, including operating hours
     const found_settings = await SettingsModel.findOne();
-    if (!found_settings) {
-      logger.info("No settings found, populating from defaults: %o", DEFAULT_SETTINGS);
-      this.#settings = DEFAULT_SETTINGS as unknown as IWSettings;
-      let settings_document = new SettingsModel(DEFAULT_SETTINGS);
-      settings_document.save()
-        .then(x => { logger.debug("Saved settings: %o", settings_document) })
-        .catch(err => { logger.error("Error saving settings %o", err) });
-    }
-    else {
-      logger.info("Found settings: %o", found_settings);
-      this.#settings = found_settings;
-    }
+    logger.info("Found settings: %o", found_settings);
+    this.#settings = found_settings;
 
     // populate blocked off array
     this.#blocked_off = Array(this.#services.length).fill([]);
     const found_blocked_off = await BlockedOffModel.findOne();
-    if (!found_blocked_off) {
-      logger.debug("No blocked off entries found. Creating blocked off array of length %o", this.#services.length);
-      const blocked_off = new BlockedOffModel({ blocked_off: [] });
-      blocked_off.save()
-        .then(e => { logger.debug("Saved blocked off %o", blocked_off) })
-        .catch(err => { logger.error("Error saving blocked off %o", err) });
-    }
-    else {
-      logger.debug("Found blocked off: %o", found_blocked_off);
-      for (var i in found_blocked_off.blocked_off) {
-        const entry = found_blocked_off.blocked_off[i];
-        logger.debug("Adding blocked off... Service: %o Date: %o Excluded: %o", entry.service, entry.exclusion_date, entry.excluded_intervals);
-        for (var j in entry.excluded_intervals) {
-          WDateUtils.AddIntervalToService(entry.service,
-            entry.exclusion_date,
-            [entry.excluded_intervals[j].start, entry.excluded_intervals[j].end],
-            this.#blocked_off);
-        }
+
+    logger.debug("Found blocked off: %o", found_blocked_off);
+    for (var i in found_blocked_off.blocked_off) {
+      const entry = found_blocked_off.blocked_off[i];
+      logger.debug("Adding blocked off... Service: %o Date: %o Excluded: %o", entry.service, entry.exclusion_date, entry.excluded_intervals);
+      for (var j in entry.excluded_intervals) {
+        WDateUtils.AddIntervalToService(entry.service,
+          entry.exclusion_date,
+          [entry.excluded_intervals[j].start, entry.excluded_intervals[j].end],
+          this.#blocked_off);
       }
     }
 
@@ -165,6 +129,9 @@ export class DataProvider implements WProvider {
   get Services() {
     return this.#services;
   }
+  get Fulfillments() {
+    return this.#fulfillments;
+  }
   get DeliveryArea() {
     return this.#delivery_area;
   }
@@ -172,10 +139,9 @@ export class DataProvider implements WProvider {
     return this.#keyvalueconfig;
   }
 
-
   set BlockedOff(da) {
     this.#blocked_off = da;
-    let new_blocked_off : IWBlockedOff['blocked_off'] = [];
+    let new_blocked_off: IWBlockedOff['blocked_off'] = [];
     for (var i in da) {
       for (var j in da[i]) {
         const excluded_intervals = [];
@@ -186,7 +152,7 @@ export class DataProvider implements WProvider {
       }
     }
     logger.debug("Generated blocked off array: %o", new_blocked_off);
-    BlockedOffModel.findOne(function (_err : Error, db_blocked : HydratedDocument<IWBlockedOff>) {
+    BlockedOffModel.findOne(function (_err: Error, db_blocked: HydratedDocument<IWBlockedOff>) {
       Object.assign(db_blocked, { blocked_off: new_blocked_off });
       db_blocked.save()
         .then(() => { logger.debug("Saved blocked off %o", db_blocked) })
@@ -195,12 +161,55 @@ export class DataProvider implements WProvider {
   }
   set Settings(da) {
     this.#settings = da;
-    SettingsModel.findOne(function (_err : Error, db_settings : HydratedDocument<IWSettings>) {
+    SettingsModel.findOne(function (_err: Error, db_settings: HydratedDocument<IWSettings>) {
       Object.assign(db_settings, da);
       db_settings.save()
         .then(() => { logger.debug("Saved settings %o", db_settings) })
         .catch(err => { logger.error("Error saving settings %o", err) });
     });
+  }
+
+  setFulfillment = async (fulfillment: Omit<FulfillmentConfig, 'id'>) => {
+    const fm = new FulfillmentModel(fulfillment);
+    const savePromise = fm.save()
+      .then(x => {
+        logger.debug(`Saved new fulfillment: ${JSON.stringify(x)}`);
+        this.#fulfillments[x.id] = x;
+        return x;
+      })
+      .catch(err => {
+        logger.error(`Error saving new fulfillment: ${JSON.stringify(err)}`);
+        return Promise.reject(err);
+      });
+    return savePromise;
+  }
+
+  updateFulfillment = async (id: string, fulfillment: Partial<Omit<FulfillmentConfig, 'id'>>) => {
+    return FulfillmentModel.findByIdAndUpdate(id,
+      fulfillment,
+      { new: true })
+      .then(doc => {
+        logger.debug(`Updated fulfillment[${id}]: ${JSON.stringify(doc)}`);
+        this.#fulfillments[id] = doc;
+        return doc;
+      })
+      .catch(err => {
+        logger.error(`Error updating fulfillment: ${JSON.stringify(err)}`);
+        return Promise.reject(err);
+      });
+  }
+
+  deleteFulfillment = async (id: string) => {
+    return FulfillmentModel.findByIdAndDelete(id)
+      .then(doc => {
+        logger.debug(`Deleted fulfillment[${id}]: ${JSON.stringify(doc)}`);
+        delete this.#fulfillments[id];
+        return doc;
+      })
+      .catch(err => {
+        logger.error(`Error deleting fulfillment: ${JSON.stringify(err)}`);
+        return Promise.reject(err);
+      });
   }
 
   set LeadTimes(da) {
@@ -215,25 +224,25 @@ export class DataProvider implements WProvider {
       return leadtimes;
     });
   }
-  
+
   set Services(da) {
     this.#services = da;
-    StringListModel.findOne((err : Error, doc : HydratedDocument<{services: string[]}>) => {
+    StringListModel.findOne((err: Error, doc: HydratedDocument<{ services: string[] }>) => {
       if (err || !doc || !doc.services.length) {
         logger.error("Error finding a valid services list to update.");
       }
       else {
         Object.assign(doc, da);
         doc.save()
-        .then(() => { logger.debug("Saved services %o", doc) })
-        .catch(err => { logger.error("Error saving services %o", err) });
+          .then(() => { logger.debug("Saved services %o", doc) })
+          .catch(err => { logger.error("Error saving services %o", err) });
       }
     });
   }
 
   set DeliveryArea(da) {
     this.#delivery_area = da;
-    DeliveryAreaModel.findOne(function (_err : Error, db_delivery_area : HydratedDocument<GeoJSON.Polygon>) {
+    DeliveryAreaModel.findOne(function (_err: Error, db_delivery_area: HydratedDocument<GeoJSON.Polygon>) {
       Object.assign(db_delivery_area, da);
       db_delivery_area.save()
         .then(() => { logger.debug("Saved delivery area %o", db_delivery_area) })
@@ -243,10 +252,10 @@ export class DataProvider implements WProvider {
 
   set KeyValueConfig(da) {
     this.#keyvalueconfig = da;
-    KeyValueModel.findOne(function (_err : Error, db_key_values : HydratedDocument<IKeyValueStore>) {
+    KeyValueModel.findOne(function (_err: Error, db_key_values: HydratedDocument<IKeyValueStore>) {
       const settings_list = [];
       for (var i in da) {
-        settings_list.push({key: i, value: da[i]});
+        settings_list.push({ key: i, value: da[i] });
       }
       db_key_values.settings = settings_list;
       db_key_values.save()
@@ -254,14 +263,6 @@ export class DataProvider implements WProvider {
         .catch(err => { logger.error("Error saving key/value config %o", err) });
     });
   }
-
-  // CreateOrder(
-  //   serialized_products, 
-  //   customer_info, 
-  //   order_metadata, 
-  //   service_info) {
-  //     //TODO
-  // }
 };
 
 const DataProviderInstance = new DataProvider();

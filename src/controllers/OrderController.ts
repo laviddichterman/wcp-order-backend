@@ -9,8 +9,9 @@ import GoogleProviderInstance from '../config/google';
 import { BigIntStringify } from '../utils';
 
 
+// THIS IS BS NOW, REDO
 const V2OrderValidationChain = [
-  body('fulfillmentDto.selectedService').isInt({ min: 0, max: 2 }).exists(),
+  body('fulfillmentDto.selectedService').exists().isMongoId(),
   body('fulfillmentDto.selectedDate').isISO8601().exists(),
   body('fulfillmentDto.selectedTime').isInt({ min: 0, max: 1440 }).exists(),
   body('customerInfo.givenName').trim().escape().exists(),
@@ -22,7 +23,7 @@ const V2OrderValidationChain = [
   body('cart.*.quantity').exists().isInt({ min: 1 }),
   body('cart.*.quantity').exists().isInt({ min: 1 }),
   body('cart.*.product').exists(),
-  body('special_instructions').trim().escape()
+  body('specialInstructions').trim().escape()
 ];
 
 export class OrderController implements IExpressController {

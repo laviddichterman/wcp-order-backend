@@ -10,9 +10,6 @@ import { WProvider } from '../types/WProvider';
 const OAuth2 = google.auth.OAuth2;
 
 export class GoogleProvider implements WProvider {
-  static get GOOGLE_EVENTS_DATETIME_FORMAT() {
-    return "yyyy-MM-ddTHH:mm:ss";
-  }
 
   #accessToken: string;
   #smtpTransport : nodemailer.Transporter<SMTPTransport.SentMessageInfo>;

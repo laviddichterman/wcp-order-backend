@@ -1,31 +1,34 @@
-import { 
-  ICatalog, 
-  SEMVER, 
-  ICatalogCategories, 
-  ICatalogModifiers, 
-  ICategory, 
-  IOption, 
-  IOptionType, 
-  IProduct, 
-  IProductInstance, 
-  IProductInstanceFunction, 
-  IAbstractExpression, 
-  ICatalogProducts, 
-  IExternalIDs, 
-  ICatalogItem, 
-  RecordProductInstanceFunctions, 
-  AbstractExpressionModifierPlacementExpression } from "@wcp/wcpshared";
+import {
+  ICatalog,
+  SEMVER,
+  ICatalogCategories,
+  ICatalogModifiers,
+  ICategory,
+  IOption,
+  IOptionType,
+  IProduct,
+  IProductInstance,
+  IProductInstanceFunction,
+  ICatalogProducts,
+  RecordProductInstanceFunctions,
+  RecordOrderInstanceFunctions,
+  FindModifierPlacementExpressionsForMTID,
+  FindHasAnyModifierExpressionsForMTID,
+  AbstractExpressionModifierPlacementExpression,
+  OrderInstanceFunction
+} from "@wcp/wcpshared";
 import DBVersionModel from '../models/DBVersionSchema';
-import { WCategoryModel } from '../models/ordering/category/WCategorySchema';
-import { WProductInstanceModel } from '../models/ordering/products/WProductInstanceSchema';
-import { WProductModel } from '../models/ordering/products/WProductSchema';
-import { WOptionModel } from '../models/ordering/options/WOptionSchema';
-import { WOptionTypeModel } from '../models/ordering/options/WOptionTypeSchema';
-import { WProductInstanceFunctionModel } from '../models/query/WProductInstanceFunction';
+import { WCategoryModel } from '../models/catalog/category/WCategorySchema';
+import { WProductInstanceModel } from '../models/catalog/products/WProductInstanceSchema';
+import { WProductModel } from '../models/catalog/products/WProductSchema';
+import { WOptionModel } from '../models/catalog/options/WOptionSchema';
+import { WOptionTypeModel } from '../models/catalog/options/WOptionTypeSchema';
+import { WProductInstanceFunctionModel } from '../models/query/product/WProductInstanceFunction';
 import socketIo from "socket.io";
 import logger from '../logging';
 import { WProvider } from "../types/WProvider";
 import { WApp } from "../App";
+import { WOrderInstanceFunctionModel } from "models/query/order/WOrderInstanceFunction";
 
 function ReduceArrayToMapByKey<T, Key extends keyof T>(xs: T[], key: Key) {
   return Object.fromEntries(xs.map(x => [x[key], x])) as Record<string, T>;
@@ -36,7 +39,7 @@ function ReduceArrayToMapByKey<T, Key extends keyof T>(xs: T[], key: Key) {
 // product_map is mapping from product_id to { product, instances (list of instance objects)}
 // orphan_products is list of orphan product ids
 const CatalogMapGenerator = (categories: ICategory[], products: IProduct[], product_instances: IProductInstance[]) => {
-  const category_map: ICatalogCategories = categories.reduce((acc, cat) =>({...acc, [cat.id]: {category: cat, children: [], products: []}}), {});
+  const category_map: ICatalogCategories = categories.reduce((acc, cat) => ({ ...acc, [cat.id]: { category: cat, children: [], products: [] } }), {});
   categories.forEach((curr) => {
     if (curr.parent_id) {
       if (category_map[curr.parent_id]) {
@@ -44,7 +47,7 @@ const CatalogMapGenerator = (categories: ICategory[], products: IProduct[], prod
       }
       else {
         logger.error(`Missing category ID ${curr.parent_id} specified by ${JSON.stringify(curr)}`);
-      }  
+      }
     }
   });
   const product_map: ICatalogProducts = products.reduce((acc, p) => {
@@ -53,7 +56,7 @@ const CatalogMapGenerator = (categories: ICategory[], products: IProduct[], prod
         category_map[cid] ? category_map[cid].products.push(p.id) : console.error(`Missing category ID: ${cid} in product: ${JSON.stringify(p)}`);
       });
     }
-    return {...acc, [p.id]:  { product: p, instances: [] } };
+    return { ...acc, [p.id]: { product: p, instances: [] } };
   }, {});
   product_instances.forEach((curr) => {
     product_map[curr.product_id].instances.push(curr);
@@ -62,7 +65,7 @@ const CatalogMapGenerator = (categories: ICategory[], products: IProduct[], prod
 };
 
 const ModifierTypeMapGenerator = (modifier_types: IOptionType[], options: IOption[]) => {
-  var modifier_types_map: ICatalogModifiers = modifier_types.reduce((acc, m)=>({...acc, [m.id]: { options: [], modifier_type: m }}), {});
+  var modifier_types_map: ICatalogModifiers = modifier_types.reduce((acc, m) => ({ ...acc, [m.id]: { options: [], modifier_type: m } }), {});
   options.forEach(o => {
     if (Object.hasOwn(modifier_types_map, o.option_type_id)) {
       modifier_types_map[o.option_type_id].options.push(o);
@@ -80,7 +83,8 @@ const CatalogGenerator = (
   options: IOption[],
   products: IProduct[],
   product_instances: IProductInstance[],
-  product_instance_functions: IProductInstanceFunction[],
+  productInstanceFunctions: IProductInstanceFunction[],
+  orderInstanceFunctions: OrderInstanceFunction[],
   api: SEMVER) => {
   const modifier_types_map = ModifierTypeMapGenerator(modifier_types, options);
   const [category_map, product_map] = CatalogMapGenerator(categories, products, product_instances);
@@ -89,49 +93,10 @@ const CatalogGenerator = (
     categories: category_map,
     products: product_map,
     version: Date.now().toString(36).toUpperCase(),
-    product_instance_functions: product_instance_functions.reduce((acc, pif) => ({...acc, [pif.id]: pif}), {} as RecordProductInstanceFunctions),
+    product_instance_functions: productInstanceFunctions.reduce((acc, pif) => ({ ...acc, [pif.id]: pif }), {} as RecordProductInstanceFunctions),
+    orderInstanceFunctions: orderInstanceFunctions.reduce((acc, oif) => ({ ...acc, [oif.id]: oif }), {} as RecordOrderInstanceFunctions),
     api
   } as ICatalog;
-}
-
-//TODO this should exist in the WAbstractExpression class file but I had trouble getting it to work since the type itself is recursive
-const FindModifierPlacementExpressionsForMTID: (expr: IAbstractExpression, mtid: string) => IAbstractExpression[] = function (expr, mtid) {
-  switch (expr.discriminator) {
-    case "IfElse":
-      return FindModifierPlacementExpressionsForMTID(expr.expr.true_branch, mtid).concat(
-        FindModifierPlacementExpressionsForMTID(expr.expr.false_branch, mtid)).concat(
-          FindModifierPlacementExpressionsForMTID(expr.expr.test, mtid));
-    case "Logical":
-      const operandA_expressions = FindModifierPlacementExpressionsForMTID(expr.expr.operandA, mtid);
-      const operandB_expressions = expr.expr.operandB !== undefined ? FindModifierPlacementExpressionsForMTID(expr.expr.operandB, mtid) : [];
-      return operandA_expressions.concat(operandB_expressions);
-    case "ModifierPlacement":
-      return expr.expr.mtid === mtid ? [expr] : [];
-    case "HasAnyOfModifierType":
-    case "ConstLiteral":
-    default:
-      return [];
-  }
-}
-
-//TODO this should exist in the WAbstractExpression class file
-const FindHasAnyModifierExpressionsForMTID: (expr: IAbstractExpression, mtid: string) => IAbstractExpression[] = function (expr, mtid) {
-  switch (expr.discriminator) {
-    case "IfElse":
-      return FindHasAnyModifierExpressionsForMTID(expr.expr.true_branch, mtid).concat(
-        FindHasAnyModifierExpressionsForMTID(expr.expr.false_branch, mtid)).concat(
-          FindHasAnyModifierExpressionsForMTID(expr.expr.test, mtid));
-    case "Logical":
-      const operandA_expressions = FindHasAnyModifierExpressionsForMTID(expr.expr.operandA, mtid);
-      const operandB_expressions = expr.expr.operandB !== undefined ? FindHasAnyModifierExpressionsForMTID(expr.expr.operandB, mtid) : [];
-      return operandA_expressions.concat(operandB_expressions);
-    case "HasAnyOfModifierType":
-      return expr.expr.mtid === mtid ? [expr] : [];
-    case "ModifierPlacement":
-    case "ConstLiteral":
-    default:
-      return [];
-  }
 }
 
 const ValidateProductModifiersFunctionsCategories = function (modifiers: { mtid: string; enable: string | null; }[], category_ids: string[], catalog: CatalogProvider) {
@@ -143,13 +108,14 @@ const ValidateProductModifiersFunctionsCategories = function (modifiers: { mtid:
 }
 
 export class CatalogProvider implements WProvider {
-  #socketRO : socketIo.Namespace;
+  #socketRO: socketIo.Namespace;
   #categories: ICategory[];
   #modifier_types: IOptionType[];
   #options: IOption[];
   #products: IProduct[];
   #product_instances: IProductInstance[];
   #product_instance_functions: IProductInstanceFunction[];
+  #orderInstanceFunctions: OrderInstanceFunction[];
   #catalog: ICatalog;
   #apiver: SEMVER;
   constructor() {
@@ -179,6 +145,10 @@ export class CatalogProvider implements WProvider {
     return this.#product_instance_functions;
   }
 
+  get OrderInstanceFunctions() {
+    return this.#orderInstanceFunctions;
+  }
+
   get Catalog() {
     return this.#catalog;
   }
@@ -187,7 +157,7 @@ export class CatalogProvider implements WProvider {
     // categories
     logger.debug(`Syncing Categories.`);
     try {
-      this.#categories = (await WCategoryModel.find().exec()).map(x=>x.toObject());
+      this.#categories = (await WCategoryModel.find().exec()).map(x => x.toObject());
     } catch (err) {
       logger.error(`Failed fetching categories with error: ${JSON.stringify(err)}`);
       return false;
@@ -199,7 +169,7 @@ export class CatalogProvider implements WProvider {
     logger.debug(`Syncing Modifier Types.`);
     // modifier types
     try {
-      this.#modifier_types = (await WOptionTypeModel.find().exec()).map(x=>x.toObject());
+      this.#modifier_types = (await WOptionTypeModel.find().exec()).map(x => x.toObject());
     } catch (err) {
       logger.error(`Failed fetching option types with error: ${JSON.stringify(err)}`);
       return false;
@@ -211,7 +181,7 @@ export class CatalogProvider implements WProvider {
     logger.debug(`Syncing Modifier Options.`);
     // modifier options
     try {
-      this.#options = (await WOptionModel.find().exec()).map(x=>x.toObject());
+      this.#options = (await WOptionModel.find().exec()).map(x => x.toObject());
     } catch (err) {
       logger.error(`Failed fetching options with error: ${JSON.stringify(err)}`);
       return false;
@@ -223,7 +193,7 @@ export class CatalogProvider implements WProvider {
     logger.debug(`Syncing Products.`);
     // products
     try {
-      this.#products = (await WProductModel.find().exec()).map(x=>x.toObject());
+      this.#products = (await WProductModel.find().exec()).map(x => x.toObject());
     } catch (err) {
       logger.error(`Failed fetching products with error: ${JSON.stringify(err)}`);
       return false;
@@ -236,7 +206,7 @@ export class CatalogProvider implements WProvider {
     // product instances
     try {
       // @ts-ignore
-      this.#product_instances = (await WProductInstanceModel.find().exec()).map(x=>x.toObject());
+      this.#product_instances = (await WProductInstanceModel.find().exec()).map(x => x.toObject());
     } catch (err) {
       logger.error(`Failed fetching product instances with error: ${JSON.stringify(err)}`);
       return false;
@@ -248,9 +218,21 @@ export class CatalogProvider implements WProvider {
     logger.debug(`Syncing Product Instance Functions.`);
     try {
       // @ts-ignore
-      this.#product_instance_functions = (await WProductInstanceFunctionModel.find().exec()).map(x=>x.toObject());
+      this.#product_instance_functions = (await WProductInstanceFunctionModel.find().exec()).map(x => x.toObject());
     } catch (err) {
       logger.error(`Failed fetching product instance functions with error: ${JSON.stringify(err)}`);
+      return false;
+    }
+    return true;
+  }
+
+  SyncOrderInstanceFunctions = async () => {
+    logger.debug(`Syncing Order Instance Functions.`);
+    try {
+      // @ts-ignore
+      this.#orderInstanceFunctions = (await WOrderInstanceFunctionModel.find().exec()).map(x => x.toObject());
+    } catch (err) {
+      logger.error(`Failed fetching order instance functions with error: ${JSON.stringify(err)}`);
       return false;
     }
     return true;
@@ -261,27 +243,24 @@ export class CatalogProvider implements WProvider {
   }
 
   RecomputeCatalog = () => {
-    this.#catalog = CatalogGenerator(this.#categories, this.#modifier_types, this.#options, this.#products, this.#product_instances, this.#product_instance_functions, this.#apiver);
+    this.#catalog = CatalogGenerator(this.#categories, this.#modifier_types, this.#options, this.#products, this.#product_instances, this.#product_instance_functions, this.#orderInstanceFunctions, this.#apiver);
   }
 
-  Bootstrap = async (app : WApp) => {
+  Bootstrap = async (app: WApp) => {
     logger.info(`Starting Bootstrap of CatalogProvider, Loading catalog from database...`);
     this.#socketRO = app.getSocketIoNamespace('nsRO');
     // load catalog from DB, do not push to clients as that'll be handled when a new client connects
-    
+
     this.#apiver = await DBVersionModel.findOne().exec()
 
-    await this.SyncCategories();
-
-    await this.SyncModifierTypes();
-
-    await this.SyncOptions();
-
-    await this.SyncProducts();
-
-    await this.SyncProductInstances();
-
-    await this.SyncProductInstanceFunctions();
+    await Promise.all([
+      this.SyncCategories(),
+      this.SyncModifierTypes(),
+      this.SyncOptions(),
+      this.SyncProducts(),
+      this.SyncProductInstances(),
+      this.SyncProductInstanceFunctions(),
+      this.SyncOrderInstanceFunctions()]);
 
     this.RecomputeCatalog();
 
@@ -318,7 +297,7 @@ export class CatalogProvider implements WProvider {
           cycle_update_promise = WCategoryModel.findByIdAndUpdate(cur, { parent_id: null });
         }
       }
-      const response = await WCategoryModel.findByIdAndUpdate(category_id, {...category});
+      const response = await WCategoryModel.findByIdAndUpdate(category_id, category);
       if (cycle_update_promise) {
         await cycle_update_promise;
       }
@@ -358,16 +337,8 @@ export class CatalogProvider implements WProvider {
     }
   }
 
-  CreateModifierType = async ({ name, display_name, ordinal, min_selected, max_selected, externalIDs, display_flags }: Omit<IOptionType, "id">) => {
-    const doc = new WOptionTypeModel({
-      name,
-      display_name,
-      ordinal,
-      min_selected,
-      max_selected,
-      externalIDs,
-      display_flags
-    });
+  CreateModifierType = async (modifierType: Omit<IOptionType, "id">) => {
+    const doc = new WOptionTypeModel(modifierType);
     await doc.save();
     await this.SyncModifierTypes();
     this.RecomputeCatalog();
@@ -375,19 +346,11 @@ export class CatalogProvider implements WProvider {
     return doc;
   };
 
-  UpdateModifierType = async (mt_id: string, { name, display_name, ordinal, min_selected, max_selected, externalIDs, display_flags }: Omit<IOptionType, "id">) => {
+  UpdateModifierType = async (id: string, modifierType: Omit<IOptionType, "id">) => {
     try {
       const updated = await WOptionTypeModel.findByIdAndUpdate(
-        mt_id,
-        {
-          name,
-          display_name,
-          ordinal,
-          min_selected,
-          max_selected,
-          externalIDs,
-          display_flags
-        },
+        id,
+        modifierType,
         { new: true }
       ).exec();
       if (!updated) {
@@ -417,7 +380,7 @@ export class CatalogProvider implements WProvider {
       if (options_delete.deletedCount > 0) {
         logger.debug(`Removed ${options_delete.deletedCount} Options from the catalog.`);
       }
-      const products_update = await WProductModel.updateMany({}, { $pull: { modifiers: { mtid : mt_id } } });
+      const products_update = await WProductModel.updateMany({}, { $pull: { modifiers: { mtid: mt_id } } });
       if (products_update.modifiedCount > 0) {
         const product_instance_update = await WProductInstanceModel.updateMany({}, { $pull: { modifiers: { modifier_type_id: mt_id } } });
         logger.debug(`Removed ModifierType ID from ${products_update.modifiedCount} products, ${product_instance_update.modifiedCount} product instances.`);
@@ -446,80 +409,28 @@ export class CatalogProvider implements WProvider {
     }
   }
 
-  CreateOption = async ({
-    option_type_id,
-    display_name,
-    description,
-    price,
-    shortcode,
-    disabled,
-    externalIDs,
-    ordinal,
-    metadata,
-    enable_function,
-    display_flags
-  } : ICatalogItem & Omit<IOption, 'id' | 'item'>) => {
+  CreateOption = async (modifierOption: Omit<IOption, 'id'>) => {
     // first find the Modifier Type ID in the catalog
-    var option_type = this.#modifier_types.find(x => x.id.toString() === option_type_id);
+    var option_type = this.#modifier_types.find(x => x.id === modifierOption.option_type_id);
     if (!option_type) {
       return null;
     }
 
-    const doc = new WOptionModel({
-      item: {
-        price,
-        description,
-        display_name,
-        shortcode,
-        disabled,
-        permanent_disable: false,
-        externalIDs
-      },
-      option_type_id,
-      ordinal,
-      metadata,
-      enable_function,
-      display_flags
-    });
+    const doc = new WOptionModel(modifierOption);
     await doc.save();
     await this.SyncOptions();
     this.RecomputeCatalog();
     this.EmitCatalog(this.#socketRO);
     return doc;
   };
- 
-  UpdateModifierOption = async (mo_id : string, {
-    //mt_id, 
-    display_name,
-    description,
-    price,
-    shortcode,
-    disabled,
-    externalIDs,
-    ordinal,
-    metadata,
-    enable_function,
-    display_flags } : ICatalogItem & Omit<IOption, 'id' | 'item' | 'option_type_id'>) => {
+
+  UpdateModifierOption = async (id: string, modifierOption: Omit<IOption, 'id' | 'option_type_id'>) => {
     try {
       //TODO: post update: rebuild all products with the said modifier option since the ordinal might have changed
       // 
       const updated = await WOptionModel.findByIdAndUpdate(
-        mo_id,
-        {
-          item: {
-            price,
-            description,
-            display_name,
-            shortcode,
-            disabled,
-            permanent_disable: false,
-            externalIDs
-          },
-          ordinal: ordinal,
-          metadata,
-          enable_function,
-          display_flags: display_flags
-        },
+        id,
+        modifierOption,
         { new: true }
       ).exec();
       if (!updated) {
@@ -567,33 +478,11 @@ export class CatalogProvider implements WProvider {
     }
   }
 
-
-
-  CreateProduct = async ({
-    price,
-    disabled,
-    service_disable,
-    display_flags,
-    externalIDs,
-    modifiers,
-    category_ids,
-  }: { externalIDs: IExternalIDs } & Omit<IProduct, 'id' | 'item'>,
-    suppress_catalog_recomputation = false) => {
-    if (!ValidateProductModifiersFunctionsCategories(modifiers, category_ids, this)) {
+  CreateProduct = async (product: Omit<IProduct, 'id'>, suppress_catalog_recomputation = false) => {
+    if (!ValidateProductModifiersFunctionsCategories(product.modifiers, product.category_ids, this)) {
       return null;
     }
-
-    const doc = new WProductModel({
-      item: {
-        externalIDs
-      },
-      disabled,
-      price,
-      service_disable,
-      display_flags,
-      modifiers,
-      category_ids
-    });
+    const doc = new WProductModel(product);
     await doc.save();
     await this.SyncProducts();
     if (!suppress_catalog_recomputation) {
@@ -603,34 +492,17 @@ export class CatalogProvider implements WProvider {
     return doc;
   };
 
-  UpdateProduct = async (pid: string, {
-    price,
-    disabled,
-    service_disable,
-    display_flags,
-    externalIDs,
-    modifiers,
-    category_ids }: { externalIDs: IExternalIDs } & Omit<IProduct, 'id' | 'item'>) => {
+  UpdateProduct = async (pid: string, product: Omit<IProduct, 'id'>) => {
     try {
-      if (!ValidateProductModifiersFunctionsCategories(modifiers, category_ids, this)) {
+      if (!ValidateProductModifiersFunctionsCategories(product.modifiers, product.category_ids, this)) {
         return null;
       }
       const old_modifiers = this.#catalog.products[pid].product.modifiers.map(x => x.mtid.toString());
-      const new_modifiers_mtids = modifiers.map(x => String(x.mtid));
+      const new_modifiers_mtids = product.modifiers.map(x => String(x.mtid));
       const removed_modifiers = old_modifiers.filter(x => !new_modifiers_mtids.includes(x));
       const updated = await WProductModel.findByIdAndUpdate(
         pid,
-        {
-          item: {
-            externalIDs
-          },
-          disabled,
-          price,
-          service_disable,
-          display_flags,
-          modifiers: modifiers,
-          category_ids: category_ids
-        },
+        product,
         { new: true }
       ).exec();
       if (!updated) {
@@ -654,7 +526,7 @@ export class CatalogProvider implements WProvider {
     }
   };
 
-  DeleteProduct = async (p_id : string) => {
+  DeleteProduct = async (p_id: string) => {
     logger.debug(`Removing Product ${p_id}`);
     try {
       const doc = await WProductModel.findByIdAndDelete(p_id);
@@ -675,29 +547,8 @@ export class CatalogProvider implements WProvider {
     }
   }
 
-  CreateProductInstance = async (parent_product_id : string, {
-    description,
-    display_name,
-    shortcode,
-    ordinal,
-    externalIDs,
-    modifiers,
-    is_base,
-    display_flags
-  } : Pick<ICatalogItem, 'description' | 'display_name' | 'externalIDs' | 'shortcode'> & Omit<IProductInstance, 'id' | 'item' | 'product_id'>) => {
-    const doc = new WProductInstanceModel({
-      product_id: parent_product_id,
-      item: {
-        description,
-        display_name,
-        shortcode,
-        externalIDs,
-      },
-      ordinal,
-      modifiers,
-      is_base,
-      display_flags
-    });
+  CreateProductInstance = async (productInstance: Omit<IProductInstance, 'id'>) => {
+    const doc = new WProductInstanceModel(productInstance);
     await doc.save();
     await this.SyncProductInstances();
     this.RecomputeCatalog();
@@ -705,32 +556,11 @@ export class CatalogProvider implements WProvider {
     return doc;
   };
 
-  UpdateProductInstance = async (pid : string, piid : string, {
-    display_name,
-    description,
-    shortcode,
-    ordinal,
-    externalIDs,
-    modifiers,
-    is_base,
-    display_flags
-  } : Pick<ICatalogItem, 'description' | 'display_name' | 'externalIDs' | 'shortcode'> & Omit<IProductInstance, 'id' | 'item' | 'product_id'>) => {
+  UpdateProductInstance = async (piid: string, productInstance: Omit<IProductInstance, 'id' | 'product_id'>) => {
     try {
       const updated = await WProductInstanceModel.findByIdAndUpdate(
         piid,
-        {
-          product_id: pid,
-          item: {
-            description,
-            display_name,
-            shortcode,
-            externalIDs
-          },
-          ordinal,
-          modifiers,
-          is_base,
-          display_flags
-        },
+        productInstance,
         { new: true }
       ).exec();
       if (!updated) {
@@ -746,7 +576,7 @@ export class CatalogProvider implements WProvider {
     }
   };
 
-  DeleteProductInstance = async (pi_id : string) => {
+  DeleteProductInstance = async (pi_id: string) => {
     logger.debug(`Removing Product Instance: ${pi_id}`);
     try {
       const doc = await WProductInstanceModel.findByIdAndDelete(pi_id);
@@ -762,16 +592,8 @@ export class CatalogProvider implements WProvider {
     }
   }
 
-  CreateProductInstanceFunction = async ({
-    name,
-    expression
-  } : Omit<IProductInstanceFunction, 'id'>) => {
-
-    const expressions = [];
-    const doc = new WProductInstanceFunctionModel({
-      name: name,
-      expression: expression//await GenerateAbstractExpression(this.#dbconn, expression)
-    });
+  CreateProductInstanceFunction = async (productInstanceFunction: Omit<IProductInstanceFunction, 'id'>) => {
+    const doc = new WProductInstanceFunctionModel(productInstanceFunction);
     await doc.save();
     await this.SyncProductInstanceFunctions();
     this.RecomputeCatalog();
@@ -779,25 +601,16 @@ export class CatalogProvider implements WProvider {
     return doc;
   };
 
-  UpdateProductInstanceFunction = async (pif_id : string, {
-    name,
-    expression
-  } : Omit<IProductInstanceFunction, 'id'>) => {
+  UpdateProductInstanceFunction = async (pif_id: string, productInstanceFunction: Omit<IProductInstanceFunction, 'id'>) => {
     try {
       const updated = await WProductInstanceFunctionModel.findByIdAndUpdate(
         pif_id,
-        {
-          name: name,
-          expression: expression
-        },
+        productInstanceFunction,
         { new: true }
       ).exec();
       if (!updated) {
         return null;
       }
-      // since the product instance function is bound to the modifier types and modifier options that contain them, we need to sync those objects here
-      await this.SyncOptions();
-      await this.SyncProducts();
       await this.SyncProductInstanceFunctions();
       this.RecomputeCatalog();
       this.EmitCatalog(this.#socketRO);
@@ -807,7 +620,7 @@ export class CatalogProvider implements WProvider {
     }
   };
 
-  DeleteProductInstanceFunction = async (pif_id : string, suppress_catalog_recomputation = false) => {
+  DeleteProductInstanceFunction = async (pif_id: string, suppress_catalog_recomputation = false) => {
     logger.debug(`Removing Product Instance Function: ${pif_id}`);
     try {
       const doc = await WProductInstanceFunctionModel.findByIdAndDelete(pif_id);
@@ -829,8 +642,53 @@ export class CatalogProvider implements WProvider {
         await this.SyncProducts();
       }
 
-
       await this.SyncProductInstanceFunctions();
+      if (!suppress_catalog_recomputation) {
+        this.RecomputeCatalog();
+        this.EmitCatalog(this.#socketRO);
+      }
+      return doc;
+    } catch (err) {
+      throw err;
+    }
+
+  }
+  CreateOrderInstanceFunction = async (orderInstanceFunction: Omit<OrderInstanceFunction, 'id'>) => {
+    const doc = new WOrderInstanceFunctionModel(orderInstanceFunction);
+    await doc.save();
+    await this.SyncOrderInstanceFunctions();
+    this.RecomputeCatalog();
+    this.EmitCatalog(this.#socketRO);
+    return doc;
+  };
+
+  UpdateOrderInstanceFunction = async (id: string, orderInstanceFunction: Omit<OrderInstanceFunction, 'id'>) => {
+    try {
+      const updated = await WOrderInstanceFunctionModel.findByIdAndUpdate(
+        id,
+        orderInstanceFunction,
+        { new: true }
+      ).exec();
+      if (!updated) {
+        return null;
+      }
+      await this.SyncOrderInstanceFunctions();
+      this.RecomputeCatalog();
+      this.EmitCatalog(this.#socketRO);
+      return updated;
+    } catch (err) {
+      throw err;
+    }
+  };
+
+  DeleteOrderInstanceFunction = async (id: string, suppress_catalog_recomputation = false) => {
+    logger.debug(`Removing Order Instance Function: ${id}`);
+    try {
+      const doc = await WOrderInstanceFunctionModel.findByIdAndDelete(id);
+      if (!doc) {
+        return null;
+      }
+      await this.SyncOrderInstanceFunctions();
       if (!suppress_catalog_recomputation) {
         this.RecomputeCatalog();
         this.EmitCatalog(this.#socketRO);
@@ -841,6 +699,8 @@ export class CatalogProvider implements WProvider {
     }
   }
 }
+
+
 
 const CatalogProviderInstance = new CatalogProvider();
 export default CatalogProviderInstance;

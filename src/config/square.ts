@@ -1,15 +1,17 @@
-import { Error as SquareError, Client, CreateOrderRequest, CreateOrderResponse, CreatePaymentRequest, CreatePaymentResponse, Environment, UpdateOrderRequest, OrderLineItem } from 'square';
+import { Error as SquareError, Client, CreateOrderRequest, CreateOrderResponse, CreatePaymentRequest, Environment, UpdateOrderRequest, OrderLineItem, Money } from 'square';
 import { WProvider } from '../types/WProvider';
 import crypto from 'crypto';
 import logger from'../logging';
 import DataProviderInstance from './dataprovider';
 import { BigIntStringify } from '../utils';
-import { CategorizedRebuiltCart, CURRENCY, CustomerInfoDto, FulfillmentDto, JSFECreditV2 } from '@wcp/wcpshared';
+import { CategorizedRebuiltCart, CreditPayment, CURRENCY, CustomerInfoDto, FulfillmentDto, IMoney, JSFECreditV2, PaymentMethod } from '@wcp/wcpshared';
 import { RecomputeTotalsResult } from './order_manager';
-import { formatRFC3339 } from 'date-fns';
+import { formatRFC3339, parseISO } from 'date-fns';
 
 const SQUARE_TAX_RATE_CATALOG_ID = "TMG7E3E5E45OXHJTBOHG2PMS";
 const VARIABLE_PRICE_STORE_CREDIT_CATALOG_ID = "DNP5YT6QDIWTB53H46F3ECIN";
+
+export const BigIntMoneyToIntMoney = (bigIntMoney: Money) : IMoney => ({ amount: Number(bigIntMoney.amount!), currency: bigIntMoney.currency! });
 
 export class SquareProvider implements WProvider {
   #client : Client;
@@ -30,59 +32,6 @@ export class SquareProvider implements WProvider {
     logger.info(`Finished Bootstrap of SquareProvider`);
   }
 
-  // interface RecomputeTotalsArgs {
-  //   cart: CategorizedRebuiltCart;
-  //   creditResponse: ValidateAndLockCreditResponse;
-  //   fulfillment: FulfillmentDto;
-  //   totals: TotalsV2;
-  // }
-  
-  // interface RecomputeTotalsResult {
-  //   mainCategoryProductCount: number;
-  //   cartSubtotal: number;
-  //   deliveryFee: number;
-  //   subtotal: number;
-  //   discountApplied: number;
-  //   taxAmount: number;
-  //   tipBasis: number;
-  //   tipMinimum: number;
-  //   total: number;
-  //   giftCartApplied: number;
-  //   balanceAfterCredits: number;
-  // }
-  // const RecomputeTotals = function ({ cart, creditResponse, fulfillment, totals }: RecomputeTotalsArgs): RecomputeTotalsResult {
-  //   const cfg = DataProviderInstance.Settings.config;
-  //   const MAIN_CATID = cfg.MAIN_CATID as string;
-  //   const DELIVERY_FEE = cfg.DELIVERY_FEE as number;
-  //   const TAX_RATE = cfg.TAX_RATE as number;
-  //   const AUTOGRAT_THRESHOLD = cfg.AUTOGRAT_THRESHOLD as number;
-  
-  //   const mainCategoryProductCount = Object.hasOwn(cart, MAIN_CATID) ? cart[MAIN_CATID].reduce((acc, e) => acc + e.quantity, 0) : 0;
-  //   const cartSubtotal = Object.values(cart).reduce((acc, c) => acc + ComputeCartSubTotal(c), 0);
-  //   const deliveryFee = fulfillment.deliveryInfo !== null && fulfillment.deliveryInfo.validation.validated_address ? DELIVERY_FEE : 0;
-  //   const subtotal = cartSubtotal + deliveryFee;
-  //   const discountApplied = ComputeDiscountApplied(subtotal, creditResponse);
-  //   const taxAmount = ComputeTaxAmount(subtotal, TAX_RATE, discountApplied);
-  //   const tipBasis = ComputeTipBasis(subtotal, taxAmount);
-  //   const tipMinimum = mainCategoryProductCount >= AUTOGRAT_THRESHOLD ? ComputeTipValue({ isPercentage: true, isSuggestion: true, value: .2 }, tipBasis) : 0;
-  //   const total = ComputeTotal(subtotal, discountApplied, taxAmount, totals.tip);
-  //   const giftCartApplied = ComputeGiftCardApplied(total, creditResponse);
-  //   const balanceAfterCredits = ComputeBalanceAfterCredits(total, giftCartApplied);
-  //   return {
-  //     mainCategoryProductCount,
-  //     cartSubtotal,
-  //     deliveryFee,
-  //     subtotal,
-  //     discountApplied,
-  //     taxAmount,
-  //     tipBasis,
-  //     tipMinimum,
-  //     total,
-  //     giftCartApplied,
-  //     balanceAfterCredits
-  //   };
-  // }
-
   CreateOrderCart = async (reference_id : string, 
     cart: CategorizedRebuiltCart, 
     customerInfo: CustomerInfoDto, 
@@ -93,6 +42,7 @@ export class SquareProvider implements WProvider {
     note : string) :
   Promise<{ success: true; result: CreateOrderResponse; error: null; } | 
     { success: false; result: null; error: SquareError[]; }> => {
+      // TODO: use idempotency key from order instead
     const idempotency_key = crypto.randomBytes(22).toString('hex');
     const orders_api = this.#client.ordersApi;
     const request_body : CreateOrderRequest = {
@@ -162,6 +112,7 @@ export class SquareProvider implements WProvider {
   CreateOrderStoreCredit = async (reference_id : string, amount_money : bigint, note : string) :
   Promise<{ success: true; result: CreateOrderResponse; error: null; } | 
     { success: false; result: null; error: SquareError[]; }> => {
+      // TODO: use idempotency key from order instead
     const idempotency_key = crypto.randomBytes(22).toString('hex');
     const orders_api = this.#client.ordersApi;
     const request_body : CreateOrderRequest = {
@@ -219,7 +170,7 @@ export class SquareProvider implements WProvider {
   }
 
   ProcessPayment = async (nonce : string, amount_money : bigint, reference_id : string, square_order_id : string, verificationToken?: string) : 
-    Promise<{ success: true; result: CreatePaymentResponse; error: null; } | 
+    Promise<{ success: true; result: CreditPayment; error: null; } | 
     { success: false; result: null; error: SquareError[]; }> => {
     const idempotency_key = crypto.randomBytes(22).toString('hex');
     const payments_api = this.#client.paymentsApi;
@@ -241,7 +192,30 @@ export class SquareProvider implements WProvider {
     try {
       logger.info(`sending payment request: ${BigIntStringify(request_body)}`);
       const { result, ...httpResponse } = await payments_api.createPayment(request_body);
-      return { success: true, result: result, error: null };
+      if (result.payment && result.payment.status === 'COMPLETED') {
+        return { 
+          success: true, 
+          result: { 
+            t: PaymentMethod.CreditCard,
+            processor: 'SQUARE',
+            createdAt: parseISO(result.payment.createdAt).valueOf(),
+            status: 'COMPLETED',
+            amount: BigIntMoneyToIntMoney(result.payment.amountMoney), 
+            billingZip: result.payment.billingAddress.postalCode,
+            cardBrand: result.payment.cardDetails.card.cardBrand,
+            expYear: result.payment.cardDetails.card.expYear.toString(),
+            last4: result.payment.cardDetails.card.last4,
+            receiptUrl: result.payment.receiptUrl,
+            processorId: result.payment.id,
+            cardholderName:  result.payment.cardDetails.card.cardholderName,
+          },
+          error: null };  
+      }
+      return {
+        success: false,
+        result: null,
+        error: result.errors ? result.errors : null
+      };
     } catch (error) {
       logger.error(`Error in payment request: ${BigIntStringify(error)}`);
       return {

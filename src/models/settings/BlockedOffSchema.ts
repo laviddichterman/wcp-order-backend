@@ -2,10 +2,8 @@ import { IWBlockedOff, IWInterval } from "@wcp/wcpshared";
 import mongoose, {Schema} from "mongoose";
 import path from 'path';
 
-export const IntervalSchema = new Schema<IWInterval>({
-  start: { type: Number, required: true },
-  end: { type: Number, required: true },
-}, { _id: false });
+import { IntervalSchema } from "../IntervalSchema";
+
 export const SingleBlockOffSchema = new Schema({
   service: Number,
   exclusion_date: String,

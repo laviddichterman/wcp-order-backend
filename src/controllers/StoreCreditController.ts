@@ -10,7 +10,7 @@ import StoreCreditProviderInstance from '../config/store_credit_provider';
 import GoogleProviderInstance from '../config/google';
 import SquareProviderInstance from '../config/square';
 import internal, { Stream } from 'stream';
-import { format, parse } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { SpendCreditResponse, WDateUtils, ValidateLockAndSpendRequest } from '@wcp/wcpshared';
 import { BigIntStringify } from '../utils';
 
@@ -234,7 +234,7 @@ export class StoreCreditController implements IExpressController {
     const STORE_NAME = DataProviderInstance.KeyValueConfig.STORE_NAME;
     try {
       const amountAsString = Number(req.body.amount).toFixed(2);
-      const expiration = req.body.expiration ? parse(req.body.expiration, WDateUtils.DATE_STRING_INTERNAL_FORMAT, Date.now()) : null
+      const expiration = req.body.expiration ? parseISO(req.body.expiration) : null
       const added_by = req.body.added_by;
       const recipient_name_first = req.body.recipient_name_first;
       const recipient_name_last = req.body.recipient_name_last;
@@ -242,7 +242,7 @@ export class StoreCreditController implements IExpressController {
       const reason = req.body.reason;
       const credit_code = StoreCreditProviderInstance.GenerateCreditCode();
       const qr_code_fs = await StoreCreditProviderInstance.GenerateQRCodeFS(credit_code);
-      const expiration_formatted = expiration ? format(expiration, WDateUtils.DATE_STRING_INTERNAL_FORMAT) : "";
+      const expiration_formatted = expiration ? WDateUtils.formatISODate(expiration) : "";
       await StoreCreditProviderInstance.CreateCreditFromCreditCode(`${recipient_name_first} ${recipient_name_last}`, amountAsString, "DISCOUNT", credit_code, expiration_formatted, added_by, reason);
       await CreateExternalEmail(EMAIL_ADDRESS, STORE_NAME, amountAsString, recipient_name_first, recipient_name_last, recipient_email, credit_code, expiration, qr_code_fs);
       logger.info(`Store credit code: ${credit_code} of type DISCOUNT for ${amountAsString} added by ${added_by} for reason: ${reason}.`)
