@@ -2,7 +2,6 @@ import { IProductInstance, PriceDisplay } from "@wcp/wcpshared";
 import mongoose, {Schema} from "mongoose";
 import path from "path";
 import { WOptionInstanceSchema } from "../options/WOptionInstanceSchema";
-import { WCatalogItemSchema } from "../WCatalogItemSchema";
 //const WPriceDisplayEnumSchema = require("../WPriceDisplayEnumSchema");
 
 type MT = Omit<IProductInstance, "id">;
@@ -18,6 +17,26 @@ export const WProductInstanceSchema = new Schema<MT>({
     modifier_type_id: String,
     options: [WOptionInstanceSchema]
   }],
+
+  // Nice name of the product
+  // eg: House Sausage
+  display_name: String,
+
+  // Nice, long description of the product
+  // eg: House-ground spicy pork sausage
+  // This is displayed alongside any modifiers for the product
+  // HTML allowed
+  description: String,
+
+  // abbreviation used in store
+  shortcode: String,
+
+  // external ids
+  externalIDs: {
+    type: Map,
+    of: String,
+    required: true
+  },
   
   // flag to note that this product instance is the "default" form of the product to which all others should be compared
   is_base: Boolean,
@@ -59,11 +78,7 @@ export const WProductInstanceSchema = new Schema<MT>({
       // and instead use the templating strings to determine what is/isn't displayed
       suppress_exhaustive_modifier_list: Boolean
     },
-  },
-
-  // optional catalog data if this is a catalog item
-  // should allow for specific configurations of products (pizza) to be added and referenced directly in the catalog
-  item: WCatalogItemSchema
+  }
 }, {id: true, toJSON: {virtuals: true}, toObject: { virtuals: true}});
 
 export const WProductInstanceModel = mongoose.model<IProductInstance>(path.basename(__filename).replace(path.extname(__filename), ''), WProductInstanceSchema);

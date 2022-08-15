@@ -1,17 +1,41 @@
 import mongoose, {Schema} from "mongoose";
-import { WCatalogItemSchema } from "../WCatalogItemSchema";
 import path from "path";
 import { IOption } from "@wcp/wcpshared";
+import { WMoney } from "../WMoney";
+import { IntervalSchema } from "../../IntervalSchema";
 
 type MT = Omit<IOption, "id">;
 
 export const WOptionSchema = new Schema<MT>({
-  // inheritance by composition
-  // the base catalog item
-  item: { 
-    type: WCatalogItemSchema, 
+    // Nice name of the modifier, required
+  display_name: { 
+    type: String,
     required: true 
   },
+  // detailed name of the modifier, optional
+  description: String,
+
+  // short, or kitchen name, required
+  shortcode: {
+    type: String,
+    required: true
+  },
+  
+  // Moneys in base currency unit (300 is $3)
+  price: WMoney,
+
+  externalIDs: {
+    type: Map,
+    of: String,
+    required: true
+  },
+
+  // flag to temporarily turn off this product and any products that contain this
+  // start and end are epoch times in the local timezone
+  // special values: 
+  //   start > end means generally disabled
+  //   disabled not defined: means enabled
+  disabled: IntervalSchema,
 
   // placement index
   ordinal: {
@@ -20,7 +44,11 @@ export const WOptionSchema = new Schema<MT>({
   },
 
   // option type enumeration
-  option_type_id: { type: String, ref: 'WOptionTypeSchema', required: true }, 
+  option_type_id: { 
+    type: String, 
+    ref: 'WOptionTypeSchema', 
+    required: true 
+  }, 
 
   metadata: {
     // how much this contributes to the flavor

@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { body, param, validationResult } from 'express-validator';
+import { body, param } from 'express-validator';
 import { OptionPlacement, OptionQualifier, PriceDisplay } from '@wcp/wcpshared';
 import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
 import logger from '../logging';
@@ -19,8 +19,7 @@ const ProductClassValidationChain = [
   body('display_name').trim().exists(),
   body('description').trim(),
   body('shortcode').trim().escape().exists(),
-  body('revelID').trim().escape(),
-  body('squareID').trim().escape(),
+  body('externalIDs.*').trim().escape(),
   body('disabled').custom((value) => {
     if (!value || (typeof value === 'object' && "start" in value && "end" in value && Number.isInteger(value.start) && Number.isInteger(value.end))) {
       return true;
@@ -60,8 +59,7 @@ const ProductInstanceValidationChain = [
   body('display_name').trim().exists(),
   body('description').trim(),
   body('shortcode').trim().escape().exists(),
-  body('revelID').trim().escape(),
-  body('squareID').trim().escape(),
+  body('externalIDs.*').trim().escape(),
   body('is_base').toBoolean(true),
   body('display_flags.menu.ordinal').exists().isInt({min: 0}),
   body('display_flags.menu.hide').toBoolean(true),
@@ -110,10 +108,7 @@ export class ProductController implements IExpressController {
         price: req.body.price,
         disabled: req.body.disabled ? req.body.disabled : null, 
         service_disable: req.body.service_disable || [],
-        externalIDs: {
-          revelID: req.body.revelID,
-          squareID: req.body.squareID
-        },
+        externalIDs: req.body.externalIDs,
         modifiers: req.body.modifiers,
         category_ids: req.body.category_ids,
         display_flags: req.body.display_flags,
@@ -125,15 +120,13 @@ export class ProductController implements IExpressController {
         return res.status(404).send("Unable to find Modifiers or Categories to create Product");
       }
       if (req.body.create_product_instance) {
-        const pi = await CatalogProviderInstance.CreateProductInstance(newproduct.id, {
+        const pi = await CatalogProviderInstance.CreateProductInstance({
+          product_id: newproduct.id,
           description: req.body.description,
           display_name: req.body.display_name,
           shortcode: req.body.shortcode,
           ordinal: req.body.ordinal,
-          externalIDs: {
-            revelID: req.body.revelID,
-            squareID: req.body.squareID
-          },
+          externalIDs: req.body.externalIDs,
           display_flags: {
             menu: { 
               ordinal: req.body.ordinal,
@@ -156,14 +149,14 @@ export class ProductController implements IExpressController {
           is_base: true
         });
         if (!pi) {
-          logger.info(`Error while creating product instance for ${newproduct._id}.`);
-          return res.status(500).send(`Error while creating product instance for  ${newproduct._id}.`);
+          logger.info(`Error while creating product instance for ${newproduct.id}.`);
+          return res.status(500).send(`Error while creating product instance for  ${newproduct.id}.`);
         }
-        const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/${newproduct._id}/${pi._id}`;
+        const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/${newproduct.id}/${pi.id}`;
         res.setHeader('Location', location);
         return res.status(201).send({ product_instance: pi, product: newproduct });
       }
-      const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/${newproduct._id}`;
+      const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/${newproduct.id}`;
       res.setHeader('Location', location);
       return res.status(201).send(newproduct);
     } catch (error) {
@@ -173,7 +166,8 @@ export class ProductController implements IExpressController {
 
   private patchProductClass = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const doc = await CatalogProviderInstance.UpdateProduct(req.params.pid, {
+      const productId = req.params.pid;
+      const doc = await CatalogProviderInstance.UpdateProduct(productId, {
         price: req.body.price,
         disabled: req.body.disabled ? req.body.disabled : null, 
         service_disable: req.body.service_disable || [],
@@ -186,8 +180,8 @@ export class ProductController implements IExpressController {
         display_flags: req.body.display_flags,
       });
       if (!doc) {
-        logger.info(`Unable to update Product: ${req.params.pid}`);
-        return res.status(404).send(`Unable to update Product: ${req.params.pid}`);
+        logger.info(`Unable to update Product: ${productId}`);
+        return res.status(404).send(`Unable to update Product: ${productId}`);
       }
       logger.info(`Successfully updated ${JSON.stringify(doc)}`);
       return res.status(200).send(doc);
@@ -198,10 +192,11 @@ export class ProductController implements IExpressController {
 
   private deleteProductClass = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const doc = await CatalogProviderInstance.DeleteProduct(req.params.pid);
+      const productId = req.params.pid;
+      const doc = await CatalogProviderInstance.DeleteProduct(productId);
       if (!doc) {
-        logger.info(`Unable to delete Product: ${req.params.p_id}`);
-        return res.status(404).send(`Unable to delete Product: ${req.params.pid}`);
+        logger.info(`Unable to delete Product: ${productId}`);
+        return res.status(404).send(`Unable to delete Product: ${productId}`);
       }
       logger.info(`Successfully deleted ${doc}`);
       return res.status(200).send(doc);
@@ -212,15 +207,13 @@ export class ProductController implements IExpressController {
 
   private postProductInstance = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const doc = await CatalogProviderInstance.CreateProductInstance(req.params.pid, {
+      const doc = await CatalogProviderInstance.CreateProductInstance({
+        product_id: req.params.pid, 
         description: req.body.description,
         display_name: req.body.display_name,
         shortcode: req.body.shortcode,
         ordinal: req.body.ordinal,
-        externalIDs: {
-          revelID: req.body.revelID,
-          squareID: req.body.squareID
-        },
+        externalIDs: req.body.externalIDs,
         modifiers: req.body.modifiers,
         is_base: req.body.is_base,
         display_flags: req.body.display_flags
@@ -239,22 +232,20 @@ export class ProductController implements IExpressController {
 
   private patchProductInstance = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const doc = await CatalogProviderInstance.UpdateProductInstance(req.params.pid, req.params.piid, {
+      const productInstanceId = req.params.piid;
+      const doc = await CatalogProviderInstance.UpdateProductInstance(productInstanceId, {
         description: req.body.description,
         display_name: req.body.display_name,
         shortcode: req.body.shortcode,
         ordinal: req.body.ordinal,
-        externalIDs: {
-          revelID: req.body.revelID,
-          squareID: req.body.squareID
-        },
+        externalIDs: req.body.externalIDs,
         modifiers: req.body.modifiers,
         is_base: req.body.is_base,
         display_flags: req.body.display_flags
       });
       if (!doc) {
-        logger.info(`Unable to update ProductInstance: ${req.params.piid}`);
-        return res.status(404).send(`Unable to update ProductInstance: ${req.params.piid}`);
+        logger.info(`Unable to update ProductInstance: ${productInstanceId}`);
+        return res.status(404).send(`Unable to update ProductInstance: ${productInstanceId}`);
       }
       logger.info(`Successfully updated ${JSON.stringify(doc)}`);
       return res.status(200).send(doc);
@@ -265,10 +256,11 @@ export class ProductController implements IExpressController {
 
   private deleteProductInstance = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const doc = await CatalogProviderInstance.DeleteProductInstance(req.params.piid);
+      const productInstanceId = req.params.piid;
+      const doc = await CatalogProviderInstance.DeleteProductInstance(productInstanceId);
       if (!doc) {
-        logger.info(`Unable to delete ProductInstance Type: ${req.params.piid}`);
-        return res.status(404).send(`Unable to delete ProductInstance: ${req.params.piid}`);
+        logger.info(`Unable to delete ProductInstance Type: ${productInstanceId}`);
+        return res.status(404).send(`Unable to delete ProductInstance: ${productInstanceId}`);
       }
       logger.info(`Successfully deleted ${doc}`);
       return res.status(200).send(doc);

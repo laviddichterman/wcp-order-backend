@@ -1,5 +1,4 @@
 import mongoose, {Schema} from "mongoose";
-import { ExternalIDsSchema } from "../ExternalIDsSchema";
 import path from "path";
 import { IOptionType, DISPLAY_AS, MODIFIER_CLASS } from "@wcp/wcpshared";
 
@@ -13,7 +12,11 @@ export const WOptionTypeSchema = new Schema<MT>({
   display_name: String,
 
   // external ids
-  externalIDs: ExternalIDsSchema,
+  externalIDs: {
+    type: Map,
+    of: String,
+    required: true
+  },
 
   // ordinal
   ordinal: { type: Number, required: true },

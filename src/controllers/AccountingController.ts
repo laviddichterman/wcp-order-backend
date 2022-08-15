@@ -2,8 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import IExpressController from '../types/IExpressController';
 //import { CheckJWT, ScopeAccountingRead, ScopeAccountingWrite } from '../config/authorization';
 import GoogleProviderInstance from '../config/google';
-import { WDateUtils } from '@wcp/wcpshared';
-import { addDays, formatRFC3339, parse, startOfDay } from 'date-fns';
+import { addDays, formatRFC3339, parseISO, startOfDay } from 'date-fns';
 
 const tipsregex = /Tip Amount: \$([0-9]+(?:\.[0-9]{1,2})?)/;
 
@@ -21,7 +20,7 @@ export class AccountingController implements IExpressController {
 
   private getTips = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const tips_date = startOfDay(parse(req.query.date as string, WDateUtils.DATE_STRING_INTERNAL_FORMAT, Date.now()));
+      const tips_date = startOfDay(parseISO(req.query.date as string));
       const min_date = formatRFC3339(tips_date);
       const max_date = formatRFC3339(addDays(tips_date, 1));
       const events = await GoogleProviderInstance.GetEventsForDate(min_date, max_date, "America/Los_Angeles");

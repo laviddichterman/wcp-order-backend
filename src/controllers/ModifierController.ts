@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { body, param } from 'express-validator';
-import { DISPLAY_AS, MODIFIER_CLASS } from '@wcp/wcpshared';
+import { CURRENCY, DISPLAY_AS, MODIFIER_CLASS } from '@wcp/wcpshared';
 
 import logger from '../logging';
 import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
@@ -21,8 +21,7 @@ const ModifierTypeValidationChain = [
   body('ordinal').isInt({min: 0, max:63}).exists(),
   body('min_selected').isInt({min: 0}).exists(),
   body('max_selected').optional({nullable: true}).isInt({min: 0}),
-  body('revelID').trim().escape(),
-  body('squareID').trim().escape(),
+  body('externalIDs.*').trim().escape(),
   body('display_flags.omit_section_if_no_available_options').toBoolean(true),
   body('display_flags.omit_options_if_not_available').toBoolean(true),
   body('display_flags.use_toggle_if_only_two_options').toBoolean(true),
@@ -53,7 +52,7 @@ const ModifierOptionValidationChain = [
     throw new Error("Disabled value misformed");
   }),
   body('price.amount').isInt({min: 0, max:100000}).exists(),
-  body('price.currency').exists().isLength({min:3, max: 3}).isIn(['USD']),
+  body('price.currency').exists().isLength({min:3, max: 3}).isIn(Object.values(CURRENCY)),
   body('ordinal').isInt({min: 0, max:64}).exists(),
   body('enable_function').optional({nullable: true}).isMongoId(),
   body('flavor_factor').isFloat({ min: 0, max: 5 }),
@@ -93,10 +92,7 @@ export class ModifierController implements IExpressController {
         ordinal: req.body.ordinal,
         min_selected: req.body.min_selected,
         max_selected: req.body.max_selected,
-        externalIDs: {
-          revelID: req.body.revelID,
-          squareID: req.body.squareID
-        },
+        externalIDs: req.body.externalIDs,
         display_flags: req.body.display_flags,
       });
       const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/${doc.id}`;
@@ -117,10 +113,7 @@ export class ModifierController implements IExpressController {
           ordinal: request.body.ordinal,
           min_selected: request.body.min_selected,
           max_selected: request.body.max_selected,
-          externalIDs: {
-            revelID: request.body.revelID,
-            squareID: request.body.squareID
-          },
+          externalIDs: request.body.externalIDs,
           display_flags: request.body.display_flags,
         }
       );
@@ -157,10 +150,7 @@ export class ModifierController implements IExpressController {
         display_name: req.body.display_name,
         shortcode: req.body.shortcode,
         disabled: req.body.disabled ? req.body.disabled : null, 
-        externalIDs: {
-          revelID: req.body.revelID,
-          squareID: req.body.squareID
-        },
+        externalIDs: req.body.externalIDs,
         option_type_id: req.params.mtid,
         ordinal: req.body.ordinal,
         metadata: {
@@ -191,10 +181,7 @@ export class ModifierController implements IExpressController {
         price: req.body.price, 
         shortcode: req.body.shortcode, 
         disabled: req.body.disabled ? req.body.disabled : null, 
-        externalIDs: {
-          revelID: req.body.revelID,
-          squareID: req.body.squareID
-        },
+        externalIDs: req.body.externalIDs,
         ordinal: req.body.ordinal, 
         metadata: {
           flavor_factor: req.body.flavor_factor, 

@@ -1,6 +1,5 @@
 import { IProduct } from "@wcp/wcpshared";
 import mongoose, {Schema} from "mongoose";
-import { WCatalogItemSchema } from "../WCatalogItemSchema";
 import { WMoney } from "../WMoney";
 import path from 'path';
 
@@ -10,15 +9,12 @@ export const ProductModifierSchema = new Schema({
   // optional function object that operates on a product instance
   // and returns true if the option type should be enabled.
   enable: { type: Schema.Types.String, ref: 'WProductInstanceFunction' },
-  // service_disable in this case really only exists for slicing. FML
-  service_disable: [Number]
+  // list of fulfillmentIds for which this ModifierType should be disabled.
+  service_disable: [{ type: String, ref: 'FulfillmentSchema'}],
 }, { _id: false });
-
 
 // represents a class of products that can be made and inserted into the catalog
 const WProductSchema = new Schema<MT>({  
-  // in process of deprecation
-  item: WCatalogItemSchema,
 
   // Moneys in base currency unit (300 is $3)
   price: { 
@@ -36,11 +32,15 @@ const WProductSchema = new Schema<MT>({
     end: Number
   },
 
-  // list of service numbers (0, 1, 2...) for which this product should be disabled.
-  // The numbers here should match up with service types enumeration.
-  // [2, 1] would mean that this product and all instances should be considered disabled
-  // for orders with service types of 1 or 2.
-  service_disable: [Number],
+  // external ids
+  externalIDs: {
+    type: Map,
+    of: String,
+    required: true
+  },
+
+  // list of fulfillmentIds for which this product should be disabled.
+  service_disable: [{ type: String, ref: 'FulfillmentSchema'}],
   
   display_flags: {
     flavor_max: Number,

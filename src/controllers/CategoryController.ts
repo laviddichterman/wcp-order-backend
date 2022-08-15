@@ -23,7 +23,7 @@ const CategoryValidationChain = [
   body('display_flags.call_line_name').trim().escape(),
   body('display_flags.call_line_display').isIn(Object.keys(CALL_LINE_DISPLAY)),
   body('display_flags.nesting').isIn(Object.keys(CategoryDisplay)),
-  body('serviceDisable.*').isInt({min:0})
+  body('serviceDisable.*').trim().escape().isMongoId()
 ];
 
 const EditCategoryValidationChain = [
