@@ -1,10 +1,12 @@
 import logger from '../logging';
 import { WProvider } from '../types/WProvider';
 import PACKAGE_JSON from '../../package.json';
-import { ConstLiteralDiscriminator, IAbstractExpression, IConstLiteralExpression, IHasAnyOfModifierExpression, IIfElseExpression, ILogicalExpression, IModifierPlacementExpression, ProductInstanceFunctionType, SEMVER, WFunctional } from '@wcp/wcpshared';
+import { ConstLiteralDiscriminator, IAbstractExpression, IConstLiteralExpression, IHasAnyOfModifierExpression, IIfElseExpression, ILogicalExpression, IModifierPlacementExpression, ModifiersMap, OptionPlacement, OptionQualifier, ProductInstanceFunctionType, SEMVER, WFunctional } from '@wcp/wcpshared';
 import DBVersionModel from '../models/DBVersionSchema';
-import { WProductInstanceFunctionModel as WProductInstanceFunctionModelACTUAL } from '../models/query/WProductInstanceFunction';
-import { WCategoryModel } from '../models/ordering/category/WCategorySchema';
+import { WProductInstanceFunctionModel as WProductInstanceFunctionModelACTUAL } from '../models/query/product/WProductInstanceFunction';
+import { WMoney } from '../models/WMoney';
+import { IntervalSchema } from '../models/IntervalSchema';
+import { WCategoryModel } from '../models/catalog/category/WCategorySchema';
 import mongoose, { Schema } from "mongoose";
 
 const SetVersion = async (new_version: SEMVER) => {
@@ -19,7 +21,7 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
     {
       // re-assign each option_type_id and enable_function in every ModifierOption
       {
-        var promises: Promise<any>[] = [];
+        const promises: Promise<any>[] = [];
         const WOptionModel = mongoose.model('woptioNschema', new Schema({ option_type_id: Schema.Types.Mixed, enable_function: Schema.Types.Mixed }));
         const options = await WOptionModel.find();
         options.forEach(
@@ -31,7 +33,6 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
               o.enable_function = String(o.enable_function);
             }
             promises.push(o.save().then(() => {
-              // @ts-ignore
               logger.debug(`Updated Option ${o.id} with type safe option type id ${o.option_type_id} ${typeof o.option_type_id}.`);
             }).catch((err) => {
               // @ts-ignore
@@ -101,8 +102,8 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
       {
         interface IAbstractExpressionOld {
           const_literal?: IConstLiteralExpression;
-          if_else?: IIfElseExpression;
-          logical?: ILogicalExpression;
+          if_else?: IIfElseExpression<IAbstractExpression>;
+          logical?: ILogicalExpression<IAbstractExpression>;
           modifier_placement?: IModifierPlacementExpression;
           has_any_of_modifier?: IHasAnyOfModifierExpression;
           discriminator: keyof typeof ProductInstanceFunctionType;
@@ -291,7 +292,7 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
     {
       // add props to Category
       const category_update = await WCategoryModel.updateMany(
-        { },
+        {},
         {
           $set: {
             "display_flags.nesting": "TAB",
@@ -307,7 +308,175 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
     }
   }],
   "0.3.10": [{ major: 0, minor: 4, patch: 0 }, async () => {
-  }],  
+  }],
+  "0.4.0": [{ major: 0, minor: 5, patch: 0 }, async () => {
+    {
+      // IProduct remove item and set externalIDs = {}
+      // remove ProductModifierSchema.service_disable and log warning
+      // move to camelCase: displayFlags, serviceDisable
+      const WProductModel = mongoose.model('wproductsCHema', new Schema({
+        modifiers: [{ mtid: String, enable: String, service_disable: Schema.Types.Mixed, serviceDisable: [String] }],
+        item: Schema.Types.Mixed,
+        externalIDs: Schema.Types.Mixed,
+        displayFlags: Schema.Types.Mixed,
+        display_flags: Schema.Types.Mixed,
+        serviceDisable: [String],
+        service_disable: [Number]
+      }));
+      const elts = await WProductModel.find();
+      await Promise.all(elts.map(async (prod) => {
+        prod.displayFlags = prod.display_flags;
+        prod.display_flags = undefined;
+        prod.externalIDs = {};
+        prod.item = undefined;
+        if (prod.service_disable.length > 0) {
+          logger.warn(`About to remove product set service disable of ${JSON.stringify(prod.service_disable)} for ProductID: ${prod.id}`);
+        }
+        prod.service_disable = undefined;
+        prod.serviceDisable = [];
+        prod.modifiers = prod.modifiers.map(mod => {
+          if (mod.service_disable.length > 0) {
+            logger.warn(`About to remove modifier set service disable of ${JSON.stringify(mod.service_disable)} for ProductID: ${prod.id}`);
+          }
+          return { mtid: mod.mtid, enable: mod.enable, serviceDisable: [] };
+        });
+        return await prod.save()
+          .then(doc => {
+            logger.info(`Updated ProductModel with new schema: ${JSON.stringify(doc.toJSON())}`);
+            return doc;
+          })
+          .catch(err => {
+            logger.error(`Failed to update ProductModel ${prod.id} got error: ${JSON.stringify(err)}`);
+            return Promise.reject(err);
+          })
+      }));
+    }
+    {
+      // IProductInstance externalIDs set to {}, move description, displayName, shortcode, delete item, convert modifiers list to modifier map
+      // remove ProductModifierSchema.service_disable and log warning
+      const WProductInstanceModel = mongoose.model('WProductINStanceSchema', new Schema({
+        modifiers: Schema.Types.Mixed,
+        item: Schema.Types.Mixed,
+        displayName: String,
+        description: String,
+        shortcode: String,
+        externalIDs: Schema.Types.Mixed,
+        is_base: Boolean,
+        isBase: Boolean,
+        displayFlags: Schema.Types.Mixed,
+        display_flags: Schema.Types.Mixed,
+        product_id: String,
+        productId: String
+      }));
+      const elts = await WProductInstanceModel.find();
+      await Promise.all(elts.map(async (pi) => {
+        pi.shortcode = pi.item.shortcode;
+        pi.description = pi.item.description;
+        pi.displayName = pi.item.display_name;
+        pi.externalIDs = {};
+        pi.item = undefined;
+        pi.displayFlags = pi.display_flags;
+        pi.display_flags = undefined;
+        pi.isBase = pi.is_base;
+        pi.is_base = undefined;
+        pi.productId = pi.product_id;
+        pi.product_id = undefined;
+        pi.modifiers = pi.modifiers.reduce((o: ModifiersMap, mod: {
+          modifier_type_id: string;
+          options: {
+            option_id: string;
+            placement: keyof typeof OptionPlacement;
+            qualifier: keyof typeof OptionQualifier;
+          }[];
+        }) => ({
+          ...o,
+          [mod.modifier_type_id]: mod.options.map(
+            x => ({ optionId: x.option_id, placement: OptionPlacement[x.placement], qualifier: OptionQualifier[x.qualifier] }))
+        }), {});
+        return await pi.save()
+          .then(doc => {
+            logger.info(`Updated ProductInstance with new schema: ${JSON.stringify(doc.toJSON())}`);
+            return doc;
+          })
+          .catch(err => {
+            logger.error(`Failed to update ProductInstance ${pi.id} got error: ${JSON.stringify(err)}`);
+            return Promise.reject(err);
+          })
+      }));
+    }
+    {
+      // IOption moves all item fields to base (displayName, description, shortcode, price, disabled), set externalIDs = {}
+      // camelCase: displayName, enable, displayFlags, modifierTypeId
+      const WOptionModel = mongoose.model('woPtioNschema', new Schema({
+        item: Schema.Types.Mixed,
+        displayName: String,
+        description: String,
+        shortcode: String,
+        option_type_id: String,
+        modifierTypeId: String,
+        disabled: IntervalSchema,
+        price: WMoney,
+        externalIDs: Schema.Types.Mixed,
+        displayFlags: Schema.Types.Mixed,
+        display_flags: Schema.Types.Mixed,
+        enable_function: Schema.Types.Mixed,
+        enable: Schema.Types.Mixed
+      }));
+      const elts = await WOptionModel.find();
+      await Promise.all(elts.map(async (opt) => {
+        opt.shortcode = opt.item.shortcode;
+        opt.description = opt.item.description;
+        opt.displayName = opt.item.display_name;
+        opt.price = opt.item.price;
+        opt.disabled = opt.item.disabled ? opt.item.disabled : null;
+        opt.externalIDs = {};
+        opt.item = undefined;
+        opt.displayFlags = opt.display_flags;
+        opt.display_flags = undefined;
+        opt.modifierTypeId = opt.option_type_id;
+        opt.option_type_id = undefined;
+        opt.enable = opt.enable_function;
+        opt.enable_function = undefined;
+        return await opt.save()
+          .then(doc => {
+            logger.info(`Updated ModifierOption with new schema: ${JSON.stringify(doc.toJSON())}`);
+            return doc;
+          })
+          .catch(err => {
+            logger.error(`Failed to update ModifierOption ${opt.id} got error: ${JSON.stringify(err)}`);
+            return Promise.reject(err);
+          });
+      }));
+    }
+    {
+      // IOptionType externalIDs = {}
+      // camelCase: displayName, displayFlags
+      const WOptionTypeModel = mongoose.model('WOpTIOntypeSchema', new Schema({
+        display_name: String,
+        displayName: String,        
+        externalIDs: Schema.Types.Mixed,
+        displayFlags: Schema.Types.Mixed,
+        display_flags: Schema.Types.Mixed,
+      }));
+      const elts = await WOptionTypeModel.find();
+      await Promise.all(elts.map(async (opt) => {
+        opt.displayName = opt.display_name;
+        opt.display_name = undefined;
+        opt.externalIDs = {};
+        opt.displayFlags = opt.display_flags;
+        opt.display_flags = undefined;
+        return await opt.save()
+          .then(doc => {
+            logger.info(`Updated ModifierOptionType with new schema: ${JSON.stringify(doc.toJSON())}`);
+            return doc;
+          })
+          .catch(err => {
+            logger.error(`Failed to update ModifierOptionType ${opt.id} got error: ${JSON.stringify(err)}`);
+            return Promise.reject(err);
+          });
+      }));
+    }
+  }],
 }
 
 export class DatabaseManager implements WProvider {

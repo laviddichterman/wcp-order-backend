@@ -10,7 +10,7 @@ export const ProductModifierSchema = new Schema({
   // and returns true if the option type should be enabled.
   enable: { type: Schema.Types.String, ref: 'WProductInstanceFunction' },
   // list of fulfillmentIds for which this ModifierType should be disabled.
-  service_disable: [{ type: String, ref: 'FulfillmentSchema'}],
+  serviceDisable: [{ type: String, ref: 'FulfillmentSchema'}],
 }, { _id: false });
 
 // represents a class of products that can be made and inserted into the catalog
@@ -40,9 +40,9 @@ const WProductSchema = new Schema<MT>({
   },
 
   // list of fulfillmentIds for which this product should be disabled.
-  service_disable: [{ type: String, ref: 'FulfillmentSchema'}],
+  serviceDisable: [{ type: String, ref: 'FulfillmentSchema'}],
   
-  display_flags: {
+  displayFlags: {
     flavor_max: Number,
     bake_max: Number,
     bake_differential: Number,

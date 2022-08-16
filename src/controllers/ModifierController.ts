@@ -17,21 +17,21 @@ const ModifierOptionByIdValidationChain = [
 
 const ModifierTypeValidationChain = [  
   body('name').trim().exists(),
-  body('display_name').trim(),
+  body('displayName').trim(),
   body('ordinal').isInt({min: 0, max:63}).exists(),
   body('min_selected').isInt({min: 0}).exists(),
   body('max_selected').optional({nullable: true}).isInt({min: 0}),
   body('externalIDs.*').trim().escape(),
-  body('display_flags.omit_section_if_no_available_options').toBoolean(true),
-  body('display_flags.omit_options_if_not_available').toBoolean(true),
-  body('display_flags.use_toggle_if_only_two_options').toBoolean(true),
-  body('display_flags.hidden').toBoolean(true),
-  body('display_flags.modifier_class').exists().isIn(Object.keys(MODIFIER_CLASS)),
-  body('display_flags.empty_display_as').exists().isIn(Object.keys(DISPLAY_AS)),
-  body('display_flags.template_string').exists().matches(/^[A-Za-z0-9]*$/),
-  body('display_flags.multiple_item_separator').exists(),
-  body('display_flags.non_empty_group_prefix').exists(),
-  body('display_flags.non_empty_group_suffix').exists()
+  body('displayFlags.omit_section_if_no_available_options').toBoolean(true),
+  body('displayFlags.omit_options_if_not_available').toBoolean(true),
+  body('displayFlags.use_toggle_if_only_two_options').toBoolean(true),
+  body('displayFlags.hidden').toBoolean(true),
+  body('displayFlags.modifier_class').exists().isIn(Object.keys(MODIFIER_CLASS)),
+  body('displayFlags.empty_display_as').exists().isIn(Object.keys(DISPLAY_AS)),
+  body('displayFlags.template_string').exists().matches(/^[A-Za-z0-9]*$/),
+  body('displayFlags.multiple_item_separator').exists(),
+  body('displayFlags.non_empty_group_prefix').exists(),
+  body('displayFlags.non_empty_group_suffix').exists()
 ];
 
 const EditModifierTypeValidationChain = [
@@ -40,7 +40,7 @@ const EditModifierTypeValidationChain = [
 ];
 const ModifierOptionValidationChain = [  
   ...ModifierTypeByIdValidationChain,
-  body('display_name').trim().exists(),
+  body('displayName').trim().exists(),
   body('description').trim(),
   body('shortcode').trim().escape().exists(),
   body('revelID').trim().escape(),
@@ -54,12 +54,12 @@ const ModifierOptionValidationChain = [
   body('price.amount').isInt({min: 0, max:100000}).exists(),
   body('price.currency').exists().isLength({min:3, max: 3}).isIn(Object.values(CURRENCY)),
   body('ordinal').isInt({min: 0, max:64}).exists(),
-  body('enable_function').optional({nullable: true}).isMongoId(),
+  body('enable').optional({nullable: true}).isMongoId(),
   body('flavor_factor').isFloat({ min: 0, max: 5 }),
   body('bake_factor').isFloat({ min: 0, max: 5 }),
   body('can_split').toBoolean(true),
-  body('display_flags.omit_from_shortname').toBoolean(true),
-  body('display_flags.omit_from_name').toBoolean(true),
+  body('displayFlags.omit_from_shortname').toBoolean(true),
+  body('displayFlags.omit_from_name').toBoolean(true),
 ];
 const EditModifierOptionValidationChain = [  
   ...ModifierTypeByIdValidationChain,
@@ -88,12 +88,12 @@ export class ModifierController implements IExpressController {
     try {
       const doc = await CatalogProviderInstance.CreateModifierType({
         name: req.body.name,
-        display_name: req.body.display_name,
+        displayName: req.body.displayName,
         ordinal: req.body.ordinal,
         min_selected: req.body.min_selected,
         max_selected: req.body.max_selected,
         externalIDs: req.body.externalIDs,
-        display_flags: req.body.display_flags,
+        displayFlags: req.body.displayFlags,
       });
       const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/${doc.id}`;
       res.setHeader('Location', location);
@@ -109,12 +109,12 @@ export class ModifierController implements IExpressController {
         request.params.mtid,
         {
           name: request.body.name,
-          display_name: request.body.display_name,
+          displayName: request.body.displayName,
           ordinal: request.body.ordinal,
           min_selected: request.body.min_selected,
           max_selected: request.body.max_selected,
           externalIDs: request.body.externalIDs,
-          display_flags: request.body.display_flags,
+          displayFlags: request.body.displayFlags,
         }
       );
       if (!doc) {
@@ -147,19 +147,19 @@ export class ModifierController implements IExpressController {
       const new_option = await CatalogProviderInstance.CreateOption({
         price: req.body.price,
         description: req.body.description,
-        display_name: req.body.display_name,
+        displayName: req.body.displayName,
         shortcode: req.body.shortcode,
         disabled: req.body.disabled ? req.body.disabled : null, 
         externalIDs: req.body.externalIDs,
-        option_type_id: req.params.mtid,
+        modifierTypeId: req.params.mtid,
         ordinal: req.body.ordinal,
         metadata: {
           flavor_factor: req.body.flavor_factor || 0,
           bake_factor: req.body.bake_factor || 0,
           can_split: req.body.can_split || false,
         },
-        enable_function: req.body.enable_function,
-        display_flags: req.body.display_flags,
+        enable: req.body.enable,
+        displayFlags: req.body.displayFlags,
       });
       if (!new_option) {
         logger.info(`Unable to find ModifierType ${req.params.mtid} to create Modifier Option`);
@@ -176,7 +176,7 @@ export class ModifierController implements IExpressController {
   private patchModifierOption = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const doc = await CatalogProviderInstance.UpdateModifierOption(req.params.moid, {
-        display_name: req.body.display_name, 
+        displayName: req.body.displayName, 
         description: req.body.description, 
         price: req.body.price, 
         shortcode: req.body.shortcode, 
@@ -188,8 +188,8 @@ export class ModifierController implements IExpressController {
           bake_factor: req.body.bake_factor, 
           can_split: req.body.can_split, 
         },
-        enable_function: req.body.enable_function,
-        display_flags: req.body.display_flags,
+        enable: req.body.enable,
+        displayFlags: req.body.displayFlags,
       });
       if (!doc) {
         logger.info(`Unable to update ModifierOption: ${req.params.moid}`);

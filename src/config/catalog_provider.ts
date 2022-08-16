@@ -36,7 +36,7 @@ function ReduceArrayToMapByKey<T, Key extends keyof T>(xs: T[], key: Key) {
 
 // Returns [ category_map, product_map ] list;
 // category_map entries are mapping of catagory_id to { category, children (id list), product (id list) }
-// product_map is mapping from product_id to { product, instances (list of instance objects)}
+// product_map is mapping from productId to { product, instances (list of instance objects)}
 // orphan_products is list of orphan product ids
 const CatalogMapGenerator = (categories: ICategory[], products: IProduct[], product_instances: IProductInstance[]) => {
   const category_map: ICatalogCategories = categories.reduce((acc, cat) => ({ ...acc, [cat.id]: { category: cat, children: [], products: [] } }), {});
@@ -59,7 +59,7 @@ const CatalogMapGenerator = (categories: ICategory[], products: IProduct[], prod
     return { ...acc, [p.id]: { product: p, instances: [] } };
   }, {});
   product_instances.forEach((curr) => {
-    product_map[curr.product_id].instances.push(curr);
+    product_map[curr.productId].instances.push(curr);
   })
   return [category_map, product_map];
 };
@@ -67,11 +67,11 @@ const CatalogMapGenerator = (categories: ICategory[], products: IProduct[], prod
 const ModifierTypeMapGenerator = (modifier_types: IOptionType[], options: IOption[]) => {
   var modifier_types_map: ICatalogModifiers = modifier_types.reduce((acc, m) => ({ ...acc, [m.id]: { options: [], modifier_type: m } }), {});
   options.forEach(o => {
-    if (Object.hasOwn(modifier_types_map, o.option_type_id)) {
-      modifier_types_map[o.option_type_id].options.push(o);
+    if (Object.hasOwn(modifier_types_map, o.modifierTypeId)) {
+      modifier_types_map[o.modifierTypeId].options.push(o);
     }
     else {
-      logger.error(`Modifier Type ID ${o.option_type_id} referenced by ModifierOption ${o.id} not found!`);
+      logger.error(`Modifier Type ID ${o.modifierTypeId} referenced by ModifierOption ${o.id} not found!`);
     }
   });
   return modifier_types_map;
@@ -373,7 +373,7 @@ export class CatalogProvider implements WProvider {
         logger.warn("Unable to delete the ModifierType from the database.");
         return null;
       }
-      const options_delete = await WOptionModel.deleteMany({ option_type_id: mt_id });
+      const options_delete = await WOptionModel.deleteMany({ modifierTypeId: mt_id });
       if (this.#catalog.modifiers[mt_id].options.length !== options_delete.deletedCount) {
         logger.error(`Mismatch between number of modifier options deleted and the number the catalog sees as child of this modifier type.`);
       }
@@ -411,7 +411,7 @@ export class CatalogProvider implements WProvider {
 
   CreateOption = async (modifierOption: Omit<IOption, 'id'>) => {
     // first find the Modifier Type ID in the catalog
-    var option_type = this.#modifier_types.find(x => x.id === modifierOption.option_type_id);
+    var option_type = this.#modifier_types.find(x => x.id === modifierOption.modifierTypeId);
     if (!option_type) {
       return null;
     }
@@ -424,7 +424,7 @@ export class CatalogProvider implements WProvider {
     return doc;
   };
 
-  UpdateModifierOption = async (id: string, modifierOption: Omit<IOption, 'id' | 'option_type_id'>) => {
+  UpdateModifierOption = async (id: string, modifierOption: Omit<IOption, 'id' | 'modifierTypeId'>) => {
     try {
       //TODO: post update: rebuild all products with the said modifier option since the ordinal might have changed
       // 
@@ -462,10 +462,10 @@ export class CatalogProvider implements WProvider {
       await this.SyncOptions();
       // need to delete any ProductInstanceFunctions that use this MO
       await Promise.all(this.#product_instance_functions.map(async (pif) => {
-        const dependent_pfi_expressions = FindModifierPlacementExpressionsForMTID(pif.expression, doc.option_type_id) as AbstractExpressionModifierPlacementExpression[];
+        const dependent_pfi_expressions = FindModifierPlacementExpressionsForMTID(pif.expression, doc.modifierTypeId) as AbstractExpressionModifierPlacementExpression[];
         const filtered = dependent_pfi_expressions.filter(x => x.expr.moid === mo_id)
         if (filtered.length > 0) {
-          logger.debug(`Found product instance function composed of ${doc.option_type_id}:${mo_id}, removing PIF with ID: ${pif.id}.`);
+          logger.debug(`Found product instance function composed of ${doc.modifierTypeId}:${mo_id}, removing PIF with ID: ${pif.id}.`);
           // the PIF and any dependent objects will be synced, but the catalog will not be recomputed / emitted
           await this.DeleteProductInstanceFunction(pif.id, true);
         }
@@ -511,7 +511,7 @@ export class CatalogProvider implements WProvider {
 
       if (removed_modifiers.length) {
         await Promise.all(removed_modifiers.map(async (mtid) => {
-          const product_instance_update = await WProductInstanceModel.updateMany({ product_id: pid }, { $pull: { modifiers: { modifier_type_id: mtid } } });
+          const product_instance_update = await WProductInstanceModel.updateMany({ productId: pid }, { $pull: { modifiers: { modifier_type_id: mtid } } });
           logger.debug(`Removed ModifierType ID ${mtid} from ${product_instance_update.modifiedCount} product instances.`);
         }));
         await this.SyncProductInstances();
@@ -533,7 +533,7 @@ export class CatalogProvider implements WProvider {
       if (!doc) {
         return null;
       }
-      const product_instance_delete = await WProductInstanceModel.deleteMany({ product_id: p_id });
+      const product_instance_delete = await WProductInstanceModel.deleteMany({ productId: p_id });
       if (product_instance_delete.deletedCount > 0) {
         logger.debug(`Removed ${product_instance_delete.deletedCount} Product Instances.`);
         await this.SyncProductInstances();
@@ -556,7 +556,7 @@ export class CatalogProvider implements WProvider {
     return doc;
   };
 
-  UpdateProductInstance = async (piid: string, productInstance: Omit<IProductInstance, 'id' | 'product_id'>) => {
+  UpdateProductInstance = async (piid: string, productInstance: Omit<IProductInstance, 'id' | 'productId'>) => {
     try {
       const updated = await WProductInstanceModel.findByIdAndUpdate(
         piid,

@@ -2,7 +2,7 @@ import { Schema } from "mongoose";
 import { IOptionInstance, OptionPlacement, OptionQualifier } from "@wcp/wcpshared";
 
 export const WOptionInstanceSchema = new Schema<IOptionInstance>({
-  option_id: {
+  optionId: {
     type: String,
     required: true
   },

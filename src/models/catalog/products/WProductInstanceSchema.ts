@@ -6,7 +6,7 @@ import { WOptionInstanceSchema } from "../options/WOptionInstanceSchema";
 type MT = Omit<IProductInstance, "id">;
 export const WProductInstanceSchema = new Schema<MT>({
   // reference to the WProductSchema ID for this class of item
-  product_id: { type: String, ref: 'WProductSchema', required: true },
+  productId: { type: String, ref: 'WProductSchema', required: true },
 
   // ordinal for product matching
   ordinal: Number,
@@ -20,7 +20,10 @@ export const WProductInstanceSchema = new Schema<MT>({
 
   // Nice name of the product
   // eg: House Sausage
-  display_name: String,
+  displayName: { 
+    type: String,
+    required: true
+  },
 
   // Nice, long description of the product
   // eg: House-ground spicy pork sausage
@@ -29,7 +32,10 @@ export const WProductInstanceSchema = new Schema<MT>({
   description: String,
 
   // abbreviation used in store
-  shortcode: String,
+  shortcode: { 
+    type: String,
+    required: true
+  },
 
   // external ids
   externalIDs: {
@@ -39,9 +45,12 @@ export const WProductInstanceSchema = new Schema<MT>({
   },
   
   // flag to note that this product instance is the "default" form of the product to which all others should be compared
-  is_base: Boolean,
+  isBase: { 
+    type: Boolean,
+    required: true
+  },
 
-  display_flags: {
+  displayFlags: {
     menu: {
       // ordering within this product instance's category in menu page
       ordinal: Number,

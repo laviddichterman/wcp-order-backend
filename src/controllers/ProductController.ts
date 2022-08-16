@@ -17,7 +17,7 @@ const ProductInstanceByIdValidationChain = [
 ];
 
 const ProductClassValidationChain = [
-  body('display_name').trim().exists(),
+  body('displayName').trim().exists(),
   body('description').trim(),
   body('shortcode').trim().escape().exists(),
   body('externalIDs.*').trim().escape(),
@@ -27,21 +27,21 @@ const ProductClassValidationChain = [
     }
     throw new Error("Disabled value misformed");
   }),
-  body('service_disable.*').isInt({min:0}),
-  body('display_flags.flavor_max').isFloat({min: 0}),
-  body('display_flags.bake_max').isFloat({min: 0}),
-  body('display_flags.bake_differential').isFloat({min: 0}),
+  body('serviceDisable.*').isInt({min:0}),
+  body('displayFlags.flavor_max').isFloat({min: 0}),
+  body('displayFlags.bake_max').isFloat({min: 0}),
+  body('displayFlags.bake_differential').isFloat({min: 0}),
   // TODO: ensure show_name_of_base_product is TRUE if modifier list length === 0
-  body('display_flags.show_name_of_base_product').toBoolean(true),
-  body('display_flags.singular_noun').trim(),
-  body('display_flags.order_guide.warnings.*').trim().escape().exists().isMongoId(), 
-  body('display_flags.order_guide.suggestions.*').trim().escape().exists().isMongoId(), 
+  body('displayFlags.show_name_of_base_product').toBoolean(true),
+  body('displayFlags.singular_noun').trim(),
+  body('displayFlags.order_guide.warnings.*').trim().escape().exists().isMongoId(), 
+  body('displayFlags.order_guide.suggestions.*').trim().escape().exists().isMongoId(), 
   body('ordinal').optional({nullable: true}).isInt({min: 0}),
   body('price.amount').isInt({ min: 0 }).exists(),
   body('price.currency').exists().isLength({ min: 3, max: 3 }).isIn(['USD']),
   body('modifiers.*.mtid').trim().escape().exists().isMongoId(),
   body('modifiers.*.enable').optional({nullable: true}).isMongoId(),
-  body('modifiers.*.service_disable.*').isInt({min:0}),
+  body('modifiers.*.serviceDisable.*').trim().escape().isMongoId(),
   body('category_ids.*').trim().escape().exists().isMongoId(),
 ];
 
@@ -57,23 +57,23 @@ const EditProductClassValidationChain = [
 ];
 const ProductInstanceValidationChain = [  
   ...ProductClassByIdValidationChain,
-  body('display_name').trim().exists(),
+  body('displayName').trim().exists(),
   body('description').trim(),
   body('shortcode').trim().escape().exists(),
   body('externalIDs.*').trim().escape(),
-  body('is_base').toBoolean(true),
-  body('display_flags.menu.ordinal').exists().isInt({min: 0}),
-  body('display_flags.menu.hide').toBoolean(true),
-  body('display_flags.menu.price_display').exists().isIn(Object.keys(PriceDisplay)),
-  body('display_flags.menu.adornment').trim(),
-  body('display_flags.menu.suppress_exhaustive_modifier_list').toBoolean(true),
-  body('display_flags.menu.show_modifier_options').toBoolean(true),
-  body('display_flags.order.ordinal').exists().isInt({min: 0}),
-  body('display_flags.order.hide').toBoolean(true),
-  body('display_flags.order.skip_customization').toBoolean(true),
-  body('display_flags.order.price_display').exists().isIn(Object.keys(PriceDisplay)),
-  body('display_flags.order.adornment').trim(),
-  body('display_flags.order.suppress_exhaustive_modifier_list').toBoolean(true),
+  body('isBase').toBoolean(true),
+  body('displayFlags.menu.ordinal').exists().isInt({min: 0}),
+  body('displayFlags.menu.hide').toBoolean(true),
+  body('displayFlags.menu.price_display').exists().isIn(Object.keys(PriceDisplay)),
+  body('displayFlags.menu.adornment').trim(),
+  body('displayFlags.menu.suppress_exhaustive_modifier_list').toBoolean(true),
+  body('displayFlags.menu.show_modifier_options').toBoolean(true),
+  body('displayFlags.order.ordinal').exists().isInt({min: 0}),
+  body('displayFlags.order.hide').toBoolean(true),
+  body('displayFlags.order.skip_customization').toBoolean(true),
+  body('displayFlags.order.price_display').exists().isIn(Object.keys(PriceDisplay)),
+  body('displayFlags.order.adornment').trim(),
+  body('displayFlags.order.suppress_exhaustive_modifier_list').toBoolean(true),
   body('ordinal').exists().isInt({min: 0}),
   body('modifiers').isObject(),
   body('modifiers.*').isArray(),
@@ -109,11 +109,11 @@ export class ProductController implements IExpressController {
       const newproduct = await CatalogProviderInstance.CreateProduct({
         price: req.body.price,
         disabled: req.body.disabled ? req.body.disabled : null, 
-        service_disable: req.body.service_disable || [],
+        serviceDisable: req.body.serviceDisable || [],
         externalIDs: req.body.externalIDs,
         modifiers: req.body.modifiers,
         category_ids: req.body.category_ids,
-        display_flags: req.body.display_flags,
+        displayFlags: req.body.displayFlags,
       }, 
       req.body.create_product_instance || req.body.suppress_catalog_recomputation // aka : suppress_catalog_recomputation
       );
@@ -123,13 +123,13 @@ export class ProductController implements IExpressController {
       }
       if (req.body.create_product_instance) {
         const pi = await CatalogProviderInstance.CreateProductInstance({
-          product_id: newproduct.id,
+          productId: newproduct.id,
           description: req.body.description,
-          display_name: req.body.display_name,
+          displayName: req.body.displayName,
           shortcode: req.body.shortcode,
           ordinal: req.body.ordinal,
           externalIDs: req.body.externalIDs,
-          display_flags: {
+          displayFlags: {
             menu: { 
               ordinal: req.body.ordinal,
               hide: false,
@@ -148,7 +148,7 @@ export class ProductController implements IExpressController {
             }
           },
           modifiers: {},
-          is_base: true
+          isBase: true
         });
         if (!pi) {
           logger.info(`Error while creating product instance for ${newproduct.id}.`);
@@ -172,11 +172,11 @@ export class ProductController implements IExpressController {
       const doc = await CatalogProviderInstance.UpdateProduct(productId, {
         price: req.body.price,
         disabled: req.body.disabled ? req.body.disabled : null, 
-        service_disable: req.body.service_disable || [],
+        serviceDisable: req.body.serviceDisable || [],
         externalIDs: req.body.externalIDs,
         modifiers: req.body.modifiers,
         category_ids: req.body.category_ids,
-        display_flags: req.body.display_flags,
+        displayFlags: req.body.displayFlags,
       });
       if (!doc) {
         logger.info(`Unable to update Product: ${productId}`);
@@ -207,15 +207,15 @@ export class ProductController implements IExpressController {
   private postProductInstance = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const doc = await CatalogProviderInstance.CreateProductInstance({
-        product_id: req.params.pid, 
+        productId: req.params.pid, 
         description: req.body.description,
-        display_name: req.body.display_name,
+        displayName: req.body.displayName,
         shortcode: req.body.shortcode,
         ordinal: req.body.ordinal,
         externalIDs: req.body.externalIDs,
         modifiers: req.body.modifiers,
-        is_base: req.body.is_base,
-        display_flags: req.body.display_flags
+        isBase: req.body.isBase,
+        displayFlags: req.body.displayFlags
       });
       if (!doc) {
         logger.info(`Unable to find parent product id: ${req.params.pid} to create new product instance`);
@@ -234,13 +234,13 @@ export class ProductController implements IExpressController {
       const productInstanceId = req.params.piid;
       const doc = await CatalogProviderInstance.UpdateProductInstance(productInstanceId, {
         description: req.body.description,
-        display_name: req.body.display_name,
+        displayName: req.body.displayName,
         shortcode: req.body.shortcode,
         ordinal: req.body.ordinal,
         externalIDs: req.body.externalIDs,
         modifiers: req.body.modifiers,
-        is_base: req.body.is_base,
-        display_flags: req.body.display_flags
+        isBase: req.body.isBase,
+        displayFlags: req.body.displayFlags
       });
       if (!doc) {
         logger.info(`Unable to update ProductInstance: ${productInstanceId}`);

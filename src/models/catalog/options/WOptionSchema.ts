@@ -8,7 +8,7 @@ type MT = Omit<IOption, "id">;
 
 export const WOptionSchema = new Schema<MT>({
     // Nice name of the modifier, required
-  display_name: { 
+  displayName: { 
     type: String,
     required: true 
   },
@@ -22,7 +22,10 @@ export const WOptionSchema = new Schema<MT>({
   },
   
   // Moneys in base currency unit (300 is $3)
-  price: WMoney,
+  price: { 
+    type: WMoney,
+    required: true
+  },
 
   externalIDs: {
     type: Map,
@@ -44,7 +47,7 @@ export const WOptionSchema = new Schema<MT>({
   },
 
   // option type enumeration
-  option_type_id: { 
+  modifierTypeId: { 
     type: String, 
     ref: 'WOptionTypeSchema', 
     required: true 
@@ -63,9 +66,9 @@ export const WOptionSchema = new Schema<MT>({
 
   // optional function object that operates on a product instance
   // and returns true if the option should be enabled.
-  enable_function: { type: String, ref: 'WProductInstanceFunction' },
+  enable: { type: String, ref: 'WProductInstanceFunction' },
 
-  display_flags: {
+  displayFlags: {
     // supresses listing on the shortname of the end product
     // if not the pre-populated value for the matching product instance
     omit_from_shortname: Boolean,

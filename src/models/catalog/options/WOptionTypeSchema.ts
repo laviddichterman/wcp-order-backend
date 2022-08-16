@@ -9,7 +9,7 @@ export const WOptionTypeSchema = new Schema<MT>({
   name: { type: String, required: true },
 
   // name override for how we display this to a customer
-  display_name: String,
+  displayName: String,
 
   // external ids
   externalIDs: {
@@ -29,7 +29,7 @@ export const WOptionTypeSchema = new Schema<MT>({
   // a complete product.
   max_selected: { type: Number, required: false },
 
-  display_flags: {
+  displayFlags: {
     // if no options can be selected, don't display this modifier section at all
     omit_section_if_no_available_options: Boolean,
     // if any option of this modifier isn't selectable, don't show it grayed out
