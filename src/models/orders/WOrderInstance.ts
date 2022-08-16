@@ -1,28 +1,12 @@
 import mongoose, {Schema} from "mongoose";
 import path from "path";
-import { CoreCartEntry, WCPProductV2Dto, WOrderInstance, WOrderInstanceNoId } from "@wcp/wcpshared";
+import { WOrderInstance, WOrderInstanceNoId } from "@wcp/wcpshared";
 import { CustomerInfoSchema } from "./WCustomerInfo";
+import { OrderCartEntrySchema } from "./WOrderCartEntry";
 import { FulfillmentInfo } from "./WFulfillmentInfo";
-
-export const WProductDtoSchema = new Schema<WCPProductV2Dto>({
-
-}, { _id: false });
-
-export const OrderCartEntry = new Schema<CoreCartEntry<WCPProductV2Dto>>({
-  categoryId: { 
-    type: String,
-    required: true,
-    ref: 'WCategoryModel'
-  },
-  product: { 
-    type: WProductDtoSchema,
-    required: true
-  },
-  quantity: {
-    type: Number,
-    required: true
-  }
-}, { _id: false });
+import { WMetricsSchema } from "./WMetrics";
+import { WOrderLineDiscountSchema } from "../payment/WOrderLineDiscount";
+import { WOrderPaymentSchema } from "models/payment/WOrderPayment";
 
 export const WOrderInstanceSchema = new Schema<WOrderInstanceNoId>({
   status: { 
@@ -39,15 +23,26 @@ export const WOrderInstanceSchema = new Schema<WOrderInstanceNoId>({
     required: true
   },
   cart: {
-    type: [OrderCartEntry],
+    type: [OrderCartEntrySchema],
     required: true
   },
-
-  // readonly discounts: OrderLineDiscount[];
-  // readonly payments: OrderPayment[];
-  // readonly refunds: OrderPayment[];
-  // readonly metrics: MetricsDto;
-
+  discounts: {
+    type: [WOrderLineDiscountSchema],
+    required: true
+  },
+  payments: {
+    type: [WOrderPaymentSchema],
+    required: true
+  },
+  refunds: {
+    type: [WOrderPaymentSchema],
+    required: true
+  },
+  metrics: {
+    type: WMetricsSchema,
+    required: true
+  },
 }, {id: true, toJSON: {virtuals: true}, toObject: { virtuals: true}});
+
 
 export const WOrderInstanceModel = mongoose.model<WOrderInstance>(path.basename(__filename).replace(path.extname(__filename), ''), WOrderInstanceSchema);

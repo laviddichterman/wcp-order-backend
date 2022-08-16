@@ -1,5 +1,5 @@
 import { Schema } from "mongoose";
-import { DeliveryInfoDto, DineInInfoDto, FulfillmentDto } from "@wcp/wcpshared";
+import { AddressComponent, DeliveryAddressValidateResponse, DeliveryInfoDto, DineInInfoDto, FulfillmentDto } from "@wcp/wcpshared";
 
 export const DineInInfoSchema = new Schema<DineInInfoDto>({
   partySize: {
@@ -8,8 +8,29 @@ export const DineInInfoSchema = new Schema<DineInInfoDto>({
   }
 }, { _id: false });
 
+export const AddressComponentSchema = new Schema<AddressComponent>({
+  types: [String],
+  long_name: String,
+  short_name: String
+}, { _id: false });
 
-export const DeliveryInfoSchema = new Schema<Omit<DeliveryInfoDto, 'validation'>>({
+export const DeliveryAddressValidateResponseSchema = new Schema<DeliveryAddressValidateResponse>({
+  validated_address: { 
+    type: String,
+    required: true
+  },
+  in_area: {
+    type: Boolean,
+    required: true
+  },
+  found: {
+    type: Boolean,
+    required: true
+  },
+  address_components: [AddressComponentSchema]
+}, { _id: false });
+
+export const DeliveryInfoSchema = new Schema<DeliveryInfoDto>({
   address: { 
     type: String,
     required: true
@@ -20,6 +41,7 @@ export const DeliveryInfoSchema = new Schema<Omit<DeliveryInfoDto, 'validation'>
     required: true
   },
   deliveryInstructions: String,
+  validation: DeliveryAddressValidateResponseSchema
 }, { _id: false });
 
 export const FulfillmentInfo = new Schema<FulfillmentDto>({

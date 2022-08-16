@@ -1,24 +1,21 @@
-import mongoose, {Schema} from "mongoose";
-import { IWOptionInstance, OptionPlacement, OptionQualifier } from "@wcp/wcpshared";
-import path from "path";
+import { Schema } from "mongoose";
+import { IOptionInstance, OptionPlacement, OptionQualifier } from "@wcp/wcpshared";
 
-export const WOptionInstanceSchema = new Schema<IWOptionInstance>({
+export const WOptionInstanceSchema = new Schema<IOptionInstance>({
   option_id: {
     type: String,
     required: true
   },
 
   placement: {
-    type: String,
-    enum: OptionPlacement,
+    type: Number,
+    enum: [OptionPlacement.NONE, OptionPlacement.LEFT, OptionPlacement.RIGHT, OptionPlacement.WHOLE],
     required: true
   },
 
   qualifier: {
-    type: String,
-    enum: OptionQualifier,
+    type: Number,
+    enum: [OptionQualifier.REGULAR, OptionQualifier.LITE, OptionQualifier.HEAVY, OptionQualifier.OTS],
     required: true
   }
 }, { _id: false});
-
-export default mongoose.model<IWOptionInstance>(path.basename(__filename).replace(path.extname(__filename), ''), WOptionInstanceSchema);

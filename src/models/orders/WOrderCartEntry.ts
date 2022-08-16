@@ -1,19 +1,28 @@
-import mongoose, {Schema} from "mongoose";
-import path from "path";
-import { CoreCartEntry, WCPProductV2Dto, WOrderInstance, WOrderInstanceNoId } from "@wcp/wcpshared";
+import { Schema } from "mongoose";
+import { CoreCartEntry, WCPProductV2Dto } from "@wcp/wcpshared";
+import { WOptionInstanceSchema } from "../catalog/options/WOptionInstanceSchema";
 
-export const WProductDtoSchema = new Schema<WCPProductV2Dto>({
-
+export const WOrderProductInstanceSchema = new Schema<WCPProductV2Dto>({
+  pid: { 
+    type: String,
+    required: true,
+    ref: "WProductModel"
+  },
+  modifiers: {
+    type: Schema.Types.Map,
+    of: [WOptionInstanceSchema],
+    required: true
+  }
 }, { _id: false });
 
-export const OrderCartEntry = new Schema<CoreCartEntry<WCPProductV2Dto>>({
+export const OrderCartEntrySchema = new Schema<CoreCartEntry<WCPProductV2Dto>>({
   categoryId: { 
     type: String,
     required: true,
     ref: 'WCategoryModel'
   },
   product: { 
-    type: WProductDtoSchema,
+    type: WOrderProductInstanceSchema,
     required: true
   },
   quantity: {

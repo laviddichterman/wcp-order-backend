@@ -1,8 +1,7 @@
-import { IProductInstance, PriceDisplay } from "@wcp/wcpshared";
+import { IProductInstance, ModifiersMap, PriceDisplay } from "@wcp/wcpshared";
 import mongoose, {Schema} from "mongoose";
 import path from "path";
 import { WOptionInstanceSchema } from "../options/WOptionInstanceSchema";
-//const WPriceDisplayEnumSchema = require("../WPriceDisplayEnumSchema");
 
 type MT = Omit<IProductInstance, "id">;
 export const WProductInstanceSchema = new Schema<MT>({
@@ -13,10 +12,11 @@ export const WProductInstanceSchema = new Schema<MT>({
   ordinal: Number,
 
   // applied modifiers for this instance of the product
-  modifiers: [{ 
-    modifier_type_id: String,
-    options: [WOptionInstanceSchema]
-  }],
+  modifiers: {
+    type: Schema.Types.Map,
+    of: [WOptionInstanceSchema],
+    required: true
+  },
 
   // Nice name of the product
   // eg: House Sausage

@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import logger from'../logging';
 import DataProviderInstance from './dataprovider';
 import { BigIntStringify } from '../utils';
-import { CategorizedRebuiltCart, CreditPayment, CURRENCY, CustomerInfoDto, FulfillmentDto, IMoney, JSFECreditV2, PaymentMethod } from '@wcp/wcpshared';
+import { CategorizedRebuiltCart, CreditPayment, CURRENCY, CustomerInfoDto, FulfillmentDto, IMoney, JSFECreditV2, PaymentMethod, TenderBaseStatus } from '@wcp/wcpshared';
 import { RecomputeTotalsResult } from './order_manager';
 import { formatRFC3339, parseISO } from 'date-fns';
 
@@ -199,7 +199,7 @@ export class SquareProvider implements WProvider {
             t: PaymentMethod.CreditCard,
             processor: 'SQUARE',
             createdAt: parseISO(result.payment.createdAt).valueOf(),
-            status: 'COMPLETED',
+            status: TenderBaseStatus.COMPLETED,
             amount: BigIntMoneyToIntMoney(result.payment.amountMoney), 
             billingZip: result.payment.billingAddress.postalCode,
             cardBrand: result.payment.cardDetails.card.cardBrand,
