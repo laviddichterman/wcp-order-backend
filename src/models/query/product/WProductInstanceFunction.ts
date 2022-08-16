@@ -1,10 +1,10 @@
-import { WAbstractExpression } from "./WAbstractExpression";
+import { WAbstractExpressionSchema } from "./WAbstractExpression";
 import mongoose, { Schema } from "mongoose";
 import path from 'path';
 import { IProductInstanceFunction } from "@wcp/wcpshared";
 type MT = Omit<IProductInstanceFunction, "id">;
 export const WProductInstanceFunction = new Schema<MT>({
-  expression: WAbstractExpression,
+  expression: WAbstractExpressionSchema,
   name: { type: String, required: true }
 }, {id: true, toJSON: {virtuals: true}, toObject: { virtuals: true}});
 

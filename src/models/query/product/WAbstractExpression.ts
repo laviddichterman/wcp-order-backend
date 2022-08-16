@@ -1,116 +1,77 @@
-import { AbstractExpressionConstLiteral, 
-  AbstractExpressionHasAnyOfModifierExpression, 
-  AbstractExpressionIfElseExpression, 
-  AbstractExpressionLogicalExpression, 
-  AbstractExpressionModifierPlacementExpression, 
-  AbstractExpressionProductMetadata, 
-  IAbstractExpression, 
-  IConstLiteralExpression, 
-  IHasAnyOfModifierExpression, 
-  IIfElseExpression, 
-  ILogicalExpression, 
-  IModifierPlacementExpression, 
-  MetadataField, 
-  LogicalFunctionOperator, 
-  ProductInstanceFunctionType, 
-  ProductMetadataExpression, 
-  PRODUCT_LOCATION } from "@wcp/wcpshared";
+import {
+  AbstractExpressionConstLiteral,
+  AbstractExpressionHasAnyOfModifierExpression,
+  AbstractExpressionIfElseExpression,
+  AbstractExpressionLogicalExpression,
+  AbstractExpressionModifierPlacementExpression,
+  AbstractExpressionProductMetadata,
+  IAbstractExpression,
+  MetadataField,
+  LogicalFunctionOperator,
+  ProductInstanceFunctionType,
+  PRODUCT_LOCATION
+} from "@wcp/wcpshared";
 import mongoose, { Schema } from "mongoose";
 import path from 'path';
-import { ConstLiteralExpressionToModel } from "../WConstLiteral";
+import { WConstLiteralSchema } from "../WConstLiteral";
 
-export const WAbstractExpression = new Schema<IAbstractExpression>({
-  expr: { 
-    type: Schema.Types.Mixed,
-    required: true
-  },
-  discriminator: {
-    type: String,
-    enum: ProductInstanceFunctionType,
-    required: true
-  }
-}, {_id: false, discriminatorKey: 'discriminator'});
+export const WAbstractExpressionSchema = new Schema<IAbstractExpression>({}, { _id: false, discriminatorKey: 'discriminator' });
 
-
-export const WAbstractExpressionModel = mongoose.model<IAbstractExpression>(path.basename(__filename).replace(path.extname(__filename), ''), WAbstractExpression);
-export const WConstLiteralExpressionModel = WAbstractExpressionModel.discriminator<AbstractExpressionConstLiteral>(ProductInstanceFunctionType.ConstLiteral, 
-  new Schema<{ expr: IConstLiteralExpression }>({
-  expr: { value: Schema.Types.Mixed }
-}, {_id: false}));
-export const WHasAnyOfModifierExpressionModel = WAbstractExpressionModel.discriminator<AbstractExpressionHasAnyOfModifierExpression>(ProductInstanceFunctionType.HasAnyOfModifierType, 
-  new Schema<{ expr: IHasAnyOfModifierExpression }>({
-  expr: { mtid: String }
-}, {_id: false}));
-export const WIfElseExpressionModel = WAbstractExpressionModel.discriminator<AbstractExpressionIfElseExpression>(ProductInstanceFunctionType.IfElse, 
-  new Schema<{ expr: IIfElseExpression<IAbstractExpression> }>({
-  expr: { 
-    true_branch: Schema.Types.Mixed,
-    false_branch: Schema.Types.Mixed,
-    test: Schema.Types.Mixed,
-  }
-}, {_id: false}));
-export const WLogicalExpressionModel = WAbstractExpressionModel.discriminator<AbstractExpressionLogicalExpression>(ProductInstanceFunctionType.Logical, 
-  new Schema<{ expr: ILogicalExpression<IAbstractExpression> }>({
-  expr: {   
-    operandA: { type: Schema.Types.Mixed, required: true },
-    operandB: Schema.Types.Mixed,
-    operator: { 
-      type: String,
-      enum: LogicalFunctionOperator,
+export const AbstractExpressionConstLiteralSchema = WAbstractExpressionSchema.discriminator(ProductInstanceFunctionType.ConstLiteral,
+  new Schema<AbstractExpressionConstLiteral>({
+    expr: { 
+      type: WConstLiteralSchema,
       required: true
     }
-  }
-}, {_id: false}));
-export const WModifierPlacementExpressionModel = WAbstractExpressionModel.discriminator<AbstractExpressionModifierPlacementExpression>(ProductInstanceFunctionType.ModifierPlacement, 
-  new Schema<{ expr: IModifierPlacementExpression }>({
-  expr: {   
-    mtid: String,
-    moid: String
-  }
-}, {_id: false}));
-export const WProductMetadataExpressionModel = WAbstractExpressionModel.discriminator<AbstractExpressionProductMetadata>(ProductInstanceFunctionType.ProductMetadata, 
-  new Schema<{ expr: ProductMetadataExpression }>({
-  expr: {   
-    field: { 
-      type: String,
-      enum: MetadataField,
-      required: true
-    },
-    location: { 
-      type: String,
-      enum: PRODUCT_LOCATION,
-      required: true
-    },
-  }
-}, {_id: false}));
-
-export const ExpressionToMongooseModel = function(expr : IAbstractExpression) : any {
-  switch (expr.discriminator) { 
-    case ProductInstanceFunctionType.ConstLiteral:
-      // THIS IS BULLSHIT, Can't figure out why the const literal expressions aren't picking up the discriminator
-      // needs to be fixed :\
-      return new WConstLiteralExpressionModel({ 
-        expr: ConstLiteralExpressionToModel(expr.expr), 
-        discriminator: ProductInstanceFunctionType.ConstLiteral });
-    case ProductInstanceFunctionType.HasAnyOfModifierType:
-      return new WHasAnyOfModifierExpressionModel({ 
-        expr: { mtid: expr.expr.mtid }, 
-        discriminator: ProductInstanceFunctionType.HasAnyOfModifierType });
-    case ProductInstanceFunctionType.IfElse:
-      return new WIfElseExpressionModel({ 
-        expr: { false_branch: ExpressionToMongooseModel(expr.expr.false_branch), true_branch: ExpressionToMongooseModel(expr.expr.true_branch), test: ExpressionToMongooseModel(expr.expr.test) }, 
-        discriminator: ProductInstanceFunctionType.IfElse });
-    case ProductInstanceFunctionType.Logical:
-      return new WLogicalExpressionModel({ 
-        expr: { operandA: ExpressionToMongooseModel(expr.expr.operandA), operandB: expr.expr.operandB ? ExpressionToMongooseModel(expr.expr.operandB) : undefined, operator: expr.expr.operator }, 
-        discriminator: ProductInstanceFunctionType.Logical });
-    case ProductInstanceFunctionType.ModifierPlacement:
-      return new WModifierPlacementExpressionModel({ 
-        expr: { mtid: expr.expr.mtid, moid: expr.expr.moid }, 
-        discriminator: ProductInstanceFunctionType.ModifierPlacement });
-    case ProductInstanceFunctionType.ProductMetadata:
-      return new WProductMetadataExpressionModel({ 
-        expr: { field: expr.expr.field, location: expr.expr.location }, 
-        discriminator: ProductInstanceFunctionType.ProductMetadata });
-  }
-}
+  }, { _id: false, discriminatorKey: 'discriminator' }));
+export const AbstractExpressionHasAnyOfModifierExpressionSchema = WAbstractExpressionSchema.discriminator(ProductInstanceFunctionType.HasAnyOfModifierType,
+  new Schema<AbstractExpressionHasAnyOfModifierExpression>({
+    expr: { 
+      mtid: {
+        type: String,
+        required: true
+      }
+    }
+  }, { _id: false, discriminatorKey: 'discriminator' }));
+export const AbstractExpressionIfElseExpressionSchema = WAbstractExpressionSchema.discriminator(ProductInstanceFunctionType.IfElse,
+  new Schema<AbstractExpressionIfElseExpression>({
+    expr: {
+      true_branch: { type: WAbstractExpressionSchema, required: true },
+      false_branch: { type: WAbstractExpressionSchema, required: true },
+      test: { type: WAbstractExpressionSchema, required: true },
+    }
+  }, { _id: false, discriminatorKey: 'discriminator' }));
+export const AbstractExpressionLogicalExpressionSchema = WAbstractExpressionSchema.discriminator(ProductInstanceFunctionType.Logical,
+  new Schema<AbstractExpressionLogicalExpression>({
+    expr: {
+      operandA: { type: WAbstractExpressionSchema, required: true },
+      operandB: WAbstractExpressionSchema,
+      operator: {
+        type: String,
+        enum: LogicalFunctionOperator,
+        required: true
+      }
+    }
+  }, { _id: false, discriminatorKey: 'discriminator' }));
+export const AbstractExpressionModifierPlacementExpressionSchema = WAbstractExpressionSchema.discriminator(ProductInstanceFunctionType.ModifierPlacement,
+  new Schema<AbstractExpressionModifierPlacementExpression>({
+    expr: {
+      mtid: String,
+      moid: String
+    }
+  }, { _id: false, discriminatorKey: 'discriminator' }));
+export const AbstractExpressionProductMetadataSchema = WAbstractExpressionSchema.discriminator(ProductInstanceFunctionType.ProductMetadata,
+  new Schema<AbstractExpressionProductMetadata>({
+    expr: {
+      field: {
+        type: String,
+        enum: MetadataField,
+        required: true
+      },
+      location: {
+        type: String,
+        enum: PRODUCT_LOCATION,
+        required: true
+      },
+    }
+  }, { _id: false, discriminatorKey: 'discriminator' }));

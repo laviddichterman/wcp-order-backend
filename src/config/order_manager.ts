@@ -1,9 +1,9 @@
-import { CanThisBeOrderedAtThisTimeAndFulfillment, ComputeCartSubTotal, CategorizedRebuiltCart, PRODUCT_LOCATION, WProduct, WCPProductV2Dto, CreateProductWithMetadataFromV2Dto, CreateOrderRequestV2, FulfillmentDto, DeliveryInfoDto, MetricsDto, CoreCartEntry, ComputeDiscountApplied, ComputeTaxAmount, ComputeTipBasis, ComputeTipValue, TotalsV2, ComputeTotal, ComputeGiftCardApplied, ComputeBalanceAfterCredits, JSFECreditV2, CreateOrderResponse, WDateUtils, GenerateMenu, IMenu, ComputeSubtotalPreDiscount, ComputeSubtotalAfterDiscount, FulfillmentConfig, CustomerInfoDto, OrderPayment, WOrderInstanceNoId, ValidateLockAndSpendSuccess, OrderLineDiscount, CURRENCY, DiscountMethod, PaymentMethod, DineInInfoDto, CALL_LINE_DISPLAY, WOrderInstance, TenderBaseStatus } from "@wcp/wcpshared";
+import { CanThisBeOrderedAtThisTimeAndFulfillment, ComputeCartSubTotal, CategorizedRebuiltCart, PRODUCT_LOCATION, WProduct, WCPProductV2Dto, CreateProductWithMetadataFromV2Dto, CreateOrderRequestV2, FulfillmentDto, DeliveryInfoDto, MetricsDto, CoreCartEntry, ComputeDiscountApplied, ComputeTaxAmount, ComputeTipBasis, ComputeTipValue, TotalsV2, ComputeTotal, ComputeGiftCardApplied, ComputeBalanceAfterCredits, JSFECreditV2, CreateOrderResponse, WDateUtils, GenerateMenu, IMenu, ComputeSubtotalPreDiscount, ComputeSubtotalAfterDiscount, FulfillmentConfig, CustomerInfoDto, OrderPayment, WOrderInstanceNoId, ValidateLockAndSpendSuccess, OrderLineDiscount, CURRENCY, DiscountMethod, PaymentMethod, DineInInfoDto, CALL_LINE_DISPLAY, WOrderInstance, TenderBaseStatus, IMoney } from "@wcp/wcpshared";
 import { Error as SquareError } from 'square';
 
 import { WProvider } from '../types/WProvider';
 
-import { formatRFC3339, format, parseISO, Interval, addMinutes, isSameMinute, isSameDay, formatISO, intervalToDuration, formatDuration } from 'date-fns';
+import { formatRFC3339, format, Interval, addMinutes, isSameMinute, isSameDay, formatISO, intervalToDuration, formatDuration } from 'date-fns';
 import GoogleProvider from "./google";
 import SquareProvider from "./square";
 import StoreCreditProvider from "./store_credit_provider";
@@ -12,7 +12,11 @@ import DataProviderInstance from './dataprovider';
 import logger from '../logging';
 import { BigIntStringify } from "../utils";
 import { OrderFunctional } from "@wcp/wcpshared";
-import { WOrderInstanceModel } from "models/orders/WOrderInstance";
+import { WOrderInstanceModel } from "../models/orders/WOrderInstance";
+
+function MoneyToDisplayString(money: IMoney) {
+  return `\$${(money.amount/100).toFixed(2)}`;
+}
 
 const WCP = "Windy City Pie";
 
@@ -95,31 +99,50 @@ const GenerateAutoResponseBodyEscaped = function (
   return encodeURIComponent(`${nice_area_code ? "Hey, nice area code!" : "Thanks!"} ${confirm[fulfillmentConfig.service]} ${where[fulfillmentConfig.service]}.\n\n${fulfillmentConfig.messages.INSTRUCTIONS} ${payment_section}`);
 }
 
-const GeneratePaymentSection = (totals: RecomputeTotalsResult, discounts: OrderLineDiscount[], payments: OrderPayment[], ishtml: boolean) => {
-  const discount = totals.discountApplied > 0 ? `\$${Number(totals.discountApplied).toFixed(2)}` : "";
+function GenerateOrderPaymentDisplay(payment: OrderPayment, isHtml: boolean) { 
+  const lineBreak = isHtml ? "<br />" : "\n";
+  switch(payment.t) {
+    case PaymentMethod.Cash: 
+      return `Received cash payment of ${MoneyToDisplayString(payment.amount)}.${lineBreak}`;
+    case PaymentMethod.CreditCard:
+      return `Received payment of ${MoneyToDisplayString(payment.amount)} from credit card ending in ${payment.last4}.
+      ${lineBreak}
+      ${payment.receiptUrl ? 
+        (isHtml ? 
+          `<a href="${payment.receiptUrl}">Receipt link</a>${lineBreak}` : 
+          `Receipt: ${payment.receiptUrl}${lineBreak}`) : 
+        ""}`;
+    case PaymentMethod.StoreCredit:
+      return `Applied store credit value ${MoneyToDisplayString(payment.amount)} using code ${payment.code}.${lineBreak}`;
+  }
+}
+
+function GenerateOrderLineDiscountDisplay(discount: OrderLineDiscount, isHtml: boolean) { 
+  switch(discount.t) {
+    case DiscountMethod.CreditCodeAmount: 
+      return `NOTE BEFORE CLOSING OUT: Apply discount of ${discount.amount}, pre-tax. Credit code used: ${discount.code}.${isHtml ? "<br />" : "\n"}`;
+  }
+}
+
+const GeneratePaymentSection = (totals: RecomputeTotalsResult, discounts: OrderLineDiscount[], payments: OrderPayment[], isHtml: boolean) => {
   const tip_amount = `\$${Number(totals.tipAmount).toFixed(2)}`;
   const subtotal = `\$${Number(totals.subtotalAfterDiscount).toFixed(2)}`;
   const totalAfterTaxBeforeTip = `\$${Number(totals.subtotalAfterDiscount + totals.taxAmount).toFixed(2)}`;
   const total_amount = "$" + Number(totals.total).toFixed(2);
-  const store_credit_money_amount = totals.giftCartApplied > 0 ? `\$${Number(totals.giftCartApplied).toFixed(2)}` : "";
-  const paid_by_credit_card = payment_info && payment_info.payment.totalMoney.amount ? "$" + Number(payment_info.payment.totalMoney.amount) / 100 : ""
-  const receipt_url = payment_info ? payment_info.payment.receiptUrl : null;
-  const discount_section = totals.discountApplied > 0 ? `NOTE BEFORE CLOSING OUT: Apply discount of ${discount}, pre-tax. Credit code used: ${store_credit.code}.${ishtml ? "<br />" : "\n"}` : "";
-  const store_credit_money_section = store_credit_money_amount ? `Applied store credit value ${store_credit_money_amount} using code ${store_credit.code}.${ishtml ? "<br />" : "\n"}` : "";
-  const card_payment_section = paid_by_credit_card ? `Paid ${paid_by_credit_card} by card ending in ${payment_info.payment.cardDetails.card.last4}.${ishtml ? "<br />" : "\n"}` : "";
-  return ishtml ? `${discount_section}
+  const paymentDisplays = payments.map(payment => GenerateOrderPaymentDisplay(payment, isHtml)).join(isHtml ? "<br />" : "\n");
+  const discountDisplays = discounts.map(discount => GenerateOrderLineDiscountDisplay(discount, isHtml)).join(isHtml ? "<br />" : "\n");
+  return isHtml ? `${discountDisplays}
   <p>Received payment of: <strong>${total_amount}</strong></p>
   <p>Pre-tax Amount: <strong>${subtotal}</strong><br />
-  Post-tax Amount: <strong>${totalAfterTaxBeforeTip}</strong> (verify this with payment)<br />
-  Tip Amount: <strong>${tip_amount}</strong><br />
-  ${receipt_url ? `Confirm the above values in the <a href="${receipt_url}">receipt</a>` : ""}</p>${store_credit_money_section}${card_payment_section}` :
-    `${discount_section}
+  Post-tax Amount: <strong>${totalAfterTaxBeforeTip}</strong>&nbsp;(verify this with payment)<br />
+  Tip Amount: <strong>${tip_amount}</strong><br /></p>
+  ${paymentDisplays}` :
+    `${discountDisplays}
   Received payment of: ${total_amount}
   Pre-tax Amount: ${subtotal}
   Post-tax Amount: ${totalAfterTaxBeforeTip}
   Tip Amount: ${tip_amount}
-  Receipt: ${receipt_url}
-  ${store_credit_money_section}${card_payment_section}`;
+  ${paymentDisplays}`;
 }
 
 const GenerateDeliverySection = (deliveryInfo: DeliveryInfoDto | null, ishtml: boolean) => {
@@ -318,6 +341,7 @@ const CreateExternalEmail = async (
   const ORDER_RESPONSE_PREAMBLE = DataProviderInstance.KeyValueConfig.ORDER_RESPONSE_PREAMBLE;
   const LOCATION_INFO = DataProviderInstance.KeyValueConfig.LOCATION_INFO;
   const cartstring = GenerateDisplayCartStringListFromProducts(cart);
+  const paymentDisplays = order.payments.map(payment => GenerateOrderPaymentDisplay(payment, true)).join("<br />");
   const delivery_section = GenerateDeliverySection(order.fulfillment.deliveryInfo, true);
   const location_section = delivery_section ? "" : `<p><strong>Location Information:</strong>
 We are located ${LOCATION_INFO}</p>`;
@@ -335,7 +359,7 @@ Order contents:<br />
 ${cartstring.join("<br />")}
 ${special_instructions_section}
 ${delivery_section}
-${isPaid && payment_info ? `<br /><a href="${payment_info.payment.receiptUrl}">Here's a link to your receipt!</a>` : ""}
+${paymentDisplays}
 ${location_section}We thank you for your support!`;
   return await GoogleProvider.SendEmail(
     {

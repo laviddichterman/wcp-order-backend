@@ -1,7 +1,7 @@
 import mongoose, {Schema} from "mongoose";
 import path from "path";
 import { IOption } from "@wcp/wcpshared";
-import { WMoney } from "../WMoney";
+import { WMoney } from "../../WMoney";
 import { IntervalSchema } from "../../IntervalSchema";
 
 type MT = Omit<IOption, "id">;

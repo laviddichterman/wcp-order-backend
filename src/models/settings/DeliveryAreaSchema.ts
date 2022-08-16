@@ -11,4 +11,4 @@ export const DeliveryAreaSchema = new Schema<GeoJSON.Polygon>({
   }
 }, {id: true, toJSON: {virtuals: true}});
 
-export default mongoose.model<GeoJSON.Polygon>(path.basename(__filename).replace(path.extname(__filename), ''), DeliveryAreaSchema);
+export const DeliveryAreaModel = mongoose.model<GeoJSON.Polygon>(path.basename(__filename).replace(path.extname(__filename), ''), DeliveryAreaSchema);

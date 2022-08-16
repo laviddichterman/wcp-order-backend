@@ -24,11 +24,11 @@ import { WProductModel } from '../models/catalog/products/WProductSchema';
 import { WOptionModel } from '../models/catalog/options/WOptionSchema';
 import { WOptionTypeModel } from '../models/catalog/options/WOptionTypeSchema';
 import { WProductInstanceFunctionModel } from '../models/query/product/WProductInstanceFunction';
+import { WOrderInstanceFunctionModel } from "../models/query/order/WOrderInstanceFunction";
 import socketIo from "socket.io";
 import logger from '../logging';
 import { WProvider } from "../types/WProvider";
 import { WApp } from "../App";
-import { WOrderInstanceFunctionModel } from "models/query/order/WOrderInstanceFunction";
 
 function ReduceArrayToMapByKey<T, Key extends keyof T>(xs: T[], key: Key) {
   return Object.fromEntries(xs.map(x => [x[key], x])) as Record<string, T>;
@@ -382,7 +382,7 @@ export class CatalogProvider implements WProvider {
       }
       const products_update = await WProductModel.updateMany({}, { $pull: { modifiers: { mtid: mt_id } } });
       if (products_update.modifiedCount > 0) {
-        const product_instance_update = await WProductInstanceModel.updateMany({}, { $pull: { modifiers: { modifier_type_id: mt_id } } });
+        const product_instance_update = await WProductInstanceModel.updateMany({}, { 'modifiers': { $unset: { [mt_id]: "" } } });
         logger.debug(`Removed ModifierType ID from ${products_update.modifiedCount} products, ${product_instance_update.modifiedCount} product instances.`);
         await this.SyncProducts();
         await this.SyncProductInstances();
@@ -453,7 +453,7 @@ export class CatalogProvider implements WProvider {
         return null;
       }
       const product_instance_options_delete = await WProductInstanceModel.updateMany(
-        { "modifiers.modifier_type_id": doc.option_type_id },
+        { },
         { $pull: { "modifiers.$.options": { option_id: mo_id } } });
       if (product_instance_options_delete.modifiedCount > 0) {
         logger.debug(`Removed ${product_instance_options_delete.modifiedCount} Options from Product Instances.`);

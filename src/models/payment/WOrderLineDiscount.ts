@@ -1,7 +1,6 @@
 import { DiscountMethod, OrderLineDiscount, OrderLineDiscountCodeAmount, TenderBaseStatus } from "@wcp/wcpshared";
-import { WMoney } from "models/catalog/WMoney";
-import mongoose, { Schema } from "mongoose";
-import path from 'path';
+import { WMoney } from "../WMoney";
+import { Schema } from "mongoose";
 import { WEncryptStringLockSchema } from "./WEncryptStringLock";
 
 export const WOrderLineDiscountSchema = new Schema<OrderLineDiscount>({

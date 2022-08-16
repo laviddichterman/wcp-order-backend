@@ -2,7 +2,7 @@ import { FulfillmentType, FulfillmentConfig } from "@wcp/wcpshared";
 import mongoose, { Schema } from "mongoose";
 import path from 'path';
 import { IntervalSchema } from "../IntervalSchema";
-import DeliveryAreaSchema from "./DeliveryAreaSchema";
+import { DeliveryAreaSchema } from "./DeliveryAreaSchema";
 
 type MT = Omit<FulfillmentConfig, "id">;
 

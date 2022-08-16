@@ -6,7 +6,7 @@ import { OrderCartEntrySchema } from "./WOrderCartEntry";
 import { FulfillmentInfo } from "./WFulfillmentInfo";
 import { WMetricsSchema } from "./WMetrics";
 import { WOrderLineDiscountSchema } from "../payment/WOrderLineDiscount";
-import { WOrderPaymentSchema } from "models/payment/WOrderPayment";
+import { WOrderPaymentSchema } from "../payment/WOrderPayment";
 
 export const WOrderInstanceSchema = new Schema<WOrderInstanceNoId>({
   status: { 

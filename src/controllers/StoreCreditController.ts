@@ -194,7 +194,7 @@ export class StoreCreditController implements IExpressController {
         logger.info(`For internal id ${reference_id} created Square Order ID: ${square_order_id} for ${amount_money}`)
         const payment_response = await SquareProviderInstance.ProcessPayment(req.body.nonce, amount_money, reference_id, square_order_id);
         if (payment_response.success === true) {
-          const amount = Number(Number(payment_response.result.payment.totalMoney.amount) / 100).toFixed(2);
+          const amount = Number(Number(payment_response.result.amount.amount) / 100).toFixed(2);
           CreateExternalEmailSender(EMAIL_ADDRESS, STORE_NAME, amount, sender_email_address, recipient_name_first, recipient_name_last, joint_credit_code, qr_code_fs_a);
           if (req.body.send_email_to_recipient) {
             CreateExternalEmailRecipient(EMAIL_ADDRESS, STORE_NAME, amount, sender_name, recipient_name_first, recipient_name_last, recipient_email_address, recipient_message, joint_credit_code, qr_code_fs_b);
@@ -205,9 +205,9 @@ export class StoreCreditController implements IExpressController {
           return res.status(200).json({reference_id, 
             joint_credit_code, 
             square_order_id, 
-            amount_money: Number(payment_response.result.payment.totalMoney.amount), 
-            last4: payment_response.result.payment.cardDetails.card.last4, 
-            receipt_url: payment_response.result.payment.receiptUrl
+            amount_money: Number(payment_response.result.amount.amount), 
+            last4: payment_response.result.last4, 
+            receipt_url: payment_response.result.receiptUrl
           });
         }
         else {

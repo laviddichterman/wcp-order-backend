@@ -9,13 +9,13 @@ export const WOptionInstanceSchema = new Schema<IOptionInstance>({
 
   placement: {
     type: Number,
-    enum: [OptionPlacement.NONE, OptionPlacement.LEFT, OptionPlacement.RIGHT, OptionPlacement.WHOLE],
+    enum: OptionPlacement,
     required: true
   },
 
   qualifier: {
     type: Number,
-    enum: [OptionQualifier.REGULAR, OptionQualifier.LITE, OptionQualifier.HEAVY, OptionQualifier.OTS],
+    enum: OptionQualifier,
     required: true
   }
 }, { _id: false});

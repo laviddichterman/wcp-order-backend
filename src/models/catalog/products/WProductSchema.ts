@@ -1,6 +1,6 @@
 import { IProduct } from "@wcp/wcpshared";
 import mongoose, {Schema} from "mongoose";
-import { WMoney } from "../WMoney";
+import { WMoney } from "../../WMoney";
 import path from 'path';
 
 type MT = Omit<IProduct, "id">;

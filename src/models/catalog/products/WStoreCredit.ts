@@ -1,5 +1,5 @@
 import {Schema} from "mongoose";
-import { WMoney} from "../WMoney";
+import { WMoney} from "../../WMoney";
 
 // represents a class of products that can be made and inserted into the catalog
 export const WStoreCredit = new Schema({

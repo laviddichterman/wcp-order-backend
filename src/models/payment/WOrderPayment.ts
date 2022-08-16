@@ -1,6 +1,6 @@
-import { OrderPayment, PaymentMethod, TenderBaseStatus, StoreCreditPayment, CreditPayment, CashPayment } from "@wcp/wcpshared";
-import { WMoney } from "models/catalog/WMoney";
 import { Schema } from "mongoose";
+import { OrderPayment, PaymentMethod, TenderBaseStatus, StoreCreditPayment, CreditPayment, CashPayment } from "@wcp/wcpshared";
+import { WMoney } from "../WMoney";
 import { WEncryptStringLockSchema } from "./WEncryptStringLock";
 
 export const WOrderPaymentSchema = new Schema<OrderPayment>({

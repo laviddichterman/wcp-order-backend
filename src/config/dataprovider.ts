@@ -2,7 +2,7 @@ import { WProvider } from '../types/WProvider';
 import { FulfillmentConfig, IWBlockedOff, IWSettings, JSFEBlockedOff, WDateUtils } from '@wcp/wcpshared';
 import { HydratedDocument } from 'mongoose';
 import logger from '../logging';
-import DeliveryAreaModel from '../models/settings/DeliveryAreaSchema';
+import { DeliveryAreaModel } from '../models/settings/DeliveryAreaSchema';
 import KeyValueModel, { IKeyValueStore } from '../models/settings/KeyValueSchema';
 import LeadTimeModel from '../models/settings/LeadTimeSchema';
 import BlockedOffModel from '../models/settings/BlockedOffSchema';

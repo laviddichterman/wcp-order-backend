@@ -7,6 +7,7 @@ import logger from '../logging';
 import IExpressController from '../types/IExpressController';
 import { CheckJWT, ScopeDeleteCatalog, ScopeWriteCatalog } from '../config/authorization';
 import CatalogProviderInstance from '../config/catalog_provider';
+
 const ProductClassByIdValidationChain = [
   param('pid').trim().escape().exists().isMongoId(), 
 ];
@@ -74,10 +75,11 @@ const ProductInstanceValidationChain = [
   body('display_flags.order.adornment').trim(),
   body('display_flags.order.suppress_exhaustive_modifier_list').toBoolean(true),
   body('ordinal').exists().isInt({min: 0}),
-  body('modifiers.*.modifier_type_id').trim().escape().exists().isMongoId(),
-  body('modifiers.*.options.*.option_id').trim().escape().exists().isMongoId(),
-  body('modifiers.*.options.*.placement').exists().isIn(Object.keys(OptionPlacement)),
-  body('modifiers.*.options.*.qualifier').exists().isIn(Object.keys(OptionQualifier))
+  body('modifiers').isObject(),
+  body('modifiers.*').isArray(),
+  body('modifiers.*.*.option_id').trim().escape().exists().isMongoId(),
+  body('modifiers.*.*.placement').exists().isIn(Object.values(OptionPlacement)),
+  body('modifiers.*.*.qualifier').exists().isIn(Object.values(OptionQualifier))
 ];
 
 const EditProductInstanceValidationChain = [  
@@ -145,7 +147,7 @@ export class ProductController implements IExpressController {
               suppress_exhaustive_modifier_list: false
             }
           },
-          modifiers: [],
+          modifiers: {},
           is_base: true
         });
         if (!pi) {
@@ -171,10 +173,7 @@ export class ProductController implements IExpressController {
         price: req.body.price,
         disabled: req.body.disabled ? req.body.disabled : null, 
         service_disable: req.body.service_disable || [],
-        externalIDs: {
-          revelID: req.body.revelID,
-          squareID: req.body.squareID
-        },
+        externalIDs: req.body.externalIDs,
         modifiers: req.body.modifiers,
         category_ids: req.body.category_ids,
         display_flags: req.body.display_flags,
