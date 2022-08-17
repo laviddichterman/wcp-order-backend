@@ -1,4 +1,4 @@
-import { CanThisBeOrderedAtThisTimeAndFulfillment, ComputeCartSubTotal, CategorizedRebuiltCart, PRODUCT_LOCATION, WProduct, WCPProductV2Dto, CreateProductWithMetadataFromV2Dto, CreateOrderRequestV2, FulfillmentDto, DeliveryInfoDto, MetricsDto, CoreCartEntry, ComputeDiscountApplied, ComputeTaxAmount, ComputeTipBasis, ComputeTipValue, TotalsV2, ComputeTotal, ComputeGiftCardApplied, ComputeBalanceAfterCredits, JSFECreditV2, CreateOrderResponse, WDateUtils, GenerateMenu, IMenu, ComputeSubtotalPreDiscount, ComputeSubtotalAfterDiscount, FulfillmentConfig, CustomerInfoDto, OrderPayment, WOrderInstanceNoId, ValidateLockAndSpendSuccess, OrderLineDiscount, CURRENCY, DiscountMethod, PaymentMethod, DineInInfoDto, CALL_LINE_DISPLAY, WOrderInstance, TenderBaseStatus, IMoney } from "@wcp/wcpshared";
+import { CanThisBeOrderedAtThisTimeAndFulfillment, ComputeCartSubTotal, CategorizedRebuiltCart, PRODUCT_LOCATION, WProduct, WCPProductV2Dto, CreateProductWithMetadataFromV2Dto, CreateOrderRequestV2, FulfillmentDto, DeliveryInfoDto, CoreCartEntry, ComputeDiscountApplied, ComputeTaxAmount, ComputeTipBasis, ComputeTipValue, TotalsV2, ComputeTotal, ComputeGiftCardApplied, ComputeBalanceAfterCredits, JSFECreditV2, CreateOrderResponse, WDateUtils, GenerateMenu, IMenu, ComputeSubtotalPreDiscount, ComputeSubtotalAfterDiscount, FulfillmentConfig, OrderPayment, WOrderInstanceNoId, ValidateLockAndSpendSuccess, OrderLineDiscount, CURRENCY, DiscountMethod, PaymentMethod, DineInInfoDto, CALL_LINE_DISPLAY, WOrderInstance, TenderBaseStatus, IMoney, WError } from "@wcp/wcpshared";
 import { Error as SquareError } from 'square';
 
 import { WProvider } from '../types/WProvider';
@@ -132,16 +132,16 @@ const GeneratePaymentSection = (totals: RecomputeTotalsResult, discounts: OrderL
   const paymentDisplays = payments.map(payment => GenerateOrderPaymentDisplay(payment, isHtml)).join(isHtml ? "<br />" : "\n");
   const discountDisplays = discounts.map(discount => GenerateOrderLineDiscountDisplay(discount, isHtml)).join(isHtml ? "<br />" : "\n");
   return isHtml ? `${discountDisplays}
-  <p>Received payment of: <strong>${total_amount}</strong></p>
   <p>Pre-tax Amount: <strong>${subtotal}</strong><br />
   Post-tax Amount: <strong>${totalAfterTaxBeforeTip}</strong>&nbsp;(verify this with payment)<br />
   Tip Amount: <strong>${tip_amount}</strong><br /></p>
+  <p>Received payment of: <strong>${total_amount}</strong></p>
   ${paymentDisplays}` :
     `${discountDisplays}
-  Received payment of: ${total_amount}
   Pre-tax Amount: ${subtotal}
   Post-tax Amount: ${totalAfterTaxBeforeTip}
   Tip Amount: ${tip_amount}
+  Received payment of: ${total_amount}
   ${paymentDisplays}`;
 }
 
@@ -440,7 +440,7 @@ export class OrderManager implements WProvider {
 
     // 1. get the fulfillment and other needed constants from the DataProvider, generate a reference ID, quick computations
     if (!Object.hasOwn(DataProviderInstance.Fulfillments, createOrderRequest.fulfillment.selectedService)) {
-      return { status: 404, success: false, result: { errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'NOT_FOUND', detail: "Fulfillment specified does not exist." }] } };
+      return { status: 404, success: false, result: null, errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'NOT_FOUND', detail: "Fulfillment specified does not exist." }] };
     }
     const fulfillmentConfig = DataProviderInstance.Fulfillments[createOrderRequest.fulfillment.selectedService];
     const STORE_NAME = DataProviderInstance.KeyValueConfig.STORE_NAME;
@@ -455,7 +455,12 @@ export class OrderManager implements WProvider {
     const menu = GenerateMenu(CatalogProviderInstance.Catalog, dateTimeInterval.start, createOrderRequest.fulfillment.selectedService);
     const { noLongerAvailable, rebuiltCart } = RebuildOrderState(menu, createOrderRequest.cart, dateTimeInterval.start, fulfillmentConfig);
     if (noLongerAvailable.length > 0) {
-      return { status: 410, success: false, result: { errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'GONE', detail: "Unable to rebuild order from current catalog data." }] } };
+      return { 
+        status: 410, 
+        success: false, 
+        result: null, 
+        errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'GONE', detail: "Unable to rebuild order from current catalog data." }] 
+      };
     }
 
     // 3. 'let's setup the order object reference
@@ -475,13 +480,23 @@ export class OrderManager implements WProvider {
     if (createOrderRequest.totals.balance !== recomputedTotals.balanceAfterCredits) {
       const errorDetail = `Computed different balance of ${recomputedTotals.balanceAfterCredits} vs sent: ${createOrderRequest.totals.balance}`;
       logger.error(errorDetail)
-      return { status: 500, success: false, result: { errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'INSUFFICIENT_FUNDS', detail: errorDetail }] } };
+      return { 
+        status: 500, 
+        success: false, 
+        result: null,
+        errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'INSUFFICIENT_FUNDS', detail: errorDetail }]
+      };
     }
     // we've only set the tip if we've proceeded to checkout with CC, so no need to check tip fudging if not closing out here
     if (createOrderRequest.nonce && createOrderRequest.totals.tip < recomputedTotals.tipMinimum) {
       const errorDetail = `Computed tip below minimum of ${recomputedTotals.tipMinimum} vs sent: ${createOrderRequest.totals.tip}`;
       logger.error(errorDetail)
-      return { status: 500, success: false, result: { errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'INSUFFICIENT_FUNDS', detail: errorDetail }] } };
+      return { 
+        status: 500, 
+        success: false, 
+        result: null,
+        errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'INSUFFICIENT_FUNDS', detail: errorDetail }] 
+      };
     }
 
     // 4. check the availability of the requested service date/time
@@ -493,7 +508,12 @@ export class OrderManager implements WProvider {
       const display_time = DateTimeIntervalToDisplayServiceInterval(dateTimeInterval);
       const errorDetail = `Requested fulfillment (${fulfillmentConfig.displayName}) at ${display_time} is no longer valid. ${optionsForSelectedDate.length > 0 ? `Next available time for date selected is ${WDateUtils.MinutesToPrintTime(optionsForSelectedDate[0].value)}` : 'No times left for selected date.'}`;
       logger.error(errorDetail)
-      return { status: 410, success: false, result: { errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'GONE', detail: errorDetail }] } };
+      return { 
+        status: 410, 
+        success: false, 
+        result: null,
+        errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'GONE', detail: errorDetail }]
+      };
     }
 
     // 5. enter payment subsection
@@ -550,7 +570,7 @@ export class OrderManager implements WProvider {
       // unwind storeCreditResponses
       await RefundStoreCreditDebits(storeCreditResponses);
       logger.error("Failed to process store credit step of ordering");
-      return { status: 404, success: false, result: { errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'INSUFFICIENT_FUNDS', detail: "Unable to debit store credit." }] } };
+      return { status: 404, success: false, result: null, errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'INSUFFICIENT_FUNDS', detail: "Unable to debit store credit." }] };
     }
 
     if (recomputedTotals.balanceAfterCredits === 0) {
@@ -558,7 +578,7 @@ export class OrderManager implements WProvider {
     }
 
     // Payment part B: attempt to charge balance to credit card
-    let errors = [] as SquareError[];
+    let errors = [] as WError[];
     let hasChargingSucceeded = false;
     if (recomputedTotals.balanceAfterCredits > 0 && createOrderRequest.nonce) {
       try {
@@ -567,18 +587,18 @@ export class OrderManager implements WProvider {
           payments.push(response.result);
           hasChargingSucceeded = true;
         }
-        errors = response.error;
+        errors = response.error.map(e=>({category: e.category, code: e.code, detail: e.detail}));
       } catch (error: any) {
         logger.error(`Nasty error in processing payment: ${JSON.stringify(error)}.`);
         errors.push({ category: 'PAYMENT_METHOD_ERROR', detail: JSON.stringify(error), code: 'INTERNAL_SERVER_ERROR' });
-        return { status: 500, success: false, result: { errors } };
+        return { status: 500, success: false, result: null, errors };
       } finally {
         if (!hasChargingSucceeded && storeCreditResponses.length > 0) {
           await RefundStoreCreditDebits(storeCreditResponses);
         }
       }
       if (!hasChargingSucceeded) {
-        return { status: 400, success: false, result: { errors } };
+        return { status: 400, success: false, result: null, errors };
       }
       else {
         isPaid = true;
