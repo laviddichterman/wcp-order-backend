@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { body, param } from 'express-validator';
-import { OptionPlacement, OptionQualifier, PriceDisplay } from '@wcp/wcpshared';
+import { IProduct, IProductInstance, OptionPlacement, OptionQualifier, PriceDisplay } from '@wcp/wcpshared';
 import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
 import logger from '../logging';
 
@@ -106,7 +106,7 @@ export class ProductController implements IExpressController {
   };
   private postProductClass = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const newproduct = await CatalogProviderInstance.CreateProduct({
+      const productClass: Omit<IProduct, "id"> = {
         price: req.body.price,
         disabled: req.body.disabled ? req.body.disabled : null, 
         serviceDisable: req.body.serviceDisable || [],
@@ -114,24 +114,29 @@ export class ProductController implements IExpressController {
         modifiers: req.body.modifiers,
         category_ids: req.body.category_ids,
         displayFlags: req.body.displayFlags,
-      }, 
-      req.body.create_product_instance || req.body.suppress_catalog_recomputation // aka : suppress_catalog_recomputation
+      };
+      const newproduct = await CatalogProviderInstance.CreateProduct(
+        productClass, 
+        req.body.create_product_instance || req.body.suppress_catalog_recomputation // aka : suppress_catalog_recomputation
       );
       if (!newproduct) {
         logger.info(`Unable to find Modifiers or Categories to create Product`);
         return res.status(404).send("Unable to find Modifiers or Categories to create Product");
       }
       if (req.body.create_product_instance) {
-        const pi = await CatalogProviderInstance.CreateProductInstance({
+        const productInstance: Omit<IProductInstance, "id" | 'displayFlags' | 'externalIDs' | 'modifiers' | 'isBase'> = {
           productId: newproduct.id,
           description: req.body.description,
           displayName: req.body.displayName,
           shortcode: req.body.shortcode,
-          ordinal: req.body.ordinal,
-          externalIDs: req.body.externalIDs,
+          ordinal: req.body.ordinal
+        };
+        const pi = await CatalogProviderInstance.CreateProductInstance({
+          ...productInstance,
+          externalIDs: {},
           displayFlags: {
             menu: { 
-              ordinal: req.body.ordinal,
+              ordinal: productInstance.ordinal,
               hide: false,
               price_display: 'ALWAYS',
               adornment: "",
@@ -139,7 +144,7 @@ export class ProductController implements IExpressController {
               show_modifier_options: false            
             },
             order: { 
-              ordinal: req.body.ordinal,
+              ordinal: productInstance.ordinal,
               hide: false,
               skip_customization: false,
               price_display: 'ALWAYS',

@@ -24,11 +24,8 @@ export class SocketIoProvider implements WProvider {
         logger.info(`CONNECTION: Client info: ${JSON.stringify(socket.client.request.headers)}.`);
       logger.info(`Num Connected: ${app.getSocketIoServer().engine.clientsCount}`);
       socket.emit('WCP_SERVER_TIME', { time: format(connect_time, "yyyy-MM-dd'T'HH:mm:ss"), tz: process.env.TZ });
-      socket.emit('WCP_SERVICES', DataProviderInstance.Services);
-      socket.emit('WCP_LEAD_TIMES', DataProviderInstance.LeadTimes);
-      socket.emit('WCP_BLOCKED_OFF', DataProviderInstance.BlockedOff);
+      socket.emit('WCP_FULFILLMENTS', DataProviderInstance.Fulfillments);
       socket.emit('WCP_SETTINGS', DataProviderInstance.Settings);
-      socket.emit('WCP_DELIVERY_AREA', DataProviderInstance.DeliveryArea);
       CatalogProviderInstance.EmitCatalog(socket);
       socket.on('disconnect', (reason : string) => {
         const formattedDuration = formatDuration(intervalToDuration({ start: connect_time, end: zonedTimeToUtc(Date.now(), process.env.TZ) }));

@@ -11,9 +11,9 @@ import { BigIntStringify } from '../utils';
 
 // THIS IS BS NOW, REDO
 const V2OrderValidationChain = [
-  body('fulfillmentDto.selectedService').exists().isMongoId(),
-  body('fulfillmentDto.selectedDate').isISO8601().exists(),
-  body('fulfillmentDto.selectedTime').isInt({ min: 0, max: 1440 }).exists(),
+  body('fulfillment.selectedService').exists().isMongoId(),
+  body('fulfillment.selectedDate').isISO8601().exists(),
+  body('fulfillment.selectedTime').isInt({ min: 0, max: 1440 }).exists(),
   body('customerInfo.givenName').trim().escape().exists(),
   body('customerInfo.familyName').trim().escape().exists(),
   body('customerInfo.mobileNum').trim().escape().exists(),
@@ -41,7 +41,17 @@ export class OrderController implements IExpressController {
   private postOrder = async (req: Request, res: Response, next: NextFunction) => {
     const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
     try {
-      const reqBody: CreateOrderRequestV2 = req.body;
+      const reqBody: CreateOrderRequestV2 = {
+        cart: req.body.cart,
+        creditValidations: req.body.creditValidations,
+        customerInfo: req.body.customerInfo,
+        discounts: req.body.discounts,
+        fulfillment: req.body.fulfillment,
+        metrics: req.body.metrics,
+        specialInstructions: req.body.specialInstructions,
+        totals: req.body.totals,
+        nonce: req.body.nonce
+      };
       const response = await OrderManagerInstance.CreateOrder(reqBody, (req.headers['x-real-ip'] as string) || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress);
       res.status(response.status).json({ success: response.success, result: response.result } as CreateOrderResponse);
     } catch (error) {

@@ -55,9 +55,9 @@ const ModifierOptionValidationChain = [
   body('price.currency').exists().isLength({min:3, max: 3}).isIn(Object.values(CURRENCY)),
   body('ordinal').isInt({min: 0, max:64}).exists(),
   body('enable').optional({nullable: true}).isMongoId(),
-  body('flavor_factor').isFloat({ min: 0, max: 5 }),
-  body('bake_factor').isFloat({ min: 0, max: 5 }),
-  body('can_split').toBoolean(true),
+  body('metadata.flavor_factor').isFloat({ min: 0, max: 5 }),
+  body('metadata.bake_factor').isFloat({ min: 0, max: 5 }),
+  body('metadata.can_split').toBoolean(true),
   body('displayFlags.omit_from_shortname').toBoolean(true),
   body('displayFlags.omit_from_name').toBoolean(true),
 ];
@@ -153,11 +153,7 @@ export class ModifierController implements IExpressController {
         externalIDs: req.body.externalIDs,
         modifierTypeId: req.params.mtid,
         ordinal: req.body.ordinal,
-        metadata: {
-          flavor_factor: req.body.flavor_factor || 0,
-          bake_factor: req.body.bake_factor || 0,
-          can_split: req.body.can_split || false,
-        },
+        metadata: req.body.metadata,
         enable: req.body.enable,
         displayFlags: req.body.displayFlags,
       });
@@ -183,11 +179,7 @@ export class ModifierController implements IExpressController {
         disabled: req.body.disabled ? req.body.disabled : null, 
         externalIDs: req.body.externalIDs,
         ordinal: req.body.ordinal, 
-        metadata: {
-          flavor_factor: req.body.flavor_factor, 
-          bake_factor: req.body.bake_factor, 
-          can_split: req.body.can_split, 
-        },
+        metadata: req.body.metadata,
         enable: req.body.enable,
         displayFlags: req.body.displayFlags,
       });

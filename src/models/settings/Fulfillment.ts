@@ -1,4 +1,4 @@
-import { FulfillmentType, FulfillmentConfig } from "@wcp/wcpshared";
+import { FulfillmentType, FulfillmentConfig, DayOfTheWeek } from "@wcp/wcpshared";
 import mongoose, { Schema } from "mongoose";
 import path from 'path';
 import { IntervalSchema } from "../IntervalSchema";
@@ -20,7 +20,7 @@ export const FulfillmentSchema = new Schema<MT>({
     min: 0,
     required: true
   },
-  service: { 
+  service: {
     type: Number,
     enum: FulfillmentType,
     required: true
@@ -43,26 +43,54 @@ export const FulfillmentSchema = new Schema<MT>({
     required: true,
     ref: 'WCategorySchema'
   },
-
   messages: {
-    CONFIRMATION: String
+    CONFIRMATION: String,
+    INSTRUCTIONS: String
   },
   terms: { type: [String], required: true },
   autograt: Schema.Types.Mixed,
   serviceCharge: Schema.Types.Mixed,
   leadTime: { type: Number, required: true },
   operatingHours: {
-    type: Map,
+    type: {
+      [DayOfTheWeek.SUNDAY]: {
+        type: [IntervalSchema],
+        required: true
+      },
+      [DayOfTheWeek.MONDAY]: {
+        type: [IntervalSchema],
+        required: true
+      },
+      [DayOfTheWeek.TUESDAY]: {
+        type: [IntervalSchema],
+        required: true
+      },
+      [DayOfTheWeek.WEDNESDAY]: {
+        type: [IntervalSchema],
+        required: true
+      },
+      [DayOfTheWeek.THURSDAY]: {
+        type: [IntervalSchema],
+        required: true
+      },
+      [DayOfTheWeek.FRIDAY]: {
+        type: [IntervalSchema],
+        required: true
+      },
+      [DayOfTheWeek.SATURDAY]: {
+        type: [IntervalSchema],
+        required: true
+      },
+    },
+    required: true
+  },
+  specialHours: {
+    type: Schema.Types.Map,
     of: [IntervalSchema],
     required: true
   },
-  specialHours: { 
-    type: Schema.Types.Map, 
-    of: [IntervalSchema],
-    required: true
-  },
-  blockedOff: { 
-    type: Schema.Types.Map, 
+  blockedOff: {
+    type: Schema.Types.Map,
     of: [IntervalSchema],
     required: true
   },
@@ -71,6 +99,6 @@ export const FulfillmentSchema = new Schema<MT>({
   timeStep: { type: Number, required: true },
   maxGuests: Number,
   serviceArea: DeliveryAreaSchema
-}, {id: true, toJSON: {virtuals: true}, toObject: { virtuals: true}});
+}, { id: true, toJSON: { virtuals: true }, toObject: { virtuals: true } });
 
 export const FulfillmentModel = mongoose.model<FulfillmentConfig>(path.basename(__filename).replace(path.extname(__filename), ''), FulfillmentSchema);
