@@ -109,7 +109,7 @@ export class SquareProvider implements WProvider {
     }
   }
 
-  CreateOrderStoreCredit = async (reference_id : string, amount_money : bigint, note : string) :
+  CreateOrderStoreCredit = async (reference_id: string, amount: IMoney, note: string) :
   Promise<{ success: true; result: CreateOrderResponse; error: null; } | 
     { success: false; result: null; error: SquareError[]; }> => {
       // TODO: use idempotency key from order instead
@@ -123,8 +123,8 @@ export class SquareProvider implements WProvider {
           quantity: "1",
           catalogObjectId: "DNP5YT6QDIWTB53H46F3ECIN",
           basePriceMoney: {
-            "amount": amount_money,
-            "currency": "USD"
+            "amount": BigInt(amount.amount),
+            "currency": amount.currency
           },
           note: note
         }],
@@ -169,7 +169,7 @@ export class SquareProvider implements WProvider {
     }
   }
 
-  ProcessPayment = async (nonce : string, amount_money : bigint, reference_id : string, square_order_id : string, verificationToken?: string) : 
+  ProcessPayment = async (nonce : string, amount: IMoney, reference_id : string, square_order_id : string, verificationToken?: string) : 
     Promise<{ success: true; result: CreditPayment; error: null; } | 
     { success: false; result: null; error: SquareError[]; }> => {
     const idempotency_key = crypto.randomBytes(22).toString('hex');
@@ -177,8 +177,8 @@ export class SquareProvider implements WProvider {
     const request_body : CreatePaymentRequest = {
       sourceId: nonce,
       amountMoney: {
-        amount: amount_money,
-        currency: 'USD'
+        "amount": BigInt(amount.amount),
+        "currency": amount.currency
       },
       referenceId: reference_id,
       orderId: square_order_id,

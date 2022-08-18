@@ -2,7 +2,7 @@ import voucher_codes from 'voucher-code-generator';
 import { startOfDay, isValid, isBefore, parseISO } from 'date-fns';
 import qrcode from 'qrcode';
 import Stream from 'stream';
-import { ValidateLockAndSpendRequest, ValidateLockAndSpendSuccess, ValidateAndLockCreditResponse, WDateUtils } from "@wcp/wcpshared";
+import { ValidateLockAndSpendRequest, ValidateLockAndSpendSuccess, ValidateAndLockCreditResponse, WDateUtils, StoreCreditType, IMoney, IssueStoreCreditRequest } from "@wcp/wcpshared";
 import GoogleProviderInstance from "./google";
 import DataProviderInstance from './dataprovider';
 import aes256gcm from './crypto-aes-256-gcm';
@@ -36,10 +36,10 @@ export class StoreCreditProvider {
       type: "png",
       width: 300,
       margin: 1,
-      color: {
-        dark: "#000000ff",//"#B3DDF2FF", uncomment for Chicago flag blue
-        light: "#0000"
-      }
+      // color: {
+      //   dark: "#000000ff",//"#B3DDF2FF", uncomment for Chicago flag blue
+      //   light: "#0000"
+      // }
 
     });
     return qr_code_fs;
@@ -56,18 +56,21 @@ export class StoreCreditProvider {
    * @param {*} reason 
    * @returns ??
    */
-  CreateCreditFromCreditCode = async (
-    recipient: string,
-    amount: string,
-    credit_type: 'MONEY' | 'DISCOUNT',
-    credit_code: string,
-    expiration: string,
-    generated_by: string,
-    reason: string
-  ) => {
+  CreateCreditFromCreditCode = async ({
+    recipientNameFirst,
+    recipientNameLast,
+    amount,
+    creditType,
+    creditCode,
+    expiration,
+    addedBy,
+    reason
+  } : Omit<IssueStoreCreditRequest, 'recipientEmail'> & { creditCode: string; }) => {
     const date_added = WDateUtils.formatISODate(Date.now());
-    const fields = [recipient, amount, credit_type, amount, date_added, generated_by, date_added, credit_code, expiration, reason, "", "", ""];
-    return GoogleProviderInstance.AppendToSheet(DataProviderInstance.KeyValueConfig.STORE_CREDIT_SHEET, `${ACTIVE_SHEET}!A1:M1`, fields);
+    const amountString = (amount.amount / 100).toFixed(2);
+    const recipient = `${recipientNameFirst} ${recipientNameLast}`;
+    const fields = [recipient, amountString, creditType, amountString, date_added, addedBy, date_added, creditCode, expiration, reason, "", "", ""];
+    return await GoogleProviderInstance.AppendToSheet(DataProviderInstance.KeyValueConfig.STORE_CREDIT_SHEET, `${ACTIVE_SHEET}!A1:M1`, fields);
   }
 
   /**
@@ -85,7 +88,7 @@ export class StoreCreditProvider {
     const values = await values_promise;
     const i = values.values.findIndex((x: string[]) => x[7] === credit_code);
     if (i === -1) {
-      return { valid: false, credit_type: "MONEY", lock: null, amount: 0 };
+      return { valid: false, credit_type: StoreCreditType.MONEY, lock: null, amount: 0 };
     }
     const entry = values.values[i];
     const date_modified = WDateUtils.formatISODate(Date.now());
@@ -98,10 +101,10 @@ export class StoreCreditProvider {
     const valid = (expiration === null || !isValid(expiration) || !isBefore(expiration, startOfDay(Date.now()))) && balance > 0;
     return valid ? {
       valid: true,
-      credit_type: entry[2] === 'MONEY' ? 'MONEY' : 'DISCOUNT',
+      credit_type: StoreCreditType[entry[2] as keyof typeof StoreCreditType],
       lock: { enc: lock.enc, iv: ivAsString, auth: authAsString },
       amount: balance
-    } : { valid: false, credit_type: 'MONEY', lock: null, amount: 0 };
+    } : { valid: false, credit_type: StoreCreditType.MONEY, lock: null, amount: 0 };
   }
 
   ValidateLockAndSpend = async ({ amount, code, lock, updatedBy } : ValidateLockAndSpendRequest) : 

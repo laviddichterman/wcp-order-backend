@@ -5,6 +5,7 @@ import { CURRENCY, DISPLAY_AS, MODIFIER_CLASS } from '@wcp/wcpshared';
 import logger from '../logging';
 import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
 import IExpressController from '../types/IExpressController';
+import { isValidDisabledValue } from '../types/Validations';
 import { CheckJWT, ScopeDeleteCatalog, ScopeWriteCatalog } from '../config/authorization';
 import CatalogProviderInstance from '../config/catalog_provider';
 const ModifierTypeByIdValidationChain = [
@@ -45,12 +46,7 @@ const ModifierOptionValidationChain = [
   body('shortcode').trim().escape().exists(),
   body('revelID').trim().escape(),
   body('squareID').trim().escape(),
-  body('disabled').custom((value) => {
-    if (!value || (typeof value === 'object' && "start" in value && "end" in value && Number.isInteger(value.start) && Number.isInteger(value.end))) {
-      return true;
-    }
-    throw new Error("Disabled value misformed");
-  }),
+  body('disabled').custom(isValidDisabledValue),
   body('price.amount').isInt({min: 0, max:100000}).exists(),
   body('price.currency').exists().isLength({min:3, max: 3}).isIn(Object.values(CURRENCY)),
   body('ordinal').isInt({min: 0, max:64}).exists(),

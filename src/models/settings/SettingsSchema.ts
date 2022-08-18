@@ -13,10 +13,6 @@ export const SettingsSchema = new Schema<IWSettings>({
     type: Number,
     default: 5
   },
-  time_step: [{
-    type: Number,
-    default: 15
-  }],
   config: {
     LOCATION_NAME: String,
     SQUARE_LOCATION: String,
@@ -36,7 +32,6 @@ export const SettingsSchema = new Schema<IWSettings>({
     MESSAGE_REQUEST_SLICING: String
   },
   pipeline_info: PipelineSchema,
-  operating_hours: [[[[Number]]]]
 });
 
 export default mongoose.model<IWSettings>(path.basename(__filename).replace(path.extname(__filename), ''), SettingsSchema);

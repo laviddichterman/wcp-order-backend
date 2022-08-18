@@ -1,5 +1,4 @@
-import { CanThisBeOrderedAtThisTimeAndFulfillment, ComputeCartSubTotal, CategorizedRebuiltCart, PRODUCT_LOCATION, WProduct, WCPProductV2Dto, CreateProductWithMetadataFromV2Dto, CreateOrderRequestV2, FulfillmentDto, DeliveryInfoDto, CoreCartEntry, ComputeDiscountApplied, ComputeTaxAmount, ComputeTipBasis, ComputeTipValue, TotalsV2, ComputeTotal, ComputeGiftCardApplied, ComputeBalanceAfterCredits, JSFECreditV2, CreateOrderResponse, WDateUtils, GenerateMenu, IMenu, ComputeSubtotalPreDiscount, ComputeSubtotalAfterDiscount, FulfillmentConfig, OrderPayment, WOrderInstanceNoId, ValidateLockAndSpendSuccess, OrderLineDiscount, CURRENCY, DiscountMethod, PaymentMethod, DineInInfoDto, CALL_LINE_DISPLAY, WOrderInstance, TenderBaseStatus, IMoney, WError } from "@wcp/wcpshared";
-import { Error as SquareError } from 'square';
+import { CanThisBeOrderedAtThisTimeAndFulfillment, ComputeCartSubTotal, CategorizedRebuiltCart, PRODUCT_LOCATION, WProduct, WCPProductV2Dto, CreateProductWithMetadataFromV2Dto, CreateOrderRequestV2, FulfillmentDto, DeliveryInfoDto, CoreCartEntry, ComputeDiscountApplied, ComputeTaxAmount, ComputeTipBasis, ComputeTipValue, TotalsV2, ComputeTotal, ComputeGiftCardApplied, ComputeBalanceAfterCredits, JSFECreditV2, CreateOrderResponse, WDateUtils, GenerateMenu, IMenu, ComputeSubtotalPreDiscount, ComputeSubtotalAfterDiscount, FulfillmentConfig, OrderPayment, WOrderInstanceNoId, ValidateLockAndSpendSuccess, OrderLineDiscount, CURRENCY, DiscountMethod, PaymentMethod, DineInInfoDto, CALL_LINE_DISPLAY, WOrderInstance, TenderBaseStatus, WError, MoneyToDisplayString } from "@wcp/wcpshared";
 
 import { WProvider } from '../types/WProvider';
 
@@ -13,10 +12,6 @@ import logger from '../logging';
 import { BigIntStringify } from "../utils";
 import { OrderFunctional } from "@wcp/wcpshared";
 import { WOrderInstanceModel } from "../models/orders/WOrderInstance";
-
-function MoneyToDisplayString(money: IMoney) {
-  return `\$${(money.amount/100).toFixed(2)}`;
-}
 
 const WCP = "Windy City Pie";
 
@@ -103,9 +98,9 @@ function GenerateOrderPaymentDisplay(payment: OrderPayment, isHtml: boolean) {
   const lineBreak = isHtml ? "<br />" : "\n";
   switch(payment.t) {
     case PaymentMethod.Cash: 
-      return `Received cash payment of ${MoneyToDisplayString(payment.amount)}.${lineBreak}`;
+      return `Received cash payment of ${MoneyToDisplayString(payment.amount, true)}.${lineBreak}`;
     case PaymentMethod.CreditCard:
-      return `Received payment of ${MoneyToDisplayString(payment.amount)} from credit card ending in ${payment.last4}.
+      return `Received payment of ${MoneyToDisplayString(payment.amount, true)} from credit card ending in ${payment.last4}.
       ${lineBreak}
       ${payment.receiptUrl ? 
         (isHtml ? 
@@ -113,7 +108,7 @@ function GenerateOrderPaymentDisplay(payment: OrderPayment, isHtml: boolean) {
           `Receipt: ${payment.receiptUrl}${lineBreak}`) : 
         ""}`;
     case PaymentMethod.StoreCredit:
-      return `Applied store credit value ${MoneyToDisplayString(payment.amount)} using code ${payment.code}.${lineBreak}`;
+      return `Applied store credit value ${MoneyToDisplayString(payment.amount, true)} using code ${payment.code}.${lineBreak}`;
   }
 }
 
@@ -447,7 +442,6 @@ export class OrderManager implements WProvider {
     const reference_id = requestTime.toString(36).toUpperCase();
     const dateTimeInterval = DateTimeIntervalBuilder(createOrderRequest.fulfillment, fulfillmentConfig);
     const customer_name = [createOrderRequest.customerInfo.givenName, createOrderRequest.customerInfo.familyName].join(" ");
-    const numGuests = createOrderRequest.fulfillment.dineInInfo?.partySize ?? 1;
     const service_title = ServiceTitleBuilder(fulfillmentConfig.displayName, createOrderRequest.fulfillment, customer_name, dateTimeInterval);
 
 
@@ -500,7 +494,7 @@ export class OrderManager implements WProvider {
     }
 
     // 4. check the availability of the requested service date/time
-    const availabilityMap = WDateUtils.GetInfoMapForAvailabilityComputation(DataProviderInstance.BlockedOff, DataProviderInstance.Settings, DataProviderInstance.LeadTimes, createOrderRequest.fulfillment.selectedDate, { [createOrderRequest.fulfillment.selectedService]: true }, { cart_based_lead_time: 0, size: recomputedTotals.mainCategoryProductCount });
+    const availabilityMap = WDateUtils.GetInfoMapForAvailabilityComputation(DataProviderInstance.Fulfillments, createOrderRequest.fulfillment.selectedDate, [createOrderRequest.fulfillment.selectedService], { cart_based_lead_time: 0, size: recomputedTotals.mainCategoryProductCount });
     const optionsForSelectedDate = WDateUtils.GetOptionsForDate(availabilityMap, createOrderRequest.fulfillment.selectedDate, formatISO(requestTime))
     const foundTimeOptionIndex = optionsForSelectedDate.findIndex(x => x.value === createOrderRequest.fulfillment.selectedTime);
     if (foundTimeOptionIndex === -1 || optionsForSelectedDate[foundTimeOptionIndex].disabled) {

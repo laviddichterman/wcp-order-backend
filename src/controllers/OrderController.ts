@@ -7,12 +7,13 @@ import OrderManagerInstance from '../config/order_manager';
 import IExpressController from '../types/IExpressController';
 import GoogleProviderInstance from '../config/google';
 import { BigIntStringify } from '../utils';
+import { isFulfillmentDefined } from '../types/Validations';
 
 
 // THIS IS BS NOW, REDO
 const V2OrderValidationChain = [
-  body('fulfillment.selectedService').exists().isMongoId(),
-  body('fulfillment.selectedDate').isISO8601().exists(),
+  body('fulfillment.selectedService').exists().isMongoId().custom(isFulfillmentDefined),
+  body('fulfillment.selectedDate').isDate({format:'YYYYMMDD'}).exists(),
   body('fulfillment.selectedTime').isInt({ min: 0, max: 1440 }).exists(),
   body('customerInfo.givenName').trim().escape().exists(),
   body('customerInfo.familyName').trim().escape().exists(),

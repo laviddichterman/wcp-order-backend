@@ -10,12 +10,13 @@ import {
   IProductInstance,
   IProductInstanceFunction,
   ICatalogProducts,
-  RecordProductInstanceFunctions,
-  RecordOrderInstanceFunctions,
   FindModifierPlacementExpressionsForMTID,
   FindHasAnyModifierExpressionsForMTID,
   AbstractExpressionModifierPlacementExpression,
-  OrderInstanceFunction
+  OrderInstanceFunction,
+  ReduceArrayToMapByKey,
+  RecordOrderInstanceFunctions,
+  RecordProductInstanceFunctions
 } from "@wcp/wcpshared";
 import DBVersionModel from '../models/DBVersionSchema';
 import { WCategoryModel } from '../models/catalog/category/WCategorySchema';
@@ -29,10 +30,6 @@ import socketIo from "socket.io";
 import logger from '../logging';
 import { WProvider } from "../types/WProvider";
 import { WApp } from "../App";
-
-function ReduceArrayToMapByKey<T, Key extends keyof T>(xs: T[], key: Key) {
-  return Object.fromEntries(xs.map(x => [x[key], x])) as Record<string, T>;
-};
 
 // Returns [ category_map, product_map ] list;
 // category_map entries are mapping of catagory_id to { category, children (id list), product (id list) }
@@ -78,44 +75,48 @@ const ModifierTypeMapGenerator = (modifier_types: IOptionType[], options: IOptio
 };
 
 const CatalogGenerator = (
+  // REVISIT:
+  // perhaps storing maps of Record<mtid, moid[]> and Record<pid, piid[]> would eliminate some of the duplicate storage
   categories: ICategory[],
   modifier_types: IOptionType[],
   options: IOption[],
   products: IProduct[],
   product_instances: IProductInstance[],
-  productInstanceFunctions: IProductInstanceFunction[],
-  orderInstanceFunctions: OrderInstanceFunction[],
+  productInstanceFunctions: RecordProductInstanceFunctions,
+  orderInstanceFunctions: RecordOrderInstanceFunctions,
   api: SEMVER) => {
   const modifier_types_map = ModifierTypeMapGenerator(modifier_types, options);
-  const [category_map, product_map] = CatalogMapGenerator(categories, products, product_instances);
-  return {
+  const [category_map, product_map] = CatalogMapGenerator(categories, Object.values(products), Object.values(product_instances));
+  return {  
     modifiers: modifier_types_map,
     categories: category_map,
     products: product_map,
     version: Date.now().toString(36).toUpperCase(),
-    product_instance_functions: productInstanceFunctions.reduce((acc, pif) => ({ ...acc, [pif.id]: pif }), {} as RecordProductInstanceFunctions),
-    orderInstanceFunctions: orderInstanceFunctions.reduce((acc, oif) => ({ ...acc, [oif.id]: oif }), {} as RecordOrderInstanceFunctions),
+    product_instance_functions: {...productInstanceFunctions},
+    orderInstanceFunctions: {...orderInstanceFunctions},
     api
   } as ICatalog;
 }
 
 const ValidateProductModifiersFunctionsCategories = function (modifiers: { mtid: string; enable: string | null; }[], category_ids: string[], catalog: CatalogProvider) {
   const found_all_modifiers = modifiers.map(entry =>
-    catalog.ModifierTypes.some(x => x.id.toString() === entry.mtid) &&
-    (entry.enable === null || catalog.ProductInstanceFunctions.some(x => x.id === entry.enable))).every(x => x === true);
-  const found_all_categories = category_ids.map(cid => catalog.Categories.some(x => x.id === cid)).every(x => x === true);
+    catalog.ModifierTypes.some(x => x.id === entry.mtid) &&
+    (entry.enable === null || Object.hasOwn(catalog.ProductInstanceFunctions, entry.enable))).every(x => x === true);
+  const found_all_categories = category_ids.map(cid => Object.hasOwn(catalog.Categories, cid)).every(x => x === true);
   return found_all_categories && found_all_modifiers;
 }
 
 export class CatalogProvider implements WProvider {
   #socketRO: socketIo.Namespace;
-  #categories: ICategory[];
+  // REVISIT:
+  // perhaps storing maps of Record<mtid, moid[]> and Record<pid, piid[]> would eliminate some of the duplicate storage
+  #categories: Record<string, ICategory>;
   #modifier_types: IOptionType[];
   #options: IOption[];
   #products: IProduct[];
   #product_instances: IProductInstance[];
-  #product_instance_functions: IProductInstanceFunction[];
-  #orderInstanceFunctions: OrderInstanceFunction[];
+  #product_instance_functions: RecordProductInstanceFunctions;
+  #orderInstanceFunctions: RecordOrderInstanceFunctions;
   #catalog: ICatalog;
   #apiver: SEMVER;
   constructor() {
@@ -157,7 +158,7 @@ export class CatalogProvider implements WProvider {
     // categories
     logger.debug(`Syncing Categories.`);
     try {
-      this.#categories = (await WCategoryModel.find().exec()).map(x => x.toObject());
+      this.#categories = ReduceArrayToMapByKey((await WCategoryModel.find().exec()).map(x => x.toObject()), 'id');
     } catch (err) {
       logger.error(`Failed fetching categories with error: ${JSON.stringify(err)}`);
       return false;
@@ -205,7 +206,6 @@ export class CatalogProvider implements WProvider {
     logger.debug(`Syncing Product Instances.`);
     // product instances
     try {
-      // @ts-ignore
       this.#product_instances = (await WProductInstanceModel.find().exec()).map(x => x.toObject());
     } catch (err) {
       logger.error(`Failed fetching product instances with error: ${JSON.stringify(err)}`);
@@ -217,8 +217,7 @@ export class CatalogProvider implements WProvider {
   SyncProductInstanceFunctions = async () => {
     logger.debug(`Syncing Product Instance Functions.`);
     try {
-      // @ts-ignore
-      this.#product_instance_functions = (await WProductInstanceFunctionModel.find().exec()).map(x => x.toObject());
+      this.#product_instance_functions = ReduceArrayToMapByKey((await WProductInstanceFunctionModel.find().exec()).map(x => x.toObject()), 'id');
     } catch (err) {
       logger.error(`Failed fetching product instance functions with error: ${JSON.stringify(err)}`);
       return false;
@@ -229,8 +228,7 @@ export class CatalogProvider implements WProvider {
   SyncOrderInstanceFunctions = async () => {
     logger.debug(`Syncing Order Instance Functions.`);
     try {
-      // @ts-ignore
-      this.#orderInstanceFunctions = (await WOrderInstanceFunctionModel.find().exec()).map(x => x.toObject());
+      this.#orderInstanceFunctions = ReduceArrayToMapByKey((await WOrderInstanceFunctionModel.find().exec()).map(x => x.toObject()), 'id');
     } catch (err) {
       logger.error(`Failed fetching order instance functions with error: ${JSON.stringify(err)}`);
       return false;
@@ -243,7 +241,7 @@ export class CatalogProvider implements WProvider {
   }
 
   RecomputeCatalog = () => {
-    this.#catalog = CatalogGenerator(this.#categories, this.#modifier_types, this.#options, this.#products, this.#product_instances, this.#product_instance_functions, this.#orderInstanceFunctions, this.#apiver);
+    this.#catalog = CatalogGenerator(Object.values(this.#categories), this.#modifier_types, this.#options, this.#products, this.#product_instances, this.#product_instance_functions, this.#orderInstanceFunctions, this.#apiver);
   }
 
   Bootstrap = async (app: WApp) => {
@@ -278,22 +276,22 @@ export class CatalogProvider implements WProvider {
 
   UpdateCategory = async (category_id: string, category: Omit<ICategory, "id">) => {
     try {
-      const category_id_map = ReduceArrayToMapByKey<ICategory, "id">(this.#categories, "id");
-      if (!Object.hasOwn(category_id_map, category_id)) {
+      if (!Object.hasOwn(this.#categories, category_id)) {
         // not found
         return null;
       }
       var cycle_update_promise = null;
-      if (category_id_map[category_id].parent_id !== category.parent_id && category.parent_id) {
+      if (this.#categories[category_id].parent_id !== category.parent_id && category.parent_id) {
         // need to check for potential cycle
         var cur = category.parent_id;
-        while (cur && category_id_map[cur].parent_id !== category_id) {
-          cur = category_id_map[cur].parent_id;
+        while (cur && this.#categories[cur].parent_id !== category_id) {
+          cur = this.#categories[cur].parent_id;
         }
         // if the cursor is not empty/null/blank then we stopped because we found the cycle
         if (cur) {
           logger.debug(`In changing ${category_id}'s parent_id to ${category.parent_id}, found cycle at ${cur}, blanking out ${cur}'s parent_id to prevent cycle.`);
-          category_id_map[cur].parent_id = null;
+          // this assignment to #categories seems suspect
+          this.#categories[cur].parent_id = null;
           cycle_update_promise = WCategoryModel.findByIdAndUpdate(cur, { parent_id: null });
         }
       }
@@ -318,7 +316,7 @@ export class CatalogProvider implements WProvider {
       if (!doc) {
         return null;
       }
-      await Promise.all(this.#categories.map(async (cat) => {
+      await Promise.all(Object.values(this.#categories).map(async (cat) => {
         if (cat.parent_id && cat.parent_id === category_id) {
           await WCategoryModel.findByIdAndUpdate(category_id, { parent_id: null });
         }
@@ -388,7 +386,7 @@ export class CatalogProvider implements WProvider {
         await this.SyncProductInstances();
       }
       // need to delete any ProductInstanceFunctions that use this MT
-      await Promise.all(this.#product_instance_functions.map(async (pif) => {
+      await Promise.all(Object.values(this.#product_instance_functions).map(async (pif) => {
         if (FindModifierPlacementExpressionsForMTID(pif.expression, mt_id).length > 0) {
           logger.debug(`Found product instance function composed of ${mt_id}, removing PIF with ID: ${pif.id}.`);
           // the PIF and any dependent objects will be synced, but the catalog will not be recomputed / emitted
@@ -461,7 +459,7 @@ export class CatalogProvider implements WProvider {
       }
       await this.SyncOptions();
       // need to delete any ProductInstanceFunctions that use this MO
-      await Promise.all(this.#product_instance_functions.map(async (pif) => {
+      await Promise.all(Object.values(this.#product_instance_functions).map(async (pif) => {
         const dependent_pfi_expressions = FindModifierPlacementExpressionsForMTID(pif.expression, doc.modifierTypeId) as AbstractExpressionModifierPlacementExpression[];
         const filtered = dependent_pfi_expressions.filter(x => x.expr.moid === mo_id)
         if (filtered.length > 0) {
@@ -511,7 +509,8 @@ export class CatalogProvider implements WProvider {
 
       if (removed_modifiers.length) {
         await Promise.all(removed_modifiers.map(async (mtid) => {
-          const product_instance_update = await WProductInstanceModel.updateMany({ productId: pid }, { $pull: { modifiers: { modifier_type_id: mtid } } });
+          /// TODO: FIX THIS !!!!!!! BEFORE SHIP check the other $unset example 
+          const product_instance_update = await WProductInstanceModel.updateMany({ productId: pid }, { modifiers: { $unset: { mtid } } });
           logger.debug(`Removed ModifierType ID ${mtid} from ${product_instance_update.modifiedCount} product instances.`);
         }));
         await this.SyncProductInstances();

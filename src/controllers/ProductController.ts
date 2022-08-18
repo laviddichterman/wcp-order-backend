@@ -7,6 +7,7 @@ import logger from '../logging';
 import IExpressController from '../types/IExpressController';
 import { CheckJWT, ScopeDeleteCatalog, ScopeWriteCatalog } from '../config/authorization';
 import CatalogProviderInstance from '../config/catalog_provider';
+import { isValidDisabledValue } from '../types/Validations';
 
 const ProductClassByIdValidationChain = [
   param('pid').trim().escape().exists().isMongoId(), 
@@ -21,12 +22,7 @@ const ProductClassValidationChain = [
   body('description').trim(),
   body('shortcode').trim().escape().exists(),
   body('externalIDs.*').trim().escape(),
-  body('disabled').custom((value) => {
-    if (!value || (typeof value === 'object' && "start" in value && "end" in value && Number.isInteger(value.start) && Number.isInteger(value.end))) {
-      return true;
-    }
-    throw new Error("Disabled value misformed");
-  }),
+  body('disabled').custom(isValidDisabledValue),
   body('serviceDisable.*').isInt({min:0}),
   body('displayFlags.flavor_max').isFloat({min: 0}),
   body('displayFlags.bake_max').isFloat({min: 0}),
