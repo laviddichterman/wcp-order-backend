@@ -2,7 +2,7 @@ import voucher_codes from 'voucher-code-generator';
 import { startOfDay, isValid, isBefore, parseISO } from 'date-fns';
 import qrcode from 'qrcode';
 import Stream from 'stream';
-import { ValidateLockAndSpendRequest, ValidateLockAndSpendSuccess, ValidateAndLockCreditResponse, WDateUtils, StoreCreditType, IMoney, IssueStoreCreditRequest } from "@wcp/wcpshared";
+import { ValidateLockAndSpendRequest, ValidateLockAndSpendSuccess, ValidateAndLockCreditResponse, WDateUtils, StoreCreditType, IMoney, IssueStoreCreditRequest, CURRENCY, MoneyToDisplayString } from "@wcp/wcpshared";
 import GoogleProviderInstance from "./google";
 import DataProviderInstance from './dataprovider';
 import aes256gcm from './crypto-aes-256-gcm';
@@ -88,7 +88,7 @@ export class StoreCreditProvider {
     const values = await values_promise;
     const i = values.values.findIndex((x: string[]) => x[7] === credit_code);
     if (i === -1) {
-      return { valid: false, credit_type: StoreCreditType.MONEY, lock: null, amount: 0 };
+      return { valid: false };
     }
     const entry = values.values[i];
     const date_modified = WDateUtils.formatISODate(Date.now());
@@ -97,14 +97,14 @@ export class StoreCreditProvider {
     const update_promise = GoogleProviderInstance.UpdateValuesInSheet(DataProviderInstance.KeyValueConfig.STORE_CREDIT_SHEET, new_range, new_entry);
     const expiration = entry[8] ? startOfDay(parseISO(entry[8])) : null;
     await update_promise;
-    const balance = parseFloat(Number(entry[3]).toFixed(2));
+    const balance = Math.round(Number(entry[3]) * 100);
     const valid = (expiration === null || !isValid(expiration) || !isBefore(expiration, startOfDay(Date.now()))) && balance > 0;
     return valid ? {
       valid: true,
       credit_type: StoreCreditType[entry[2] as keyof typeof StoreCreditType],
       lock: { enc: lock.enc, iv: ivAsString, auth: authAsString },
-      amount: balance
-    } : { valid: false, credit_type: StoreCreditType.MONEY, lock: null, amount: 0 };
+      amount: { amount: balance, currency: CURRENCY.USD },
+    } : { valid: false };
   }
 
   ValidateLockAndSpend = async ({ amount, code, lock, updatedBy } : ValidateLockAndSpendRequest) : 
@@ -114,9 +114,9 @@ export class StoreCreditProvider {
     for (let i = 0; i < values.values.length; ++i) {
       const entry = values.values[i];
       if (entry[7] == code) {
-        const credit_balance = parseFloat(Number(entry[3]).toFixed(2));
-        if (amount > credit_balance) {
-          logger.error(`We have a cheater folks, store credit key ${entry[7]}, attempted to use ${amount} but had balance ${credit_balance}`);
+        const credit_balance = Math.round(Number(entry[3])*100);
+        if (amount.amount > credit_balance) {
+          logger.error(`We have a cheater folks, store credit key ${entry[7]}, attempted to use ${MoneyToDisplayString(amount, true)} but had balance ${credit_balance}`);
           return { success: false };
         }
         if (entry[10] != lock.enc ||
@@ -137,12 +137,12 @@ export class StoreCreditProvider {
         // const newLock = aes256gcm.encrypt(lock.auth);
         // const newLockAsString = { enc: newLock.enc, auth: newLock.auth.toString('hex'), iv: newLock.iv.toString('hex') };
         const date_modified = WDateUtils.formatISODate(beginningOfToday);
-        const new_balance = credit_balance - amount;
+        const new_balance = credit_balance - amount.amount;
         const new_entry = [entry[0], entry[1], entry[2], new_balance, entry[4], updatedBy, date_modified, entry[7], entry[8], entry[9], entry[10], entry[11], entry[12]];
         const new_range = `${ACTIVE_SHEET}!${2 + i}:${2 + i}`;
         // TODO switch to volatile-esq update API call
         await GoogleProviderInstance.UpdateValuesInSheet(DataProviderInstance.KeyValueConfig.STORE_CREDIT_SHEET, new_range, new_entry);
-        logger.info(`Debited ${amount} from code ${code} yielding balance of ${new_balance}.`);
+        logger.info(`Debited ${MoneyToDisplayString(amount, true)} from code ${code} yielding balance of ${new_balance}.`);
         return { success: true, entry: entry, index: i };
       }
     }

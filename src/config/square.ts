@@ -13,6 +13,8 @@ const VARIABLE_PRICE_STORE_CREDIT_CATALOG_ID = "DNP5YT6QDIWTB53H46F3ECIN";
 
 export const BigIntMoneyToIntMoney = (bigIntMoney: Money) : IMoney => ({ amount: Number(bigIntMoney.amount!), currency: bigIntMoney.currency! });
 
+export const IMoneyToBigIntMoney = (money: IMoney) : Money => ({ amount: BigInt(money.amount), currency: money.currency });
+
 export class SquareProvider implements WProvider {
   #client : Client;
   constructor() {
@@ -52,18 +54,15 @@ export class SquareProvider implements WProvider {
         lineItems: Object.values(cart).flatMap(e=>e.map(x=>({
           quantity: x.quantity.toString(10),
           catalogObjectId: VARIABLE_PRICE_STORE_CREDIT_CATALOG_ID,
-          basePriceMoney: {
-            "amount": BigInt(x.product.m.price * 100),
-            "currency": "USD"
-          },
+          basePriceMoney: IMoneyToBigIntMoney(x.product.m.price),
           itemType: "ITEM",
           // we don't fill out applied taxes at the item level
           name: x.product.m.name
         } as OrderLineItem))),
-        discounts: totals.discountApplied > 0 ? [{ 
+        discounts: storeCredit.validation.valid === true && totals.discountApplied > 0 ? [{ 
           type: "FIXED_AMOUNT",
-          amountMoney: { amount: BigInt(totals.discountApplied * 100), currency: CURRENCY.USD },
-          appliedMoney: { amount: BigInt(totals.discountApplied * 100), currency: CURRENCY.USD },
+          amountMoney: { amount: BigInt(totals.discountApplied), currency: CURRENCY.USD },
+          appliedMoney: { amount: BigInt(totals.discountApplied), currency: CURRENCY.USD },
           metadata: { 
             "enc": storeCredit.validation.lock.enc,
             "iv": storeCredit.validation.lock.iv,
@@ -76,10 +75,10 @@ export class SquareProvider implements WProvider {
         // },
         taxes: [{ 
           catalogObjectId: SQUARE_TAX_RATE_CATALOG_ID, 
-          appliedMoney: { amount: BigInt(totals.taxAmount * 100), currency: CURRENCY.USD },
+          appliedMoney: { amount: BigInt(totals.taxAmount), currency: CURRENCY.USD },
           scope: 'ORDER'
         }],
-        totalTipMoney: { amount: BigInt(totals.tipAmount * 100), currency: CURRENCY.USD },
+        totalTipMoney: { amount: BigInt(totals.tipAmount), currency: CURRENCY.USD },
         locationId: DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
         state: "OPEN",
         fulfillments: [{ 

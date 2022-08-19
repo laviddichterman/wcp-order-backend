@@ -32,7 +32,8 @@ const PurchaseStoreCreditValidationChain = [
 
 const SpendStoreCreditValidationChain = [
   body('code').exists().isLength({min: 19, max: 19}),
-  body('amount').exists().isFloat({min: 0.01}),
+  body('amount.amount').exists().isInt({min: 1}),
+  body('amount.currency').exists().isIn(Object.values(CURRENCY)),
   body('updatedBy').exists(),
   body('lock.enc').exists().isString(),
   body('lock.iv').exists().isString(),
@@ -170,7 +171,7 @@ export class StoreCreditController implements IExpressController {
       if (!spending_result.success) {
         return res.status(422).json({success: false} as SpendCreditResponse);
       }
-      return res.status(200).json({success: true, balance: spending_result.entry[3]-req.body.amount} as SpendCreditResponse)
+      return res.status(200).json({success: true, balance: { currency: CURRENCY.USD, amount: spending_result.entry[3]-typedRequest.amount.amount } } as SpendCreditResponse)
     } catch (error) {
       GoogleProviderInstance.SendEmail(
         EMAIL_ADDRESS,

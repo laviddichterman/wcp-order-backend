@@ -1,4 +1,4 @@
-import { CanThisBeOrderedAtThisTimeAndFulfillment, ComputeCartSubTotal, CategorizedRebuiltCart, PRODUCT_LOCATION, WProduct, WCPProductV2Dto, CreateProductWithMetadataFromV2Dto, CreateOrderRequestV2, FulfillmentDto, DeliveryInfoDto, CoreCartEntry, ComputeDiscountApplied, ComputeTaxAmount, ComputeTipBasis, ComputeTipValue, TotalsV2, ComputeTotal, ComputeGiftCardApplied, ComputeBalanceAfterCredits, JSFECreditV2, CreateOrderResponse, WDateUtils, GenerateMenu, IMenu, ComputeSubtotalPreDiscount, ComputeSubtotalAfterDiscount, FulfillmentConfig, OrderPayment, WOrderInstanceNoId, ValidateLockAndSpendSuccess, OrderLineDiscount, CURRENCY, DiscountMethod, PaymentMethod, DineInInfoDto, CALL_LINE_DISPLAY, WOrderInstance, TenderBaseStatus, WError, MoneyToDisplayString } from "@wcp/wcpshared";
+import { CanThisBeOrderedAtThisTimeAndFulfillment, ComputeCartSubTotal, CategorizedRebuiltCart, PRODUCT_LOCATION, WProduct, WCPProductV2Dto, CreateProductWithMetadataFromV2Dto, CreateOrderRequestV2, FulfillmentDto, DeliveryInfoDto, CoreCartEntry, ComputeDiscountApplied, ComputeTaxAmount, ComputeTipBasis, ComputeTipValue, TotalsV2, ComputeTotal, ComputeGiftCardApplied, ComputeBalanceAfterCredits, JSFECreditV2, CreateOrderResponse, WDateUtils, GenerateMenu, IMenu, ComputeSubtotalPreDiscount, ComputeSubtotalAfterDiscount, FulfillmentConfig, OrderPayment, WOrderInstanceNoId, ValidateLockAndSpendSuccess, OrderLineDiscount, CURRENCY, DiscountMethod, PaymentMethod, DineInInfoDto, CALL_LINE_DISPLAY, WOrderInstance, TenderBaseStatus, WError, MoneyToDisplayString, IMoney } from "@wcp/wcpshared";
 
 import { WProvider } from '../types/WProvider';
 
@@ -250,7 +250,7 @@ const RecomputeTotals = function ({ cart, creditValidations, fulfillment, order,
   const taxAmount = ComputeTaxAmount(subtotalAfterDiscount, TAX_RATE);
   const tipBasis = ComputeTipBasis(subtotalPreDiscount, taxAmount);
   const tipMinimum = mainCategoryProductCount >= AUTOGRAT_THRESHOLD ? ComputeTipValue({ isPercentage: true, isSuggestion: true, value: .2 }, tipBasis) : 0;
-  const tipAmount = totals.tip;
+  const tipAmount = totals.tip.amount;
   const total = ComputeTotal(subtotalAfterDiscount, taxAmount, tipAmount);
   const giftCartApplied = ComputeGiftCardApplied(total, creditValidations.map(x => x.validation));
   const balanceAfterCredits = ComputeBalanceAfterCredits(total, giftCartApplied);
@@ -398,20 +398,19 @@ const CreateOrderEvent = async (
     });
 }
 
-const CreateSquareOrderAndCharge = async (reference_id: string, balance: number, nonce: string, note: string) => {
-  const amount_to_charge = Math.round(balance * 100);
-  const create_order_response = await SquareProvider.CreateOrderStoreCredit(reference_id, BigInt(amount_to_charge), note);
+const CreateSquareOrderAndCharge = async (reference_id: string, balance: IMoney, nonce: string, note: string) => {
+  const create_order_response = await SquareProvider.CreateOrderStoreCredit(reference_id, balance, note);
   if (create_order_response.success === true) {
     const square_order_id = create_order_response.result.order.id;
-    logger.info(`For internal id ${reference_id} created Square Order ID: ${square_order_id} for ${amount_to_charge}`)
-    const payment_response = await SquareProvider.ProcessPayment(nonce, BigInt(amount_to_charge), reference_id, square_order_id);
+    logger.info(`For internal id ${reference_id} created Square Order ID: ${square_order_id} for ${MoneyToDisplayString(balance, true)}`)
+    const payment_response = await SquareProvider.ProcessPayment(nonce, balance, reference_id, square_order_id);
     if (payment_response.success === false) {
       logger.error("Failed to process payment: %o", payment_response);
       await SquareProvider.OrderStateChange(square_order_id, create_order_response.result.order.version + 1, "CANCELED");
       return payment_response;
     }
     else {
-      logger.info(`For internal id ${reference_id} and Square Order ID: ${square_order_id} payment for ${amount_to_charge} successful.`)
+      logger.info(`For internal id ${reference_id} and Square Order ID: ${square_order_id} payment for ${MoneyToDisplayString(balance, true)} successful.`)
       return payment_response;
     }
   }
@@ -471,7 +470,7 @@ export class OrderManager implements WProvider {
 
     // 3. recompute the totals to ensure everything matches up, and to get some needed computations that we don't want to pass over the wire and blindly trust
     const recomputedTotals = RecomputeTotals({ cart: rebuiltCart, creditValidations: createOrderRequest.creditValidations, fulfillment: fulfillmentConfig, totals: createOrderRequest.totals, order: orderInstance });
-    if (createOrderRequest.totals.balance !== recomputedTotals.balanceAfterCredits) {
+    if (createOrderRequest.totals.balance.amount !== recomputedTotals.balanceAfterCredits) {
       const errorDetail = `Computed different balance of ${recomputedTotals.balanceAfterCredits} vs sent: ${createOrderRequest.totals.balance}`;
       logger.error(errorDetail)
       return { 
@@ -482,7 +481,7 @@ export class OrderManager implements WProvider {
       };
     }
     // we've only set the tip if we've proceeded to checkout with CC, so no need to check tip fudging if not closing out here
-    if (createOrderRequest.nonce && createOrderRequest.totals.tip < recomputedTotals.tipMinimum) {
+    if (createOrderRequest.nonce && createOrderRequest.totals.tip.amount < recomputedTotals.tipMinimum) {
       const errorDetail = `Computed tip below minimum of ${recomputedTotals.tipMinimum} vs sent: ${createOrderRequest.totals.tip}`;
       logger.error(errorDetail)
       return { 
@@ -494,7 +493,7 @@ export class OrderManager implements WProvider {
     }
 
     // 4. check the availability of the requested service date/time
-    const availabilityMap = WDateUtils.GetInfoMapForAvailabilityComputation(DataProviderInstance.Fulfillments, createOrderRequest.fulfillment.selectedDate, [createOrderRequest.fulfillment.selectedService], { cart_based_lead_time: 0, size: recomputedTotals.mainCategoryProductCount });
+    const availabilityMap = WDateUtils.GetInfoMapForAvailabilityComputation([DataProviderInstance.Fulfillments[createOrderRequest.fulfillment.selectedService]], createOrderRequest.fulfillment.selectedDate, { cart_based_lead_time: 0, size: recomputedTotals.mainCategoryProductCount });
     const optionsForSelectedDate = WDateUtils.GetOptionsForDate(availabilityMap, createOrderRequest.fulfillment.selectedDate, formatISO(requestTime))
     const foundTimeOptionIndex = optionsForSelectedDate.findIndex(x => x.value === createOrderRequest.fulfillment.selectedTime);
     if (foundTimeOptionIndex === -1 || optionsForSelectedDate[foundTimeOptionIndex].disabled) {
@@ -523,29 +522,29 @@ export class OrderManager implements WProvider {
     try {
       await Promise.all(createOrderRequest.creditValidations.map(async (creditUse) => {
         // NOTE: we assume validation of the amount_used field in the RecomputeTotals method
-        if (creditUse.amount_used > 0 && creditUse.validation.valid) {
+        if (creditUse.amount_used.amount > 0 && creditUse.validation.valid) {
           const response = await StoreCreditProvider.ValidateLockAndSpend({ code: creditUse.code, amount: creditUse.amount_used, lock: creditUse.validation.lock, updatedBy: STORE_NAME })
           if (response.success) {
             storeCreditResponses.push(response);
             switch (creditUse.validation.credit_type) {
               case 'DISCOUNT':
-                discountCreditAmountLeft -= creditUse.amount_used;
+                discountCreditAmountLeft -= creditUse.amount_used.amount;
                 discounts.push({
                   status: TenderBaseStatus.COMPLETED,
                   t: DiscountMethod.CreditCodeAmount,
                   createdAt: Date.now(),
-                  amount: { currency: CURRENCY.USD, amount: Math.round(creditUse.amount_used * 100) },
+                  amount: creditUse.amount_used,
                   code: creditUse.code,
                   lock: creditUse.validation.lock
                 });
                 break;
               case 'MONEY':
-                moneyCreditAmountLeft -= creditUse.amount_used;
+                moneyCreditAmountLeft -= creditUse.amount_used.amount;
                 payments.push({
                   status: TenderBaseStatus.COMPLETED,
                   t: PaymentMethod.StoreCredit,
                   createdAt: Date.now(),
-                  amount: { currency: CURRENCY.USD, amount: Math.round(creditUse.amount_used * 100) },
+                  amount: creditUse.amount_used,
                   code: creditUse.code,
                   lock: creditUse.validation.lock
                 });
