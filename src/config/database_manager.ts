@@ -309,7 +309,7 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
   }],
   "0.3.10": [{ major: 0, minor: 4, patch: 0 }, async () => {
   }],
-  "0.4.0": [{ major: 0, minor: 5, patch: 0 }, async () => {
+  "0.4.0": [{ major: 0, minor: 4, patch: 90 }, async () => {
     {
       // IProduct remove item and set externalIDs = {}
       // remove ProductModifierSchema.service_disable and log warning

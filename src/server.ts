@@ -12,6 +12,7 @@ import { KeyValueStoreController } from "./controllers/KeyValueStoreController";
 import { ModifierController } from "./controllers/ModifierController";
 import { ProductController } from "./controllers/ProductController";
 import { ProductInstanceFunctionController } from "./controllers/ProductInstanceFunctionController";
+import { FulfillmentController } from "./controllers/FulfillmentController";
 import { SettingsController } from "./controllers/SettingsController";
 import { CategoryController } from "./controllers/CategoryController";
 import { StoreCreditController } from "./controllers/StoreCreditController";
@@ -36,7 +37,8 @@ const app = new WApp(["nsRO"],
     new SettingsController(),
     new StoreCreditController(),
     new AccountingController(),
-    new OrderController()
+    new OrderController(),
+    new FulfillmentController()
   ],
   [DatabaseManagerInstance, 
     DataProviderInstance, 

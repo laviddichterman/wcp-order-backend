@@ -78,7 +78,6 @@ const GenerateAutoResponseBodyEscaped = function (
   fulfillmentConfig: FulfillmentConfig,
   date_time_interval: Interval,
   phone_number: string,
-  delivery_info: DeliveryInfoDto | null,
   isPaid: boolean
 ) {
   const NOTE_PREPAID = "You've already paid, so unless there's an issue with the order, there's no need to handle payment from this point forward.";
@@ -89,9 +88,10 @@ const GenerateAutoResponseBodyEscaped = function (
   const nice_area_code = IsNativeAreaCode(phone_number, STORE_NAME === WCP ? WCP_AREA_CODES : BTP_AREA_CODES);
   const payment_section = isPaid ? NOTE_PREPAID : NOTE_PAYMENT;
   const display_time = DateTimeIntervalToDisplayServiceInterval(date_time_interval);
-  const confirm = [`We're happy to confirm your ${display_time} pickup at`, `We're happy to confirm your ${display_time} order at`, `We're happy to confirm your delivery around ${display_time} at`];
-  const where = [STORE_ADDRESS, STORE_ADDRESS, delivery_info?.validation.validated_address ?? "NOPE"];
-  return encodeURIComponent(`${nice_area_code ? "Hey, nice area code!" : "Thanks!"} ${confirm[fulfillmentConfig.service]} ${where[fulfillmentConfig.service]}.\n\n${fulfillmentConfig.messages.INSTRUCTIONS} ${payment_section}`);
+  // const confirm = [`We're happy to confirm your ${display_time} pickup at`, `We're happy to confirm your ${display_time} at`, `We're happy to confirm your delivery around ${display_time} at`];
+  // const where = [STORE_ADDRESS, STORE_ADDRESS, delivery_info?.validation.validated_address ?? "NOPE"];
+  // TODO: need to message the delivery address if relevant
+  return encodeURIComponent(`${nice_area_code ? "Hey, nice area code!" : "Thanks!"} ${fulfillmentConfig.messages.CONFIRMATION} ${STORE_ADDRESS}.\n\n${fulfillmentConfig.messages.INSTRUCTIONS} ${payment_section}`);
 }
 
 function GenerateOrderPaymentDisplay(payment: OrderPayment, isHtml: boolean) { 
@@ -284,7 +284,7 @@ const CreateInternalEmail = async (
 
   const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
   const sameDayOrder = isSameDay(requestTime, dateTimeInterval.start);
-  const confirmation_body_escaped = GenerateAutoResponseBodyEscaped(fulfillmentConfig, dateTimeInterval, order.customerInfo.mobileNum, order.fulfillment.deliveryInfo, isPaid)
+  const confirmation_body_escaped = GenerateAutoResponseBodyEscaped(fulfillmentConfig, dateTimeInterval, order.customerInfo.mobileNum, isPaid)
   const confirmation_subject_escaped = encodeURIComponent(service_title);
   const payment_section = isPaid ? GeneratePaymentSection(totals, order.discounts, order.payments, true) : "";
   const delivery_section = GenerateDeliverySection(order.fulfillment.deliveryInfo, true);

@@ -1,10 +1,21 @@
-import { FulfillmentType, FulfillmentConfig, DayOfTheWeek } from "@wcp/wcpshared";
+import { FulfillmentType, FulfillmentConfig, DayOfTheWeek, DateIntervalEntry } from "@wcp/wcpshared";
 import mongoose, { Schema } from "mongoose";
 import path from 'path';
 import { IntervalSchema } from "../IntervalSchema";
 import { DeliveryAreaSchema } from "./DeliveryAreaSchema";
 
 type MT = Omit<FulfillmentConfig, "id">;
+
+const IntervalEntrySchema = new Schema<DateIntervalEntry>({
+  key: { 
+    type: String,
+    requred: true
+  },
+  value: {
+    type: [IntervalSchema],
+    required: true
+  }
+}, { _id: false });
 
 export const FulfillmentSchema = new Schema<MT>({
   displayName: {
@@ -21,7 +32,7 @@ export const FulfillmentSchema = new Schema<MT>({
     required: true
   },
   service: {
-    type: Number,
+    type: String,
     enum: FulfillmentType,
     required: true
   },
@@ -44,8 +55,12 @@ export const FulfillmentSchema = new Schema<MT>({
     ref: 'WCategorySchema'
   },
   messages: {
-    CONFIRMATION: String,
-    INSTRUCTIONS: String
+    type: {
+      CONFIRMATION: String,
+      INSTRUCTIONS: String
+    },
+    required: true,
+    _id: false
   },
   terms: { type: [String], required: true },
   autograt: Schema.Types.Mixed,
@@ -82,17 +97,20 @@ export const FulfillmentSchema = new Schema<MT>({
         required: true
       },
     },
-    required: true
+    required: true,
+    _id: false
   },
   specialHours: {
-    type: Schema.Types.Map,
-    of: [IntervalSchema],
-    required: true
+    type: [IntervalEntrySchema],
+    default: [],
+    required: true,
+    _id: false
   },
   blockedOff: {
-    type: Schema.Types.Map,
-    of: [IntervalSchema],
-    required: true
+    type: [IntervalEntrySchema],
+    default: [],
+    required: true,
+    _id: false
   },
   minDuration: { type: Number, required: true },
   maxDuration: { type: Number, required: true },

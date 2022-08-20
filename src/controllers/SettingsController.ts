@@ -12,7 +12,7 @@ import { PostBlockedOffToFulfillmentsRequest, SetLeadTimesRequest } from '@wcp/w
 const BlockOffValidationChain = [  
   body('fulfillmentIds').isArray({ min: 1 }),
   body('fulfillmentIds.*').custom(isFulfillmentDefined),
-  body('date').isDate({format:"YYYYMMDD"}),
+  body('date').isISO8601(),
   body('interval.start').trim().exists().isInt({min: 0, max: 1440}),
   body('interval.end').trim().exists().isInt({min: 0, max: 1440}),
 ];
@@ -50,7 +50,8 @@ export class SettingsController implements IExpressController {
         interval: { start: req.body.interval.start, end: req.body.interval.end }
       };
       await DataProviderInstance.postBlockedOffToFulfillments(requestBody);
-      SocketIoProviderInstance.EmitFulfillments(DataProviderInstance.Fulfillments);
+      await DataProviderInstance.syncFulfillments();
+      await SocketIoProviderInstance.EmitFulfillments(DataProviderInstance.Fulfillments);
       const location = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
       res.setHeader('Location', location);
       return res.status(201).send(DataProviderInstance.Fulfillments);
@@ -67,6 +68,7 @@ export class SettingsController implements IExpressController {
         interval: { start: req.body.interval.start, end: req.body.interval.end }
       };
       await DataProviderInstance.deleteBlockedOffFromFulfillments(requestBody);
+      await DataProviderInstance.syncFulfillments();
       SocketIoProviderInstance.EmitFulfillments(DataProviderInstance.Fulfillments);
       return res.status(201).send(DataProviderInstance.Fulfillments);
     } catch (error) {

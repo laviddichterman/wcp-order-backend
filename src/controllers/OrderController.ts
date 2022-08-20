@@ -13,7 +13,7 @@ import { isFulfillmentDefined } from '../types/Validations';
 // THIS IS BS NOW, REDO
 const V2OrderValidationChain = [
   body('fulfillment.selectedService').exists().isMongoId().custom(isFulfillmentDefined),
-  body('fulfillment.selectedDate').isDate({format:'YYYYMMDD'}).exists(),
+  body('fulfillment.selectedDate').isISO8601(),
   body('fulfillment.selectedTime').isInt({ min: 0, max: 1440 }).exists(),
   body('customerInfo.givenName').trim().escape().exists(),
   body('customerInfo.familyName').trim().escape().exists(),

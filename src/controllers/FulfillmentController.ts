@@ -8,6 +8,7 @@ import logger from '../logging';
 import IExpressController from '../types/IExpressController';
 import { CheckJWT, ScopeDeleteCatalog, ScopeWriteCatalog } from '../config/authorization';
 import DataProviderInstance from '../config/dataprovider';
+import SocketIoProviderInstance from '../config/socketio_provider';
 
 
 const FulfillmentConfigByIdValidationChain = [
@@ -18,9 +19,10 @@ const FulfillmentValidationChain = [
   body('displayName').trim().exists(),
   body('shortcode').trim().escape().exists(),
   body('ordinal').isInt({min: 0}),
-  body('service').isInt({min: 0, max: (Object.keys(FulfillmentType).length/2) - 1}),
+  body('service').exists().isIn(Object.keys(FulfillmentType)),
   body('terms.*').trim().escape().exists(),
   body('messages.CONFIRMATION').isString().trim().exists(),
+  body('messages.INSTRUCTIONS').isString().trim().exists(),
   body('menuBaseCategoryId').trim().escape().exists().isMongoId(),
   body('orderBaseCategoryId').trim().escape().exists().isMongoId(),
   body('requirePrepayment').exists().isBoolean({ strict: true }),
@@ -33,14 +35,14 @@ const FulfillmentValidationChain = [
   body('operatingHours.*').isArray(),
   body('operatingHours.*.*.start').isInt({ min: 0, max: 1440 }),
   body('operatingHours.*.*.end').isInt({ min: 0, max: 1440 }),
-  body('specialHours').isObject().exists(),
-  body('specialHours.*').isArray(),
-  body('specialHours.*.*.start').isInt({ min: 0, max: 1440 }),
-  body('specialHours.*.*.end').isInt({ min: 0, max: 1440 }),
-  body('blockedOff').isObject().exists(),
-  body('blockedOff.*').isArray(),
-  body('blockedOff.*.*.start').isInt({ min: 0, max: 1440 }),
-  body('blockedOff.*.*.end').isInt({ min: 0, max: 1440 }),
+  body('specialHours').exists().isArray(),
+  body('specialHours.*.key').isISO8601(),
+  body('specialHours.*.value.start').isInt({ min: 0, max: 1440 }),
+  body('specialHours.*.value.end').isInt({ min: 0, max: 1440 }),
+  body('blockedOff').exists().isArray(),
+  body('blockedOff.*.key').isISO8601(),
+  body('blockedOff.*.value.start').isInt({ min: 0, max: 1440 }),
+  body('blockedOff.*.value.end').isInt({ min: 0, max: 1440 }),
   body('minDuration').exists().isInt({ min: 0 }),
   body('maxDuration').exists().isInt({ min: 0 }),
   body('timeStep').exists().isInt({ min: 1 }),
@@ -53,7 +55,7 @@ const EditFulfillmentValidationChain = [
   ...FulfillmentValidationChain
 ];
 
-export class ProductController implements IExpressController {
+export class FulfillmentController implements IExpressController {
   public path = "/api/v1/config/fulfillment";
   public router = Router({ mergeParams: true });
 
@@ -94,7 +96,9 @@ export class ProductController implements IExpressController {
         serviceArea: req.body.serviceArea
       };
       DataProviderInstance.setFulfillment(fulfillment)
-      .then(newFulfillment => {
+      .then(async (newFulfillment) => {
+        await DataProviderInstance.syncFulfillments();
+        await SocketIoProviderInstance.EmitFulfillments(DataProviderInstance.Fulfillments);
         const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/${newFulfillment._id}`;
         res.setHeader('Location', location);
         return res.status(201).send(newFulfillment);
@@ -138,9 +142,10 @@ export class ProductController implements IExpressController {
         serviceArea: req.body.serviceArea
       };
       DataProviderInstance.updateFulfillment(fulfillmentId, fulfillment)
-      .then(updatedFulfillment => {
+      .then(async(updatedFulfillment) => {
         logger.info(`Successfully updated Fulfillment: ${JSON.stringify(updatedFulfillment)}`);
-
+        await DataProviderInstance.syncFulfillments();
+        await SocketIoProviderInstance.EmitFulfillments(DataProviderInstance.Fulfillments);
         // TODO: check if we need to ensure something is consistent in the catalog
 
         return res.status(200).send(updatedFulfillment);
@@ -159,10 +164,12 @@ export class ProductController implements IExpressController {
     try {
       const fulfillmentId = req.params.fid;
       DataProviderInstance.deleteFulfillment(fulfillmentId)
-      .then((doc) => {
+      .then(async (doc) => {
         logger.info(`Successfully deleted Fulfillment ${doc}`);
         // TODO: make catalog consistent
         // REQUIRED BEFORE LAUNCH
+        await DataProviderInstance.syncFulfillments();
+        SocketIoProviderInstance.EmitFulfillments(DataProviderInstance.Fulfillments);
         return res.status(200).send(doc);
       })
       .catch((err) => {

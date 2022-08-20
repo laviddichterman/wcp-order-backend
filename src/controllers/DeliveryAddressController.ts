@@ -6,11 +6,9 @@ import { Client } from "@googlemaps/google-maps-services-js";
 import * as turf from '@turf/turf'
 
 import DataProviderInstance, { DataProvider } from '../config/dataprovider';
-import SocketIoProviderInstance from '../config/socketio_provider';
 import logger from '../logging';
 import IExpressController from '../types/IExpressController';
 import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
-import { CheckJWT, ScopeWriteKVStore } from '../config/authorization';
 import { DeliveryAddressValidateRequest, DeliveryAddressValidateResponse } from '@wcp/wcpshared';
 import { body } from 'express-validator';
 import { isFulfillmentDefined } from '../types/Validations';

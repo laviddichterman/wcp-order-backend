@@ -19,16 +19,19 @@ export class DataProvider implements WProvider {
     this.#keyvalueconfig = {};
   }
 
-  Bootstrap = async () => {
-    logger.info("DataProvider: Loading from and bootstrapping to database.");
-
+  syncFulfillments = async() => {
     logger.debug(`Syncing Fulfillments.`);
-    // modifier types
     try {
       this.#fulfillments = ReduceArrayToMapByKey((await FulfillmentModel.find().exec()).map(x => x.toObject()), 'id');
     } catch (err) {
       logger.error(`Failed fetching option types with error: ${JSON.stringify(err)}`);
-    }
+    } 
+  }
+
+  Bootstrap = async () => {
+    logger.info("DataProvider: Loading from and bootstrapping to database.");
+
+    await this.syncFulfillments();
 
     // look for key value config area:
     const found_key_value_store = await KeyValueModel.findOne();
@@ -78,6 +81,8 @@ export class DataProvider implements WProvider {
     });
   }
 
+
+
   postBlockedOffToFulfillments = async (request: PostBlockedOffToFulfillmentsRequest) => {
     return await Promise.all(request.fulfillmentIds.map(async (fId) => {
       const newBlockedOff = WDateUtils.AddIntervalToDate(request.interval, request.date, this.#fulfillments[fId].blockedOff);
@@ -100,6 +105,8 @@ export class DataProvider implements WProvider {
 
   setFulfillment = async (fulfillment: Omit<FulfillmentConfig, 'id'>) => {
     const fm = new FulfillmentModel(fulfillment);
+    console.log(fm);
+    console.log(fulfillment);
     const savePromise = fm.save()
       .then(x => {
         logger.debug(`Saved new fulfillment: ${JSON.stringify(x)}`);
