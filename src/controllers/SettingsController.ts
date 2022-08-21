@@ -69,7 +69,7 @@ export class SettingsController implements IExpressController {
       };
       await DataProviderInstance.deleteBlockedOffFromFulfillments(requestBody);
       await DataProviderInstance.syncFulfillments();
-      SocketIoProviderInstance.EmitFulfillments(DataProviderInstance.Fulfillments);
+      await SocketIoProviderInstance.EmitFulfillments(DataProviderInstance.Fulfillments);
       return res.status(201).send(DataProviderInstance.Fulfillments);
     } catch (error) {
       next(error)
@@ -80,7 +80,8 @@ export class SettingsController implements IExpressController {
     try {
       const requestBody: SetLeadTimesRequest = req.body;
       await DataProviderInstance.setLeadTimes(requestBody);
-      SocketIoProviderInstance.EmitFulfillments(DataProviderInstance.Fulfillments);
+      await DataProviderInstance.syncFulfillments();
+      await SocketIoProviderInstance.EmitFulfillments(DataProviderInstance.Fulfillments);
       const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/`;
       res.setHeader('Location', location);
       return res.status(201).send(DataProviderInstance.Fulfillments);
