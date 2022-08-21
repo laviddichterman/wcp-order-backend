@@ -453,7 +453,7 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
       // camelCase: displayName, displayFlags
       const WOptionTypeModel = mongoose.model('WOpTIOntypeSchema', new Schema({
         display_name: String,
-        displayName: String,        
+        displayName: String,
         externalIDs: Schema.Types.Mixed,
         displayFlags: Schema.Types.Mixed,
         display_flags: Schema.Types.Mixed,
@@ -476,6 +476,10 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
           });
       }));
     }
+  }],
+  "0.4.90": [{ major: 0, minor: 4, patch: 91 }, async () => {
+  }],
+  "0.4.91": [{ major: 0, minor: 4, patch: 92 }, async () => {
   }],
 }
 
