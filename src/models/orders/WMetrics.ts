@@ -1,15 +1,11 @@
 import { Schema } from "mongoose";
-import { MetricsDto } from "@wcp/wcpshared";
+import { Metrics } from "@wcp/wcpshared";
 
-export const WMetricsSchema = new Schema<MetricsDto>({
+export const WMetricsSchema = new Schema<Metrics>({
     pageLoadTime: Number,
-    pageLoadTimeLocal: Number,
-    roughTicksSinceLoad: Number,
     numTimeBumps: Number,
     numTipAdjusts: Number,
     numTipFixed: Number,
-    currentTime: Number,
-    currentLocalTime: Number,
     timeToFirstProduct: Number,
     timeToServiceDate: Number,
     timeToServiceTime: Number,

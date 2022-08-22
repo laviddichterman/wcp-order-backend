@@ -1,4 +1,46 @@
-import { CanThisBeOrderedAtThisTimeAndFulfillment, ComputeCartSubTotal, CategorizedRebuiltCart, PRODUCT_LOCATION, WProduct, WCPProductV2Dto, CreateProductWithMetadataFromV2Dto, CreateOrderRequestV2, FulfillmentDto, DeliveryInfoDto, CoreCartEntry, ComputeDiscountApplied, ComputeTaxAmount, ComputeTipBasis, ComputeTipValue, TotalsV2, ComputeTotal, ComputeGiftCardApplied, ComputeBalanceAfterCredits, JSFECreditV2, CreateOrderResponse, WDateUtils, GenerateMenu, IMenu, ComputeSubtotalPreDiscount, ComputeSubtotalAfterDiscount, FulfillmentConfig, OrderPayment, WOrderInstanceNoId, ValidateLockAndSpendSuccess, OrderLineDiscount, CURRENCY, DiscountMethod, PaymentMethod, DineInInfoDto, CALL_LINE_DISPLAY, WOrderInstance, TenderBaseStatus, WError, MoneyToDisplayString, IMoney } from "@wcp/wcpshared";
+import { 
+  CanThisBeOrderedAtThisTimeAndFulfillment, 
+  ComputeCartSubTotal, 
+  CategorizedRebuiltCart, 
+  PRODUCT_LOCATION, 
+  WProduct, 
+  WCPProductV2Dto, 
+  CreateProductWithMetadataFromV2Dto, 
+  CreateOrderRequestV2, 
+  FulfillmentDto, 
+  DeliveryInfoDto, 
+  CoreCartEntry, 
+  ComputeDiscountApplied, 
+  ComputeTaxAmount, 
+  ComputeTipBasis, 
+  ComputeTipValue, 
+  TotalsV2, 
+  ComputeTotal, 
+  ComputeGiftCardApplied, 
+  ComputeBalanceAfterCredits, 
+  JSFECreditV2, 
+  CreateOrderResponse, 
+  WDateUtils, 
+  GenerateMenu, 
+  IMenu, 
+  ComputeSubtotalPreDiscount, 
+  ComputeSubtotalAfterDiscount, 
+  FulfillmentConfig, 
+  OrderPayment, 
+  WOrderInstanceNoId, 
+  ValidateLockAndSpendSuccess, 
+  OrderLineDiscount, 
+  CURRENCY, 
+  DiscountMethod, 
+  PaymentMethod, 
+  DineInInfoDto, 
+  CALL_LINE_DISPLAY, 
+  WOrderInstance, 
+  TenderBaseStatus, 
+  WError, 
+  MoneyToDisplayString, 
+  IMoney, 
+  DateTimeIntervalBuilder } from "@wcp/wcpshared";
 
 import { WProvider } from '../types/WProvider';
 
@@ -61,13 +103,6 @@ const IsNativeAreaCode = function (phone: string, area_codes: string[]) {
   const numeric_phone = phone.match(/\d/g).join("");
   const area_code = numeric_phone.slice(0, 3);
   return (numeric_phone.length == 10 && area_codes.some(x => x === area_code));
-};
-
-const DateTimeIntervalBuilder = ({ selectedDate, selectedTime }: Pick<FulfillmentDto, "selectedDate" | "selectedTime">, fulfillment: FulfillmentConfig) => {
-  // hack for date computation on DST transition days since we're currently not open during the time jump
-  const date_lower = WDateUtils.ComputeServiceDateTime(selectedDate, selectedTime);
-  const date_upper = addMinutes(date_lower, fulfillment.maxDuration);
-  return { start: date_lower, end: date_upper } as Interval;
 };
 
 const DateTimeIntervalToDisplayServiceInterval = (interval: Interval) => {
