@@ -36,18 +36,18 @@ interface RecomputeTotalsArgs {
 
 export interface RecomputeTotalsResult {
   mainCategoryProductCount: number;
-  cartSubtotal: number;
-  serviceFee: number;
-  subtotalPreDiscount: number;
-  subtotalAfterDiscount: number;
-  discountApplied: number;
-  taxAmount: number;
-  tipBasis: number;
-  tipMinimum: number;
-  total: number;
-  giftCartApplied: number;
-  balanceAfterCredits: number;
-  tipAmount: number;
+  cartSubtotal: IMoney;
+  serviceFee: IMoney;
+  subtotalPreDiscount: IMoney;
+  subtotalAfterDiscount: IMoney;
+  discountApplied: IMoney;
+  taxAmount: IMoney;
+  tipBasis: IMoney;
+  tipMinimum: IMoney;
+  total: IMoney;
+  giftCartApplied: IMoney;
+  balanceAfterCredits: IMoney;
+  tipAmount: IMoney;
 }
 
 const GenerateShortCode = function (menu: IMenu, p: WProduct) {
@@ -120,10 +120,10 @@ function GenerateOrderLineDiscountDisplay(discount: OrderLineDiscount, isHtml: b
 }
 
 const GeneratePaymentSection = (totals: RecomputeTotalsResult, discounts: OrderLineDiscount[], payments: OrderPayment[], isHtml: boolean) => {
-  const tip_amount = `\$${Number(totals.tipAmount).toFixed(2)}`;
-  const subtotal = `\$${Number(totals.subtotalAfterDiscount).toFixed(2)}`;
-  const totalAfterTaxBeforeTip = `\$${Number(totals.subtotalAfterDiscount + totals.taxAmount).toFixed(2)}`;
-  const total_amount = "$" + Number(totals.total).toFixed(2);
+  const tip_amount = MoneyToDisplayString(totals.tipAmount, true);
+  const subtotal = MoneyToDisplayString(totals.subtotalAfterDiscount, true);
+  const totalAfterTaxBeforeTip = MoneyToDisplayString({ currency: CURRENCY.USD, amount: totals.subtotalAfterDiscount.amount + totals.taxAmount.amount }, true);
+  const total_amount = MoneyToDisplayString(totals.total, true);
   const paymentDisplays = payments.map(payment => GenerateOrderPaymentDisplay(payment, isHtml)).join(isHtml ? "<br />" : "\n");
   const discountDisplays = discounts.map(discount => GenerateOrderLineDiscountDisplay(discount, isHtml)).join(isHtml ? "<br />" : "\n");
   return isHtml ? `${discountDisplays}
@@ -242,15 +242,15 @@ const RecomputeTotals = function ({ cart, creditValidations, fulfillment, order,
   // TODO: validate the amount used field in the creditValidations
 
   const mainCategoryProductCount = Object.hasOwn(cart, MAIN_CATID) ? cart[MAIN_CATID].reduce((acc, e) => acc + e.quantity, 0) : 0;
-  const cartSubtotal = Object.values(cart).reduce((acc, c) => acc + ComputeCartSubTotal(c), 0);
-  const serviceFee = fulfillment.serviceCharge !== null ? OrderFunctional.ProcessOrderInstanceFunction(order, CatalogProviderInstance.Catalog.orderInstanceFunctions[fulfillment.serviceCharge], CatalogProviderInstance.Catalog) as number : 0;
+  const cartSubtotal = { currency: CURRENCY.USD, amount: Object.values(cart).reduce((acc, c) => acc + ComputeCartSubTotal(c).amount, 0) };
+  const serviceFee = { currency: CURRENCY.USD, amount: fulfillment.serviceCharge !== null ? OrderFunctional.ProcessOrderInstanceFunction(order, CatalogProviderInstance.Catalog.orderInstanceFunctions[fulfillment.serviceCharge], CatalogProviderInstance.Catalog) as number : 0 };
   const subtotalPreDiscount = ComputeSubtotalPreDiscount(cartSubtotal, serviceFee);
   const discountApplied = ComputeDiscountApplied(subtotalPreDiscount, creditValidations.map(x => x.validation));
   const subtotalAfterDiscount = ComputeSubtotalAfterDiscount(subtotalPreDiscount, discountApplied);
   const taxAmount = ComputeTaxAmount(subtotalAfterDiscount, TAX_RATE);
   const tipBasis = ComputeTipBasis(subtotalPreDiscount, taxAmount);
-  const tipMinimum = mainCategoryProductCount >= AUTOGRAT_THRESHOLD ? ComputeTipValue({ isPercentage: true, isSuggestion: true, value: .2 }, tipBasis) : 0;
-  const tipAmount = totals.tip.amount;
+  const tipMinimum = mainCategoryProductCount >= AUTOGRAT_THRESHOLD ? ComputeTipValue({ isPercentage: true, isSuggestion: true, value: .2 }, tipBasis) : { currency: CURRENCY.USD, amount: 0 };
+  const tipAmount = totals.tip;
   const total = ComputeTotal(subtotalAfterDiscount, taxAmount, tipAmount);
   const giftCartApplied = ComputeGiftCardApplied(total, creditValidations.map(x => x.validation));
   const balanceAfterCredits = ComputeBalanceAfterCredits(total, giftCartApplied);
@@ -470,8 +470,8 @@ export class OrderManager implements WProvider {
 
     // 3. recompute the totals to ensure everything matches up, and to get some needed computations that we don't want to pass over the wire and blindly trust
     const recomputedTotals = RecomputeTotals({ cart: rebuiltCart, creditValidations: createOrderRequest.creditValidations, fulfillment: fulfillmentConfig, totals: createOrderRequest.totals, order: orderInstance });
-    if (createOrderRequest.totals.balance.amount !== recomputedTotals.balanceAfterCredits) {
-      const errorDetail = `Computed different balance of ${recomputedTotals.balanceAfterCredits} vs sent: ${createOrderRequest.totals.balance}`;
+    if (createOrderRequest.totals.balance.amount !== recomputedTotals.balanceAfterCredits.amount) {
+      const errorDetail = `Computed different balance of ${MoneyToDisplayString(recomputedTotals.balanceAfterCredits, true)} vs sent: ${MoneyToDisplayString(createOrderRequest.totals.balance, true)}`;
       logger.error(errorDetail)
       return { 
         status: 500, 
@@ -481,8 +481,8 @@ export class OrderManager implements WProvider {
       };
     }
     // we've only set the tip if we've proceeded to checkout with CC, so no need to check tip fudging if not closing out here
-    if (createOrderRequest.nonce && createOrderRequest.totals.tip.amount < recomputedTotals.tipMinimum) {
-      const errorDetail = `Computed tip below minimum of ${recomputedTotals.tipMinimum} vs sent: ${createOrderRequest.totals.tip}`;
+    if (createOrderRequest.nonce && createOrderRequest.totals.tip.amount < recomputedTotals.tipMinimum.amount) {
+      const errorDetail = `Computed tip below minimum of ${MoneyToDisplayString(recomputedTotals.tipMinimum, true)} vs sent: ${MoneyToDisplayString(createOrderRequest.totals.tip, true)}`;
       logger.error(errorDetail)
       return { 
         status: 500, 
@@ -516,8 +516,8 @@ export class OrderManager implements WProvider {
 
     // Payment part A: attempt to process store credits, keep track of old store credit balance in case of failure
     const storeCreditResponses: ValidateLockAndSpendSuccess[] = [];
-    let moneyCreditAmountLeft = recomputedTotals.giftCartApplied;
-    let discountCreditAmountLeft = recomputedTotals.discountApplied;
+    let moneyCreditAmountLeft = recomputedTotals.giftCartApplied.amount;
+    let discountCreditAmountLeft = recomputedTotals.discountApplied.amount;
     let creditProcessingFailed = false;
     try {
       await Promise.all(createOrderRequest.creditValidations.map(async (creditUse) => {
@@ -566,14 +566,14 @@ export class OrderManager implements WProvider {
       return { status: 404, success: false, result: null, errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'INSUFFICIENT_FUNDS', detail: "Unable to debit store credit." }] };
     }
 
-    if (recomputedTotals.balanceAfterCredits === 0) {
+    if (recomputedTotals.balanceAfterCredits.amount === 0) {
       isPaid = true;
     }
 
     // Payment part B: attempt to charge balance to credit card
     let errors = [] as WError[];
     let hasChargingSucceeded = false;
-    if (recomputedTotals.balanceAfterCredits > 0 && createOrderRequest.nonce) {
+    if (recomputedTotals.balanceAfterCredits.amount > 0 && createOrderRequest.nonce) {
       try {
         const response = await CreateSquareOrderAndCharge(reference_id, createOrderRequest.totals.balance, createOrderRequest.nonce, `This credit is applied to your order for: ${service_title}`);
         if (response.success) {

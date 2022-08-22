@@ -59,10 +59,10 @@ export class SquareProvider implements WProvider {
           // we don't fill out applied taxes at the item level
           name: x.product.m.name
         } as OrderLineItem))),
-        discounts: storeCredit.validation.valid === true && totals.discountApplied > 0 ? [{ 
+        discounts: storeCredit.validation.valid === true && totals.discountApplied.amount > 0 ? [{ 
           type: "FIXED_AMOUNT",
-          amountMoney: { amount: BigInt(totals.discountApplied), currency: CURRENCY.USD },
-          appliedMoney: { amount: BigInt(totals.discountApplied), currency: CURRENCY.USD },
+          amountMoney: IMoneyToBigIntMoney(totals.discountApplied),
+          appliedMoney: IMoneyToBigIntMoney(totals.discountApplied),
           metadata: { 
             "enc": storeCredit.validation.lock.enc,
             "iv": storeCredit.validation.lock.iv,
@@ -75,10 +75,10 @@ export class SquareProvider implements WProvider {
         // },
         taxes: [{ 
           catalogObjectId: SQUARE_TAX_RATE_CATALOG_ID, 
-          appliedMoney: { amount: BigInt(totals.taxAmount), currency: CURRENCY.USD },
+          appliedMoney: IMoneyToBigIntMoney(totals.taxAmount),
           scope: 'ORDER'
         }],
-        totalTipMoney: { amount: BigInt(totals.tipAmount), currency: CURRENCY.USD },
+        totalTipMoney: IMoneyToBigIntMoney(totals.tipAmount),
         locationId: DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
         state: "OPEN",
         fulfillments: [{ 
