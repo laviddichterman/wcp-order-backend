@@ -25,7 +25,7 @@ const PurchaseStoreCreditValidationChain = [
   body('senderEmail').isEmail().exists(),
   body('recipientNameFirst').trim().exists().escape(),
   body('recipientNameLast').trim().exists().escape(),
-  body('recipientEmail').optional().isEmail(),
+  body('recipientEmail').optional({nullable: true}).isEmail(),
   body('sendEmailToRecipient').toBoolean(true),
   body('recipientMessage').trim()
 ];
@@ -47,7 +47,7 @@ const IssueStoreCreditValidationChain = [
   body('recipientNameLast').trim().exists().escape(),
   body('recipientEmail').isEmail(),
   body('creditType').trim().exists().isIn(Object.keys(StoreCreditType)),
-  body('expiration').optional().isDate({format:'YYYYMMDD'}),
+  body('expiration').optional({nullable: true}).isISO8601(),
   body('addedBy').trim().exists().escape(),
   body('reason').trim().exists().escape(),
 ];
