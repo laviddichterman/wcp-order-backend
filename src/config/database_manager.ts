@@ -485,6 +485,31 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
   }],
   "0.4.93": [{ major: 0, minor: 4, patch: 94 }, async () => {
   }],
+  "0.4.94": [{ major: 0, minor: 4, patch: 95 }, async () => {
+
+    const SettingsModel = mongoose.model('SeTTingsSchema', new Schema({
+      pipeline_info: Schema.Types.Mixed,
+      operating_hours: Schema.Types.Mixed,
+      time_step: Schema.Types.Mixed,
+      time_step2: Schema.Types.Mixed,
+    }));
+    const s_update = await SettingsModel.updateMany(
+      {},
+      {
+        $unset: {
+          "pipeline_info": "",
+          "operating_hours": "",
+          "time_step": "",
+          "time_step2": "",
+        }
+      });
+    if (s_update.modifiedCount > 0) {
+      logger.debug(`Updated ${s_update.modifiedCount} SettingsModel documents to remove old settings fields.`);
+    }
+    else {
+      logger.error("Didn't update SettingsModel");
+    }
+  }],
 }
 
 export class DatabaseManager implements WProvider {

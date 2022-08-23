@@ -54,8 +54,14 @@ export const FulfillmentSchema = new Schema<MT>({
     required: true,
     ref: 'WCategorySchema'
   },
+  orderSupplementaryCategoryId: {
+    type: String,
+    required: false,
+    ref: 'WCategorySchema'
+  },
   messages: {
     type: {
+      DESCRIPTION: String,
       CONFIRMATION: String,
       INSTRUCTIONS: String
     },

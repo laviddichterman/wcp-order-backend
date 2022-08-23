@@ -30,6 +30,7 @@ import socketIo from "socket.io";
 import logger from '../logging';
 import { WProvider } from "../types/WProvider";
 import { WApp } from "../App";
+import DataProviderInstance from "./dataprovider";
 
 // Returns [ category_map, product_map ] list;
 // category_map entries are mapping of catagory_id to { category, children (id list), product (id list) }
@@ -312,6 +313,19 @@ export class CatalogProvider implements WProvider {
   DeleteCategory = async (category_id: string) => {
     logger.debug(`Removing ${category_id}`);
     try {
+      // first make sure this isn't used in a fulfillment
+      Object.values(DataProviderInstance.Fulfillments).map((x) => {
+        if (x.menuBaseCategoryId === category_id) {
+          throw Error(`CategoryId: ${category_id} found as Menu Base for FulfillmentId: ${x.id} (${x.displayName})`); 
+        }
+        if (x.orderBaseCategoryId === category_id) {
+          throw Error(`CategoryId: ${category_id} found as Order Base for FulfillmentId: ${x.id} (${x.displayName})`); 
+        }
+        if (x.orderSupplementaryCategoryId === category_id) {
+          throw Error(`CategoryId: ${category_id} found as Order Supplementary for FulfillmentId: ${x.id} (${x.displayName})`); 
+        }
+      });
+
       const doc = await WCategoryModel.findByIdAndDelete(category_id);
       if (!doc) {
         return null;

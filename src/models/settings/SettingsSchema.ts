@@ -24,4 +24,4 @@ export const SettingsSchema = new Schema<IWSettings>({
   },
 });
 
-export default mongoose.model<IWSettings>(path.basename(__filename).replace(path.extname(__filename), ''), SettingsSchema);
+export const SettingsModel = mongoose.model<IWSettings>(path.basename(__filename).replace(path.extname(__filename), ''), SettingsSchema);

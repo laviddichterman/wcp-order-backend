@@ -3,7 +3,7 @@ import { FulfillmentConfig, ReduceArrayToMapByKey, IWSettings, PostBlockedOffToF
 import { HydratedDocument } from 'mongoose';
 import logger from '../logging';
 import KeyValueModel, { IKeyValueStore } from '../models/settings/KeyValueSchema';
-import SettingsModel from '../models/settings/SettingsSchema';
+import { SettingsModel } from '../models/settings/SettingsSchema';
 import { FulfillmentModel } from '../models/settings/FulfillmentSchema';
 import { Promise } from 'bluebird';
 
@@ -105,8 +105,6 @@ export class DataProvider implements WProvider {
 
   setFulfillment = async (fulfillment: Omit<FulfillmentConfig, 'id'>) => {
     const fm = new FulfillmentModel(fulfillment);
-    console.log(fm);
-    console.log(fulfillment);
     const savePromise = fm.save()
       .then(x => {
         logger.debug(`Saved new fulfillment: ${JSON.stringify(x)}`);

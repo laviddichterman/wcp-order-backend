@@ -22,10 +22,12 @@ const FulfillmentValidationChain = [
   body('service').exists().isIn(Object.keys(FulfillmentType)),
   body('terms').isArray().exists(),
   body('terms.*').trim(),
+  body('messages.DESCRIPTION').isString().trim().optional({nullable: true}),
   body('messages.CONFIRMATION').isString().trim().exists(),
   body('messages.INSTRUCTIONS').isString().trim().exists(),
   body('menuBaseCategoryId').trim().escape().exists().isMongoId(),
   body('orderBaseCategoryId').trim().escape().exists().isMongoId(),
+  body('orderSupplementaryCategoryId').trim().optional({nullable: true}).isMongoId(),
   body('requirePrepayment').exists().isBoolean({ strict: true }),
   body('allowPrepayment').exists().isBoolean({ strict: true }),
   body('autograt.function').optional({nullable: true}).isMongoId(),
@@ -81,6 +83,7 @@ export class FulfillmentController implements IExpressController {
         messages: req.body.messages,
         menuBaseCategoryId: req.body.menuBaseCategoryId,
         orderBaseCategoryId: req.body.orderBaseCategoryId,
+        orderSupplementaryCategoryId: req.body.orderSupplementaryCategoryId,
         requirePrepayment: req.body.requirePrepayment,
         allowPrepayment: req.body.allowPrepayment, 
         autograt: req.body.autograt,
@@ -127,6 +130,7 @@ export class FulfillmentController implements IExpressController {
         messages: req.body.messages,
         menuBaseCategoryId: req.body.menuBaseCategoryId,
         orderBaseCategoryId: req.body.orderBaseCategoryId,
+        orderSupplementaryCategoryId: req.body.orderSupplementaryCategoryId,
         requirePrepayment: req.body.requirePrepayment,
         allowPrepayment: req.body.allowPrepayment, 
         autograt: req.body.autograt,
@@ -148,8 +152,6 @@ export class FulfillmentController implements IExpressController {
         logger.info(`Successfully updated Fulfillment: ${JSON.stringify(updatedFulfillment)}`);
         await DataProviderInstance.syncFulfillments();
         await SocketIoProviderInstance.EmitFulfillments(DataProviderInstance.Fulfillments);
-        // TODO: check if we need to ensure something is consistent in the catalog
-
         return res.status(200).send(updatedFulfillment);
       })
       .catch(err => {
