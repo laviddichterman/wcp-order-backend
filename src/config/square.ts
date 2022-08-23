@@ -34,79 +34,79 @@ export class SquareProvider implements WProvider {
     logger.info(`Finished Bootstrap of SquareProvider`);
   }
 
-  CreateOrderCart = async (reference_id : string, 
-    cart: CategorizedRebuiltCart, 
-    customerInfo: CustomerInfoDto, 
-    fulfillmentInfo: FulfillmentDto, 
-    completionDateTime: Date | number,
-    storeCredit: JSFECreditV2 | null, 
-    totals: RecomputeTotalsResult,
-    note : string) :
-  Promise<{ success: true; result: CreateOrderResponse; error: null; } | 
-    { success: false; result: null; error: SquareError[]; }> => {
-      // TODO: use idempotency key from order instead
-    const idempotency_key = crypto.randomBytes(22).toString('hex');
-    const orders_api = this.#client.ordersApi;
-    const request_body : CreateOrderRequest = {
-      idempotencyKey: idempotency_key,
-      order: {
-        referenceId: reference_id,
-        lineItems: Object.values(cart).flatMap(e=>e.map(x=>({
-          quantity: x.quantity.toString(10),
-          catalogObjectId: VARIABLE_PRICE_STORE_CREDIT_CATALOG_ID,
-          basePriceMoney: IMoneyToBigIntMoney(x.product.m.price),
-          itemType: "ITEM",
-          // we don't fill out applied taxes at the item level
-          name: x.product.m.name
-        } as OrderLineItem))),
-        discounts: storeCredit.validation.valid === true && totals.discountApplied.amount > 0 ? [{ 
-          type: "FIXED_AMOUNT",
-          amountMoney: IMoneyToBigIntMoney(totals.discountApplied),
-          appliedMoney: IMoneyToBigIntMoney(totals.discountApplied),
-          metadata: { 
-            "enc": storeCredit.validation.lock.enc,
-            "iv": storeCredit.validation.lock.iv,
-            "auth": storeCredit.validation.lock.auth,
-            "code": storeCredit.code
-          }
-        }] : [],
-        // pricingOptions: {
-        //   autoApplyTaxes: true
-        // },
-        taxes: [{ 
-          catalogObjectId: SQUARE_TAX_RATE_CATALOG_ID, 
-          appliedMoney: IMoneyToBigIntMoney(totals.taxAmount),
-          scope: 'ORDER'
-        }],
-        totalTipMoney: IMoneyToBigIntMoney(totals.tipAmount),
-        locationId: DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
-        state: "OPEN",
-        fulfillments: [{ 
-          type: "PICKUP", 
-          pickupDetails: { 
-            scheduleType: 'SCHEDULED', 
-            recipient: { 
-              displayName: `${customerInfo.givenName} ${customerInfo.familyName}`,
-              emailAddress: customerInfo.email,
-              phoneNumber: customerInfo.mobileNum
-            },
-            placedAt: formatRFC3339(Date.now()),
-            pickupAt: formatRFC3339(completionDateTime),
-          }, 
-        }],
-      }, 
-    };
-    try {
-      logger.info(`sending order request: ${BigIntStringify(request_body)}`);
-      const { result, ...httpResponse } = await orders_api.createOrder(request_body);
-      return { success: true, result: result, error: null };
-    } catch (error) {
-      if (typeof error === 'object' && Object.hasOwn(error, 'errors')) {
-        return { success: false, result: null, error: error.errors as SquareError[] };
-      }
-      return { success: false, result: null, error: [{category: "API_ERROR", code: "INTERNAL_SERVER_ERROR"}]};
-    }
-  }
+  // CreateOrderCart = async (reference_id : string, 
+  //   cart: CategorizedRebuiltCart, 
+  //   customerInfo: CustomerInfoDto, 
+  //   fulfillmentInfo: FulfillmentDto, 
+  //   completionDateTime: Date | number,
+  //   storeCredit: JSFECreditV2 | null, 
+  //   totals: RecomputeTotalsResult,
+  //   note : string) :
+  // Promise<{ success: true; result: CreateOrderResponse; error: null; } | 
+  //   { success: false; result: null; error: SquareError[]; }> => {
+  //     // TODO: use idempotency key from order instead
+  //   const idempotency_key = crypto.randomBytes(22).toString('hex');
+  //   const orders_api = this.#client.ordersApi;
+  //   const request_body : CreateOrderRequest = {
+  //     idempotencyKey: idempotency_key,
+  //     order: {
+  //       referenceId: reference_id,
+  //       lineItems: Object.values(cart).flatMap(e=>e.map(x=>({
+  //         quantity: x.quantity.toString(10),
+  //         catalogObjectId: VARIABLE_PRICE_STORE_CREDIT_CATALOG_ID,
+  //         basePriceMoney: IMoneyToBigIntMoney(x.product.m.price),
+  //         itemType: "ITEM",
+  //         // we don't fill out applied taxes at the item level
+  //         name: x.product.m.name
+  //       } as OrderLineItem))),
+  //       discounts: storeCredit.validation.valid === true && totals.discountApplied.amount > 0 ? [{ 
+  //         type: "FIXED_AMOUNT",
+  //         amountMoney: IMoneyToBigIntMoney(totals.discountApplied),
+  //         appliedMoney: IMoneyToBigIntMoney(totals.discountApplied),
+  //         metadata: { 
+  //           "enc": storeCredit.validation.lock.enc,
+  //           "iv": storeCredit.validation.lock.iv,
+  //           "auth": storeCredit.validation.lock.auth,
+  //           "code": storeCredit.code
+  //         }
+  //       }] : [],
+  //       // pricingOptions: {
+  //       //   autoApplyTaxes: true
+  //       // },
+  //       taxes: [{ 
+  //         catalogObjectId: SQUARE_TAX_RATE_CATALOG_ID, 
+  //         appliedMoney: IMoneyToBigIntMoney(totals.taxAmount),
+  //         scope: 'ORDER'
+  //       }],
+  //       totalTipMoney: IMoneyToBigIntMoney(totals.tipAmount),
+  //       locationId: DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
+  //       state: "OPEN",
+  //       fulfillments: [{ 
+  //         type: "PICKUP", 
+  //         pickupDetails: { 
+  //           scheduleType: 'SCHEDULED', 
+  //           recipient: { 
+  //             displayName: `${customerInfo.givenName} ${customerInfo.familyName}`,
+  //             emailAddress: customerInfo.email,
+  //             phoneNumber: customerInfo.mobileNum
+  //           },
+  //           placedAt: formatRFC3339(Date.now()),
+  //           pickupAt: formatRFC3339(completionDateTime),
+  //         }, 
+  //       }],
+  //     }, 
+  //   };
+  //   try {
+  //     logger.info(`sending order request: ${BigIntStringify(request_body)}`);
+  //     const { result, ...httpResponse } = await orders_api.createOrder(request_body);
+  //     return { success: true, result: result, error: null };
+  //   } catch (error) {
+  //     if (typeof error === 'object' && Object.hasOwn(error, 'errors')) {
+  //       return { success: false, result: null, error: error.errors as SquareError[] };
+  //     }
+  //     return { success: false, result: null, error: [{category: "API_ERROR", code: "INTERNAL_SERVER_ERROR"}]};
+  //   }
+  // }
 
   CreateOrderStoreCredit = async (reference_id: string, amount: IMoney, note: string) :
   Promise<{ success: true; result: CreateOrderResponse; error: null; } | 

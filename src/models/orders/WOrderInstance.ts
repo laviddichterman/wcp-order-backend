@@ -1,6 +1,6 @@
 import mongoose, {Schema} from "mongoose";
 import path from "path";
-import { WOrderInstance, WOrderInstanceNoId } from "@wcp/wcpshared";
+import { WOrderInstance } from "@wcp/wcpshared";
 import { CustomerInfoSchema } from "./WCustomerInfo";
 import { OrderCartEntrySchema } from "./WOrderCartEntry";
 import { FulfillmentInfo } from "./WFulfillmentInfo";
@@ -8,7 +8,7 @@ import { WMetricsSchema } from "./WMetrics";
 import { WOrderLineDiscountSchema } from "../payment/WOrderLineDiscount";
 import { WOrderPaymentSchema } from "../payment/WOrderPayment";
 
-export const WOrderInstanceSchema = new Schema<WOrderInstanceNoId>({
+export const WOrderInstanceSchema = new Schema<Omit<WOrderInstance, 'id'>>({
   status: { 
     type: String,
     enum: ['OPEN', 'COMPLETED', 'CANCELED'],

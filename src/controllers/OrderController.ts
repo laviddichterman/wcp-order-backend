@@ -46,7 +46,6 @@ export class OrderController implements IExpressController {
         cart: req.body.cart,
         creditValidations: req.body.creditValidations,
         customerInfo: req.body.customerInfo,
-        discounts: req.body.discounts,
         fulfillment: req.body.fulfillment,
         metrics: req.body.metrics,
         specialInstructions: req.body.specialInstructions,

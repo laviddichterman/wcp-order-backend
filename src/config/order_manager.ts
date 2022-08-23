@@ -1,46 +1,48 @@
-import { 
-  CanThisBeOrderedAtThisTimeAndFulfillment, 
-  ComputeCartSubTotal, 
-  CategorizedRebuiltCart, 
-  PRODUCT_LOCATION, 
-  WProduct, 
-  WCPProductV2Dto, 
-  CreateProductWithMetadataFromV2Dto, 
-  CreateOrderRequestV2, 
-  FulfillmentDto, 
-  DeliveryInfoDto, 
-  CoreCartEntry, 
-  ComputeDiscountApplied, 
-  ComputeTaxAmount, 
-  ComputeTipBasis, 
-  ComputeTipValue, 
-  TotalsV2, 
-  ComputeTotal, 
-  ComputeGiftCardApplied, 
-  ComputeBalanceAfterCredits, 
-  JSFECreditV2, 
-  CreateOrderResponse, 
-  WDateUtils, 
-  GenerateMenu, 
-  IMenu, 
-  ComputeSubtotalPreDiscount, 
-  ComputeSubtotalAfterDiscount, 
-  FulfillmentConfig, 
-  OrderPayment, 
-  WOrderInstanceNoId, 
-  ValidateLockAndSpendSuccess, 
-  OrderLineDiscount, 
-  CURRENCY, 
-  DiscountMethod, 
-  PaymentMethod, 
-  DineInInfoDto, 
-  CALL_LINE_DISPLAY, 
-  WOrderInstance, 
-  TenderBaseStatus, 
-  WError, 
-  MoneyToDisplayString, 
-  IMoney, 
-  DateTimeIntervalBuilder } from "@wcp/wcpshared";
+import {
+  CanThisBeOrderedAtThisTimeAndFulfillment,
+  ComputeCartSubTotal,
+  CategorizedRebuiltCart,
+  PRODUCT_LOCATION,
+  WProduct,
+  WCPProductV2Dto,
+  CreateProductWithMetadataFromV2Dto,
+  CreateOrderRequestV2,
+  FulfillmentDto,
+  DeliveryInfoDto,
+  CoreCartEntry,
+  ComputeTaxAmount,
+  ComputeTipBasis,
+  ComputeTipValue,
+  TotalsV2,
+  ComputeTotal,
+  ComputeBalanceAfterCredits,
+  JSFECreditV2,
+  CreateOrderResponse,
+  WDateUtils,
+  GenerateMenu,
+  IMenu,
+  ComputeSubtotalPreDiscount,
+  ComputeSubtotalAfterDiscount,
+  FulfillmentConfig,
+  OrderPayment,
+  WOrderInstancePartial,
+  ValidateLockAndSpendSuccess,
+  OrderLineDiscount,
+  CURRENCY,
+  DiscountMethod,
+  PaymentMethod,
+  DineInInfoDto,
+  CALL_LINE_DISPLAY,
+  WOrderInstance,
+  TenderBaseStatus,
+  WError,
+  MoneyToDisplayString,
+  IMoney,
+  DateTimeIntervalBuilder,
+  ComputeMainProductCategoryCount,
+  ComputeCreditsApplied,
+  StoreCreditType
+} from "@wcp/wcpshared";
 
 import { WProvider } from '../types/WProvider';
 
@@ -69,7 +71,7 @@ const FormatDurationHelper = function (milliseconds: number) {
 
 
 interface RecomputeTotalsArgs {
-  order: WOrderInstanceNoId;
+  order: WOrderInstancePartial;
   cart: CategorizedRebuiltCart;
   creditValidations: JSFECreditV2[];
   fulfillment: FulfillmentConfig;
@@ -82,12 +84,12 @@ export interface RecomputeTotalsResult {
   serviceFee: IMoney;
   subtotalPreDiscount: IMoney;
   subtotalAfterDiscount: IMoney;
-  discountApplied: IMoney;
+  discountApplied: JSFECreditV2[];
   taxAmount: IMoney;
   tipBasis: IMoney;
   tipMinimum: IMoney;
   total: IMoney;
-  giftCartApplied: IMoney;
+  giftCartApplied: JSFECreditV2[];
   balanceAfterCredits: IMoney;
   tipAmount: IMoney;
 }
@@ -129,27 +131,27 @@ const GenerateAutoResponseBodyEscaped = function (
   return encodeURIComponent(`${nice_area_code ? "Hey, nice area code!" : "Thanks!"} ${fulfillmentConfig.messages.CONFIRMATION} ${STORE_ADDRESS}.\n\n${fulfillmentConfig.messages.INSTRUCTIONS} ${payment_section}`);
 }
 
-function GenerateOrderPaymentDisplay(payment: OrderPayment, isHtml: boolean) { 
+function GenerateOrderPaymentDisplay(payment: OrderPayment, isHtml: boolean) {
   const lineBreak = isHtml ? "<br />" : "\n";
-  switch(payment.t) {
-    case PaymentMethod.Cash: 
+  switch (payment.t) {
+    case PaymentMethod.Cash:
       return `Received cash payment of ${MoneyToDisplayString(payment.amount, true)}.${lineBreak}`;
     case PaymentMethod.CreditCard:
       return `Received payment of ${MoneyToDisplayString(payment.amount, true)} from credit card ending in ${payment.last4}.
       ${lineBreak}
-      ${payment.receiptUrl ? 
-        (isHtml ? 
-          `<a href="${payment.receiptUrl}">Receipt link</a>${lineBreak}` : 
-          `Receipt: ${payment.receiptUrl}${lineBreak}`) : 
-        ""}`;
+      ${payment.receiptUrl ?
+          (isHtml ?
+            `<a href="${payment.receiptUrl}">Receipt link</a>${lineBreak}` :
+            `Receipt: ${payment.receiptUrl}${lineBreak}`) :
+          ""}`;
     case PaymentMethod.StoreCredit:
       return `Applied store credit value ${MoneyToDisplayString(payment.amount, true)} using code ${payment.code}.${lineBreak}`;
   }
 }
 
-function GenerateOrderLineDiscountDisplay(discount: OrderLineDiscount, isHtml: boolean) { 
-  switch(discount.t) {
-    case DiscountMethod.CreditCodeAmount: 
+function GenerateOrderLineDiscountDisplay(discount: OrderLineDiscount, isHtml: boolean) {
+  switch (discount.t) {
+    case DiscountMethod.CreditCodeAmount:
       return `NOTE BEFORE CLOSING OUT: Apply discount of ${discount.amount}, pre-tax. Credit code used: ${discount.code}.${isHtml ? "<br />" : "\n"}`;
   }
 }
@@ -235,7 +237,6 @@ const GenerateDisplayCartStringListFromProducts = (cart: CategorizedRebuiltCart)
 }
 
 const GenerateShortCartFromFullCart = (cart: CategorizedRebuiltCart) => {
-  // TODO: the sliced part of this is a hack. need to move to a modifier that takes into account the service type
   const catalogCategories = CatalogProviderInstance.Catalog.categories;
   return Object.entries(cart).map(([catid, category_cart]) => {
     if (category_cart.length > 0) {
@@ -269,26 +270,24 @@ const RebuildOrderState = function (menu: IMenu, cart: CoreCartEntry<WCPProductV
 
 
 const RecomputeTotals = function ({ cart, creditValidations, fulfillment, order, totals }: RecomputeTotalsArgs): RecomputeTotalsResult {
-  const cfg = DataProviderInstance.Settings.config;
-  const MAIN_CATID = cfg.MAIN_CATID as string;
-  const TAX_RATE = cfg.TAX_RATE as number;
-  const AUTOGRAT_THRESHOLD = cfg.AUTOGRAT_THRESHOLD as number;
+  const TAX_RATE = DataProviderInstance.Settings.config.TAX_RATE as number;
+  const AUTOGRAT_THRESHOLD = DataProviderInstance.Settings.config.AUTOGRAT_THRESHOLD as number;
 
-  // TODO: validate the amount used field in the creditValidations
-
-  const mainCategoryProductCount = Object.hasOwn(cart, MAIN_CATID) ? cart[MAIN_CATID].reduce((acc, e) => acc + e.quantity, 0) : 0;
+  const mainCategoryProductCount = ComputeMainProductCategoryCount(fulfillment.orderBaseCategoryId, order.cart);
   const cartSubtotal = { currency: CURRENCY.USD, amount: Object.values(cart).reduce((acc, c) => acc + ComputeCartSubTotal(c).amount, 0) };
   const serviceFee = { currency: CURRENCY.USD, amount: fulfillment.serviceCharge !== null ? OrderFunctional.ProcessOrderInstanceFunction(order, CatalogProviderInstance.Catalog.orderInstanceFunctions[fulfillment.serviceCharge], CatalogProviderInstance.Catalog) as number : 0 };
   const subtotalPreDiscount = ComputeSubtotalPreDiscount(cartSubtotal, serviceFee);
-  const discountApplied = ComputeDiscountApplied(subtotalPreDiscount, creditValidations.map(x => x.validation));
-  const subtotalAfterDiscount = ComputeSubtotalAfterDiscount(subtotalPreDiscount, discountApplied);
+  const discountApplied = ComputeCreditsApplied(subtotalPreDiscount, creditValidations.filter(x=>x.validation.credit_type===StoreCreditType.DISCOUNT));
+  const amountDiscounted = { amount: discountApplied.reduce((acc, x) => acc + x.amount_used.amount, 0), currency: CURRENCY.USD };
+  const subtotalAfterDiscount = ComputeSubtotalAfterDiscount(subtotalPreDiscount, amountDiscounted);
   const taxAmount = ComputeTaxAmount(subtotalAfterDiscount, TAX_RATE);
   const tipBasis = ComputeTipBasis(subtotalPreDiscount, taxAmount);
   const tipMinimum = mainCategoryProductCount >= AUTOGRAT_THRESHOLD ? ComputeTipValue({ isPercentage: true, isSuggestion: true, value: .2 }, tipBasis) : { currency: CURRENCY.USD, amount: 0 };
   const tipAmount = totals.tip;
   const total = ComputeTotal(subtotalAfterDiscount, taxAmount, tipAmount);
-  const giftCartApplied = ComputeGiftCardApplied(total, creditValidations.map(x => x.validation));
-  const balanceAfterCredits = ComputeBalanceAfterCredits(total, giftCartApplied);
+  const giftCartApplied = ComputeCreditsApplied(total, creditValidations.filter(x=>x.validation.credit_type===StoreCreditType.MONEY));
+  const amountCredited = { amount: giftCartApplied.reduce((acc, x) => acc + x.amount_used.amount, 0), currency: CURRENCY.USD };
+  const balanceAfterCredits = ComputeBalanceAfterCredits(total, amountCredited);
   return {
     mainCategoryProductCount,
     cartSubtotal,
@@ -483,20 +482,16 @@ export class OrderManager implements WProvider {
     const menu = GenerateMenu(CatalogProviderInstance.Catalog, dateTimeInterval.start, createOrderRequest.fulfillment.selectedService);
     const { noLongerAvailable, rebuiltCart } = RebuildOrderState(menu, createOrderRequest.cart, dateTimeInterval.start, fulfillmentConfig);
     if (noLongerAvailable.length > 0) {
-      return { 
-        status: 410, 
-        success: false, 
-        result: null, 
-        errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'GONE', detail: "Unable to rebuild order from current catalog data." }] 
+      return {
+        status: 410,
+        success: false,
+        result: null,
+        errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'GONE', detail: "Unable to rebuild order from current catalog data." }]
       };
     }
 
     // 3. 'let's setup the order object reference
-    let orderInstance: WOrderInstanceNoId = {
-      status: 'OPEN',
-      payments: [],
-      refunds: [],
-      discounts: [],
+    const orderInstance: WOrderInstancePartial = {
       cart: createOrderRequest.cart,
       customerInfo: createOrderRequest.customerInfo,
       fulfillment: createOrderRequest.fulfillment,
@@ -508,9 +503,9 @@ export class OrderManager implements WProvider {
     if (createOrderRequest.totals.balance.amount !== recomputedTotals.balanceAfterCredits.amount) {
       const errorDetail = `Computed different balance of ${MoneyToDisplayString(recomputedTotals.balanceAfterCredits, true)} vs sent: ${MoneyToDisplayString(createOrderRequest.totals.balance, true)}`;
       logger.error(errorDetail)
-      return { 
-        status: 500, 
-        success: false, 
+      return {
+        status: 500,
+        success: false,
         result: null,
         errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'INSUFFICIENT_FUNDS', detail: errorDetail }]
       };
@@ -519,11 +514,11 @@ export class OrderManager implements WProvider {
     if (createOrderRequest.nonce && createOrderRequest.totals.tip.amount < recomputedTotals.tipMinimum.amount) {
       const errorDetail = `Computed tip below minimum of ${MoneyToDisplayString(recomputedTotals.tipMinimum, true)} vs sent: ${MoneyToDisplayString(createOrderRequest.totals.tip, true)}`;
       logger.error(errorDetail)
-      return { 
-        status: 500, 
-        success: false, 
+      return {
+        status: 500,
+        success: false,
         result: null,
-        errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'INSUFFICIENT_FUNDS', detail: errorDetail }] 
+        errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'INSUFFICIENT_FUNDS', detail: errorDetail }]
       };
     }
 
@@ -536,9 +531,9 @@ export class OrderManager implements WProvider {
       const display_time = DateTimeIntervalToDisplayServiceInterval(dateTimeInterval);
       const errorDetail = `Requested fulfillment (${fulfillmentConfig.displayName}) at ${display_time} is no longer valid. ${optionsForSelectedDate.length > 0 ? `Next available time for date selected is ${WDateUtils.MinutesToPrintTime(optionsForSelectedDate[0].value)}` : 'No times left for selected date.'}`;
       logger.error(errorDetail)
-      return { 
-        status: 410, 
-        success: false, 
+      return {
+        status: 410,
+        success: false,
         result: null,
         errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'GONE', detail: errorDetail }]
       };
@@ -551,19 +546,16 @@ export class OrderManager implements WProvider {
 
     // Payment part A: attempt to process store credits, keep track of old store credit balance in case of failure
     const storeCreditResponses: ValidateLockAndSpendSuccess[] = [];
-    let moneyCreditAmountLeft = recomputedTotals.giftCartApplied.amount;
-    let discountCreditAmountLeft = recomputedTotals.discountApplied.amount;
     let creditProcessingFailed = false;
     try {
       await Promise.all(createOrderRequest.creditValidations.map(async (creditUse) => {
         // NOTE: we assume validation of the amount_used field in the RecomputeTotals method
-        if (creditUse.amount_used.amount > 0 && creditUse.validation.valid) {
+        if (creditUse.amount_used.amount > 0) {
           const response = await StoreCreditProvider.ValidateLockAndSpend({ code: creditUse.code, amount: creditUse.amount_used, lock: creditUse.validation.lock, updatedBy: STORE_NAME })
           if (response.success) {
             storeCreditResponses.push(response);
             switch (creditUse.validation.credit_type) {
               case 'DISCOUNT':
-                discountCreditAmountLeft -= creditUse.amount_used.amount;
                 discounts.push({
                   status: TenderBaseStatus.COMPLETED,
                   t: DiscountMethod.CreditCodeAmount,
@@ -574,7 +566,6 @@ export class OrderManager implements WProvider {
                 });
                 break;
               case 'MONEY':
-                moneyCreditAmountLeft -= creditUse.amount_used.amount;
                 payments.push({
                   status: TenderBaseStatus.COMPLETED,
                   t: PaymentMethod.StoreCredit,
@@ -594,7 +585,7 @@ export class OrderManager implements WProvider {
       creditProcessingFailed = true;
     }
 
-    if (creditProcessingFailed || moneyCreditAmountLeft !== 0 || discountCreditAmountLeft !== 0) {
+    if (creditProcessingFailed) {
       // unwind storeCreditResponses
       await RefundStoreCreditDebits(storeCreditResponses);
       logger.error("Failed to process store credit step of ordering");
@@ -615,7 +606,7 @@ export class OrderManager implements WProvider {
           payments.push(response.result);
           hasChargingSucceeded = true;
         }
-        errors = response.error.map(e=>({category: e.category, code: e.code, detail: e.detail}));
+        errors = response.error.map(e => ({ category: e.category, code: e.code, detail: e.detail }));
       } catch (error: any) {
         logger.error(`Nasty error in processing payment: ${JSON.stringify(error)}.`);
         errors.push({ category: 'PAYMENT_METHOD_ERROR', detail: JSON.stringify(error), code: 'INTERNAL_SERVER_ERROR' });
@@ -635,7 +626,7 @@ export class OrderManager implements WProvider {
 
     // 6. send out emails and capture the order to persistent storage
     try {
-      orderInstance = {
+      const completedOrderInstance: Omit<WOrderInstance, 'id'> = {
         cart: orderInstance.cart,
         customerInfo: orderInstance.customerInfo,
         fulfillment: orderInstance.fulfillment,
@@ -646,7 +637,7 @@ export class OrderManager implements WProvider {
         status: 'COMPLETED'
       };
 
-      await new WOrderInstanceModel(orderInstance)
+      await new WOrderInstanceModel(completedOrderInstance)
         .save()
         .then(async (dbOrderInstance) => {
           logger.info(`Successfully saved OrderInstance to database: ${JSON.stringify(dbOrderInstance.toJSON())}`)

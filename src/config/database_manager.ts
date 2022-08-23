@@ -510,6 +510,8 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
       logger.error("Didn't update SettingsModel");
     }
   }],
+  "0.4.95": [{ major: 0, minor: 4, patch: 96 }, async () => {
+  }],
 }
 
 export class DatabaseManager implements WProvider {

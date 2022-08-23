@@ -11,6 +11,7 @@ export const SettingsSchema = new Schema<IWSettings>({
     LOCATION_NAME: String,
     SQUARE_LOCATION: String,
     SQUARE_APPLICATION_ID: String,
+    DEFAULT_FULFILLMENTID: String,
     TAX_RATE: Number,
     ALLOW_ADVANCED: Boolean,
     DELIVERY_LINK: String,
