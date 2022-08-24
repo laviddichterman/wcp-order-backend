@@ -134,10 +134,11 @@ export class StoreCreditProvider {
         }
         // no shenanagains confirmed
         // do we want to update the lock?
+        // if we update the lock, we need to store the old lock to revert it to in the case that we need to roll back the transaction
         // const newLock = aes256gcm.encrypt(lock.auth);
-        // const newLockAsString = { enc: newLock.enc, auth: newLock.auth.toString('hex'), iv: newLock.iv.toString('hex') };
+        // const newLockAsString = { enc:   newLock.enc, auth: newLock.auth.toString('hex'), iv: newLock.iv.toString('hex') };
         const date_modified = WDateUtils.formatISODate(beginningOfToday);
-        const new_balance = credit_balance - amount.amount;
+        const new_balance = ((credit_balance - amount.amount)/100).toFixed(2);
         const new_entry = [entry[0], entry[1], entry[2], new_balance, entry[4], updatedBy, date_modified, entry[7], entry[8], entry[9], entry[10], entry[11], entry[12]];
         const new_range = `${ACTIVE_SHEET}!${2 + i}:${2 + i}`;
         // TODO switch to volatile-esq update API call
