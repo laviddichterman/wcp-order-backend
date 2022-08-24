@@ -1,7 +1,7 @@
 import logger from '../logging';
 import { WProvider } from '../types/WProvider';
 import PACKAGE_JSON from '../../package.json';
-import { ConstLiteralDiscriminator, IAbstractExpression, IConstLiteralExpression, IHasAnyOfModifierExpression, IIfElseExpression, ILogicalExpression, IModifierPlacementExpression, ModifiersMap, OptionPlacement, OptionQualifier, ProductInstanceFunctionType, SEMVER, WFunctional } from '@wcp/wcpshared';
+import { ConstLiteralDiscriminator, IAbstractExpression, IConstLiteralExpression, IHasAnyOfModifierExpression, IIfElseExpression, ILogicalExpression, IModifierPlacementExpression, OptionPlacement, OptionQualifier, ProductInstanceFunctionType, SEMVER, WFunctional } from '@wcp/wcpshared';
 import DBVersionModel from '../models/DBVersionSchema';
 import { WProductInstanceFunctionModel as WProductInstanceFunctionModelACTUAL } from '../models/query/product/WProductInstanceFunction';
 import { WMoney } from '../models/WMoney';
@@ -352,7 +352,7 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
       }));
     }
     {
-      // IProductInstance externalIDs set to {}, move description, displayName, shortcode, delete item, convert modifiers list to modifier map
+      // IProductInstance externalIDs set to {}, move description, displayName, shortcode, delete item, convert modifiers list to new modifiers list
       // remove ProductModifierSchema.service_disable and log warning
       const WProductInstanceModel = mongoose.model('WProductINStanceSchema', new Schema({
         modifiers: Schema.Types.Mixed,
@@ -381,18 +381,16 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
         pi.is_base = undefined;
         pi.productId = pi.product_id;
         pi.product_id = undefined;
-        pi.modifiers = pi.modifiers.reduce((o: ModifiersMap, mod: {
+        pi.modifiers = pi.modifiers.map((mod: {
           modifier_type_id: string;
           options: {
             option_id: string;
             placement: keyof typeof OptionPlacement;
             qualifier: keyof typeof OptionQualifier;
           }[];
-        }) => ({
-          ...o,
-          [mod.modifier_type_id]: mod.options.map(
+        }) => ({ modifierTypeId: mod.modifier_type_id, options: mod.options.map(
             x => ({ optionId: x.option_id, placement: OptionPlacement[x.placement], qualifier: OptionQualifier[x.qualifier] }))
-        }), {});
+        }));
         return await pi.save()
           .then(doc => {
             logger.info(`Updated ProductInstance with new schema: ${JSON.stringify(doc.toJSON())}`);
@@ -435,7 +433,7 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
         opt.display_flags = undefined;
         opt.modifierTypeId = opt.option_type_id;
         opt.option_type_id = undefined;
-        opt.enable = opt.enable_function;
+        opt.enable = opt.enable_function ?? null;
         opt.enable_function = undefined;
         return await opt.save()
           .then(doc => {
@@ -511,6 +509,8 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
     }
   }],
   "0.4.95": [{ major: 0, minor: 4, patch: 96 }, async () => {
+  }],
+  "0.4.96": [{ major: 0, minor: 4, patch: 97 }, async () => {
   }],
 }
 

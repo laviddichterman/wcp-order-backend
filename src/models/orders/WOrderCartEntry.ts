@@ -1,6 +1,6 @@
 import { Schema } from "mongoose";
 import { CoreCartEntry, WCPProductV2Dto } from "@wcp/wcpshared";
-import { WOptionInstanceSchema } from "../catalog/options/WOptionInstanceSchema";
+import { ProductModifierSchema } from "../catalog/options/WOptionInstanceSchema";
 
 export const WOrderProductInstanceSchema = new Schema<WCPProductV2Dto>({
   pid: { 
@@ -9,8 +9,7 @@ export const WOrderProductInstanceSchema = new Schema<WCPProductV2Dto>({
     ref: "WProductModel"
   },
   modifiers: {
-    type: Schema.Types.Map,
-    of: [WOptionInstanceSchema],
+    type: [ProductModifierSchema],
     required: true
   }
 }, { _id: false });

@@ -71,11 +71,12 @@ const ProductInstanceValidationChain = [
   body('displayFlags.order.adornment').trim(),
   body('displayFlags.order.suppress_exhaustive_modifier_list').toBoolean(true),
   body('ordinal').exists().isInt({min: 0}),
-  body('modifiers').isObject(),
-  body('modifiers.*').isArray(),
-  body('modifiers.*.*.option_id').trim().escape().exists().isMongoId(),
-  body('modifiers.*.*.placement').exists().isIn(Object.values(OptionPlacement)),
-  body('modifiers.*.*.qualifier').exists().isIn(Object.values(OptionQualifier))
+  body('modifiers').isArray(),
+  body('modifiers.*.modifierTypeId').trim().escape().exists().isMongoId(),
+  body('modifiers.*.options').isArray(),
+  body('modifiers.*.options.*.option_id').trim().escape().exists().isMongoId(),
+  body('modifiers.*.options.*.placement').exists().isIn(Object.values(OptionPlacement)),
+  body('modifiers.*.options.*.qualifier').exists().isIn(Object.values(OptionQualifier))
 ];
 
 const EditProductInstanceValidationChain = [  
@@ -134,7 +135,7 @@ export class ProductController implements IExpressController {
             menu: { 
               ordinal: productInstance.ordinal,
               hide: false,
-              price_display: 'ALWAYS',
+              price_display: PriceDisplay.ALWAYS,
               adornment: "",
               suppress_exhaustive_modifier_list: false,
               show_modifier_options: false            
@@ -143,12 +144,12 @@ export class ProductController implements IExpressController {
               ordinal: productInstance.ordinal,
               hide: false,
               skip_customization: false,
-              price_display: 'ALWAYS',
+              price_display: PriceDisplay.ALWAYS,
               adornment: "",
               suppress_exhaustive_modifier_list: false
             }
           },
-          modifiers: {},
+          modifiers: [],
           isBase: true
         });
         if (!pi) {

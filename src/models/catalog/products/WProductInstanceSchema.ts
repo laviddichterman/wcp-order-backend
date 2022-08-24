@@ -1,7 +1,7 @@
-import { IProductInstance, ModifiersMap, PriceDisplay } from "@wcp/wcpshared";
+import { IProductInstance, PriceDisplay } from "@wcp/wcpshared";
 import mongoose, {Schema} from "mongoose";
 import path from "path";
-import { WOptionInstanceSchema } from "../options/WOptionInstanceSchema";
+import { ProductModifierSchema } from "../options/WOptionInstanceSchema";
 
 type MT = Omit<IProductInstance, "id">;
 export const WProductInstanceSchema = new Schema<MT>({
@@ -13,8 +13,7 @@ export const WProductInstanceSchema = new Schema<MT>({
 
   // applied modifiers for this instance of the product
   modifiers: {
-    type: Schema.Types.Map,
-    of: [WOptionInstanceSchema],
+    type: [ProductModifierSchema],
     required: true
   },
 

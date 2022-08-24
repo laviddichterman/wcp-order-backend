@@ -332,7 +332,7 @@ export class CatalogProvider implements WProvider {
       }
       await Promise.all(Object.values(this.#categories).map(async (cat) => {
         if (cat.parent_id && cat.parent_id === category_id) {
-          await WCategoryModel.findByIdAndUpdate(category_id, { parent_id: null });
+          await WCategoryModel.findByIdAndUpdate(cat.id, { parent_id: null });
         }
       }));
       const products_update = await WProductModel.updateMany({}, { $pull: { category_ids: category_id } });
