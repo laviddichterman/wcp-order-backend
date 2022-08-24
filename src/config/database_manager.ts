@@ -530,7 +530,7 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
         logger.debug(`Updated ${category_update.modifiedCount} Categories with empty serviceDisable props.`);
       }
       else {
-        logger.warn("No categories had nesting or serviceDisable added");
+        logger.warn("No categories had serviceDisable blanked added");
       }
     }
   }],
