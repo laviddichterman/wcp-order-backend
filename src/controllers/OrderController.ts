@@ -9,8 +9,6 @@ import GoogleProviderInstance from '../config/google';
 import { BigIntStringify } from '../utils';
 import { isFulfillmentDefined } from '../types/Validations';
 
-
-// THIS IS BS NOW, REDO
 const V2OrderValidationChain = [
   body('fulfillment.selectedService').exists().isMongoId().custom(isFulfillmentDefined),
   body('fulfillment.selectedDate').isISO8601(),
@@ -20,8 +18,8 @@ const V2OrderValidationChain = [
   body('customerInfo.mobileNum').trim().escape().exists(),
   body('customerInfo.email').isEmail().exists(),
   body('customerInfo.referral').trim().escape(),
+  body('creditValidations').isArray(),
   body('cart.*.categoryId').exists().isMongoId(),
-  body('cart.*.quantity').exists().isInt({ min: 1 }),
   body('cart.*.quantity').exists().isInt({ min: 1 }),
   body('cart.*.product').exists(),
   body('specialInstructions').trim().escape()
