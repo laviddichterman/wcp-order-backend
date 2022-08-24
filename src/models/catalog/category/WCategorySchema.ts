@@ -39,7 +39,7 @@ export const WCategorySchema = new Schema<MT>({
       required: true
     },    
   },
-  serviceDisable: [Number],
+  serviceDisable: [{ type: String, ref: 'FulfillmentSchema'}],
 }, {id: true, toJSON: {virtuals: true}, toObject: { virtuals: true}});
 
 export const WCategoryModel = mongoose.model<ICategory>(path.basename(__filename).replace(path.extname(__filename), ''), WCategorySchema);

@@ -517,6 +517,8 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
   "0.4.98": [{ major: 0, minor: 4, patch: 99 }, async () => {
   }],
   "0.4.99": [{ major: 0, minor: 4, patch: 100 }, async () => {
+  }],
+  "0.4.100": [{ major: 0, minor: 4, patch: 101 }, async () => {
     {
       // add props to Category
       const category_update = await WCategoryModel.updateMany(
