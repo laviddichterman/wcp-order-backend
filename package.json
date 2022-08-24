@@ -1,6 +1,6 @@
 {
   "name": "@wcp/wcp-order-backend",
-  "version": "0.4.97",
+  "version": "0.4.98",
   "main": "dist/src/server.js",
   "files": [
     "dist",
@@ -70,8 +70,8 @@
     "@types/qrcode": "^1.5.0",
     "@types/validator": "^13.7.5",
     "@types/voucher-code-generator": "^1.1.1",
-    "@typescript-eslint/eslint-plugin": "^5.34.0",
-    "@typescript-eslint/parser": "^5.34.0",
+    "@typescript-eslint/eslint-plugin": "^5.35.1",
+    "@typescript-eslint/parser": "^5.35.1",
     "chai": "^4.3.6",
     "eslint": "^8.22.0",
     "eslint-config-airbnb-base": "^15.0.0",

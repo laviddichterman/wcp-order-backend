@@ -3,25 +3,39 @@ import { WMoney } from "../WMoney";
 import { Schema } from "mongoose";
 import { WEncryptStringLockSchema } from "./WEncryptStringLock";
 
-export const WOrderLineDiscountSchema = new Schema<OrderLineDiscount>({
+export const WOrderLineDiscountSchema = new Schema({
+  t: {
+    type: String,
+    enum: DiscountMethod,
+    required: true
+  },
   createdAt: {
     type: Number,
     required: true
   },
   status: {
     type: String,
-    enum: Object.keys(TenderBaseStatus),
+    enum: TenderBaseStatus,
     requred: true
+  },
+  amount: {
+    type: WMoney,
+  },
+  code: {
+    type: String,
+  },
+  lock: {
+    type: WEncryptStringLockSchema,
   }
-}, {_id: false, discriminatorKey: 't'});
+}, { _id: false, discriminatorKey: 't', toJSON: { virtuals: true }, toObject: { virtuals: true } });
 
 
 //export const WOrderLineDiscountModel = mongoose.model<OrderLineDiscount>(path.basename(__filename).replace(path.extname(__filename), ''), WOrderLineDiscount);
-export const WOrderLineDiscountCodeAmountSchema = WOrderLineDiscountSchema.discriminator(DiscountMethod.CreditCodeAmount, 
+export const WOrderLineDiscountCodeAmountSchema = WOrderLineDiscountSchema.discriminator(DiscountMethod.CreditCodeAmount,
   new Schema<OrderLineDiscountCodeAmount>({
-    amount: { 
+    amount: {
       type: WMoney,
-      required: true 
+      required: true
     },
     code: {
       type: String,
@@ -31,4 +45,4 @@ export const WOrderLineDiscountCodeAmountSchema = WOrderLineDiscountSchema.discr
       type: WEncryptStringLockSchema,
       required: true
     }
-}, {_id: false, discriminatorKey: 't'}));
+  }, { _id: false, discriminatorKey: 't', toJSON: { virtuals: true }, toObject: { virtuals: true } }));

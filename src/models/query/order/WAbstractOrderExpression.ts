@@ -9,7 +9,14 @@ import {
 import { Schema } from "mongoose";
 import { WConstLiteralSchema } from "../WConstLiteral";
 
-export const WAbstractOrderExpressionSchema = new Schema<AbstractOrderExpression>({}, { _id: false, discriminatorKey: 'discriminator' });
+export const WAbstractOrderExpressionSchema = new Schema<AbstractOrderExpression>({
+  discriminator: {
+    type: String,
+    enum: OrderInstanceFunctionType,
+    required: true
+  }
+},
+  { _id: false, discriminatorKey: 'discriminator', toJSON: { virtuals: true }, toObject: { virtuals: true } });
 
 export const AbstractOrderExpressionConstLiteralSchema = WAbstractOrderExpressionSchema.discriminator(OrderInstanceFunctionType.ConstLiteral,
   new Schema<AbstractOrderExpressionConstLiteral>({
@@ -17,7 +24,7 @@ export const AbstractOrderExpressionConstLiteralSchema = WAbstractOrderExpressio
       type: WConstLiteralSchema,
       required: true
     }
-  }, { _id: false, discriminatorKey: 'discriminator' }));
+  }, { _id: false, discriminatorKey: 'discriminator', toJSON: { virtuals: true }, toObject: { virtuals: true } }));
 
 
 export const AbstractOrderExpressionIfElseSchema = WAbstractOrderExpressionSchema.discriminator(OrderInstanceFunctionType.IfElse,
@@ -27,7 +34,7 @@ export const AbstractOrderExpressionIfElseSchema = WAbstractOrderExpressionSchem
       false_branch: WAbstractOrderExpressionSchema,
       test: WAbstractOrderExpressionSchema
     }
-  }, { _id: false, discriminatorKey: 'discriminator' }));
+  }, { _id: false, discriminatorKey: 'discriminator', toJSON: { virtuals: true }, toObject: { virtuals: true } }));
 
 export const AbstractOrderExpressionLogicalExpressionSchema = WAbstractOrderExpressionSchema.discriminator(OrderInstanceFunctionType.Logical,
   new Schema<AbstractOrderExpressionLogicalExpression>({
@@ -40,4 +47,4 @@ export const AbstractOrderExpressionLogicalExpressionSchema = WAbstractOrderExpr
         required: true
       }
     }
-  }, { _id: false, discriminatorKey: 'discriminator' }));
+  }, { _id: false, discriminatorKey: 'discriminator', toJSON: { virtuals: true }, toObject: { virtuals: true } }));

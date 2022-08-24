@@ -11,11 +11,16 @@ import {
   ProductInstanceFunctionType,
   PRODUCT_LOCATION
 } from "@wcp/wcpshared";
-import mongoose, { Schema } from "mongoose";
-import path from 'path';
+import { Schema } from "mongoose";
 import { WConstLiteralSchema } from "../WConstLiteral";
 
-export const WAbstractExpressionSchema = new Schema<IAbstractExpression>({}, { _id: false, discriminatorKey: 'discriminator' });
+export const WAbstractExpressionSchema = new Schema<IAbstractExpression>({
+  discriminator: {
+    type: String,
+    enum: ProductInstanceFunctionType,
+    required: true
+  }
+}, { _id: false, discriminatorKey: 'discriminator', toJSON: { virtuals: true }, toObject: { virtuals: true } });
 
 export const AbstractExpressionConstLiteralSchema = WAbstractExpressionSchema.discriminator(ProductInstanceFunctionType.ConstLiteral,
   new Schema<AbstractExpressionConstLiteral>({
@@ -23,7 +28,7 @@ export const AbstractExpressionConstLiteralSchema = WAbstractExpressionSchema.di
       type: WConstLiteralSchema,
       required: true
     }
-  }, { _id: false, discriminatorKey: 'discriminator' }));
+  }, { _id: false, discriminatorKey: 'discriminator', toJSON: { virtuals: true }, toObject: { virtuals: true } }));
 export const AbstractExpressionHasAnyOfModifierExpressionSchema = WAbstractExpressionSchema.discriminator(ProductInstanceFunctionType.HasAnyOfModifierType,
   new Schema<AbstractExpressionHasAnyOfModifierExpression>({
     expr: { 
@@ -32,7 +37,7 @@ export const AbstractExpressionHasAnyOfModifierExpressionSchema = WAbstractExpre
         required: true
       }
     }
-  }, { _id: false, discriminatorKey: 'discriminator' }));
+  }, { _id: false, discriminatorKey: 'discriminator', toJSON: { virtuals: true }, toObject: { virtuals: true } }));
 export const AbstractExpressionIfElseExpressionSchema = WAbstractExpressionSchema.discriminator(ProductInstanceFunctionType.IfElse,
   new Schema<AbstractExpressionIfElseExpression>({
     expr: {
@@ -40,7 +45,7 @@ export const AbstractExpressionIfElseExpressionSchema = WAbstractExpressionSchem
       false_branch: { type: WAbstractExpressionSchema, required: true },
       test: { type: WAbstractExpressionSchema, required: true },
     }
-  }, { _id: false, discriminatorKey: 'discriminator' }));
+  }, { _id: false, discriminatorKey: 'discriminator', toJSON: { virtuals: true }, toObject: { virtuals: true } }));
 export const AbstractExpressionLogicalExpressionSchema = WAbstractExpressionSchema.discriminator(ProductInstanceFunctionType.Logical,
   new Schema<AbstractExpressionLogicalExpression>({
     expr: {
@@ -52,14 +57,14 @@ export const AbstractExpressionLogicalExpressionSchema = WAbstractExpressionSche
         required: true
       }
     }
-  }, { _id: false, discriminatorKey: 'discriminator' }));
+  }, { _id: false, discriminatorKey: 'discriminator', toJSON: { virtuals: true }, toObject: { virtuals: true } }));
 export const AbstractExpressionModifierPlacementExpressionSchema = WAbstractExpressionSchema.discriminator(ProductInstanceFunctionType.ModifierPlacement,
   new Schema<AbstractExpressionModifierPlacementExpression>({
     expr: {
       mtid: String,
       moid: String
     }
-  }, { _id: false, discriminatorKey: 'discriminator' }));
+  }, { _id: false, discriminatorKey: 'discriminator', toJSON: { virtuals: true }, toObject: { virtuals: true } }));
 export const AbstractExpressionProductMetadataSchema = WAbstractExpressionSchema.discriminator(ProductInstanceFunctionType.ProductMetadata,
   new Schema<AbstractExpressionProductMetadata>({
     expr: {
@@ -74,4 +79,4 @@ export const AbstractExpressionProductMetadataSchema = WAbstractExpressionSchema
         required: true
       },
     }
-  }, { _id: false, discriminatorKey: 'discriminator' }));
+  }, { _id: false, discriminatorKey: 'discriminator', toJSON: { virtuals: true }, toObject: { virtuals: true } }));

@@ -46,7 +46,7 @@ import {
 
 import { WProvider } from '../types/WProvider';
 
-import { formatRFC3339, format, Interval, addMinutes, isSameMinute, isSameDay, formatISO, intervalToDuration, formatDuration } from 'date-fns';
+import { formatRFC3339, format, Interval, isSameMinute, isSameDay, formatISO, intervalToDuration, formatDuration } from 'date-fns';
 import GoogleProvider from "./google";
 import SquareProvider from "./square";
 import StoreCreditProvider from "./store_credit_provider";
@@ -112,9 +112,9 @@ const DateTimeIntervalToDisplayServiceInterval = (interval: Interval) => {
 }
 
 const GenerateAutoResponseBodyEscaped = function (
+  order: WOrderInstance,
   fulfillmentConfig: FulfillmentConfig,
   date_time_interval: Interval,
-  phone_number: string,
   isPaid: boolean
 ) {
   const NOTE_PREPAID = "You've already paid, so unless there's an issue with the order, there's no need to handle payment from this point forward.";
@@ -122,13 +122,13 @@ const GenerateAutoResponseBodyEscaped = function (
   const STORE_NAME = DataProviderInstance.KeyValueConfig.STORE_NAME;
   const STORE_ADDRESS = DataProviderInstance.KeyValueConfig.STORE_ADDRESS;
 
-  const nice_area_code = IsNativeAreaCode(phone_number, STORE_NAME === WCP ? WCP_AREA_CODES : BTP_AREA_CODES);
+  const nice_area_code = IsNativeAreaCode(order.customerInfo.mobileNum, STORE_NAME === WCP ? WCP_AREA_CODES : BTP_AREA_CODES);
   const payment_section = isPaid ? NOTE_PREPAID : NOTE_PAYMENT;
   const display_time = DateTimeIntervalToDisplayServiceInterval(date_time_interval);
-  // const confirm = [`We're happy to confirm your ${display_time} pickup at`, `We're happy to confirm your ${display_time} at`, `We're happy to confirm your delivery around ${display_time} at`];
-  // const where = [STORE_ADDRESS, STORE_ADDRESS, delivery_info?.validation.validated_address ?? "NOPE"];
-  // TODO: need to message the delivery address if relevant
-  return encodeURIComponent(`${nice_area_code ? "Hey, nice area code!" : "Thanks!"} ${fulfillmentConfig.messages.CONFIRMATION} ${STORE_ADDRESS}.\n\n${fulfillmentConfig.messages.INSTRUCTIONS} ${payment_section}`);
+  const confirm = fulfillmentConfig.messages.CONFIRMATION; // [`We're happy to confirm your ${display_time} pickup at`, `We're happy to confirm your ${display_time} at`, `We're happy to confirm your delivery around ${display_time} at`];
+  const where = order.fulfillment.deliveryInfo?.validation.validated_address ?? STORE_ADDRESS;
+
+  return encodeURIComponent(`${nice_area_code ? "Hey, nice area code!" : "Thanks!"} ${confirm} ${display_time} at ${where}.\n\n${fulfillmentConfig.messages.INSTRUCTIONS} ${payment_section}`);
 }
 
 function GenerateOrderPaymentDisplay(payment: OrderPayment, isHtml: boolean) {
@@ -318,7 +318,7 @@ const CreateInternalEmail = async (
 
   const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
   const sameDayOrder = isSameDay(requestTime, dateTimeInterval.start);
-  const confirmation_body_escaped = GenerateAutoResponseBodyEscaped(fulfillmentConfig, dateTimeInterval, order.customerInfo.mobileNum, isPaid)
+  const confirmation_body_escaped = GenerateAutoResponseBodyEscaped(order, fulfillmentConfig, dateTimeInterval, isPaid)
   const confirmation_subject_escaped = encodeURIComponent(service_title);
   const payment_section = isPaid ? GeneratePaymentSection(totals, order.discounts, order.payments, true) : "";
   const delivery_section = GenerateDeliverySection(order.fulfillment.deliveryInfo, true);
@@ -529,7 +529,7 @@ export class OrderManager implements WProvider {
     if (foundTimeOptionIndex === -1 || optionsForSelectedDate[foundTimeOptionIndex].disabled) {
       // TODO: FIX THIS MESSAGE, for some reason it shows as no other options available even if there are.
       const display_time = DateTimeIntervalToDisplayServiceInterval(dateTimeInterval);
-      const errorDetail = `Requested fulfillment (${fulfillmentConfig.displayName}) at ${display_time} is no longer valid. ${optionsForSelectedDate.length > 0 ? `Next available time for date selected is ${WDateUtils.MinutesToPrintTime(optionsForSelectedDate[0].value)}` : 'No times left for selected date.'}`;
+      const errorDetail = `Requested fulfillment (${fulfillmentConfig.displayName}) at ${display_time} is no longer valid. ${optionsForSelectedDate.length > 0 ? `Next available time for date selected is ${WDateUtils.MinutesToPrintTime(optionsForSelectedDate[0].value)}. Please submit the order again.` : 'No times left for selected date.'}`;
       logger.error(errorDetail)
       return {
         status: 410,
@@ -637,7 +637,7 @@ export class OrderManager implements WProvider {
         status: 'COMPLETED'
       };
 
-      await new WOrderInstanceModel(completedOrderInstance)
+      return await new WOrderInstanceModel(completedOrderInstance)
         .save()
         .then(async (dbOrderInstance) => {
           logger.info(`Successfully saved OrderInstance to database: ${JSON.stringify(dbOrderInstance.toJSON())}`)
@@ -677,7 +677,7 @@ export class OrderManager implements WProvider {
             isPaid,
             recomputedTotals,
             ipAddress);
-          return { status: 200, success: true, result: dbOrderInstance.toObject() };
+          return { status: 200, success: true, errors, result: dbOrderInstance.toObject() };
         });
     } catch (err) {
       throw err;

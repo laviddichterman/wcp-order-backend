@@ -3,37 +3,72 @@ import { OrderPayment, PaymentMethod, TenderBaseStatus, StoreCreditPayment, Cred
 import { WMoney } from "../WMoney";
 import { WEncryptStringLockSchema } from "./WEncryptStringLock";
 
-export const WOrderPaymentSchema = new Schema<OrderPayment>({
+export const WOrderPaymentSchema = new Schema({
+  t: {
+    type: String,
+    enum: PaymentMethod,
+    required: true
+  },
   createdAt: {
     type: Number,
     required: true
   },
   status: {
     type: String,
-    enum: Object.keys(TenderBaseStatus),
+    enum: TenderBaseStatus,
     requred: true
   },
-  amount: { 
+  amount: {
     type: WMoney,
-    required: true 
+    required: true
   },
-}, {_id: false, discriminatorKey: 't'});
+  cardBrand: String,
+  amountTendered: {
+    type: WMoney,
+  },
+  change: {
+    type: WMoney,
+  },
+  code: {
+    type: String,
+  },
+  lock: {
+    type: WEncryptStringLockSchema,
+  },
+  processor: {
+    type: String,
+  },
+  processorId: {
+    type: String,
+  },
+  receiptUrl: {
+    type: String,
+  },
+  last4: {
+    type: String,
+  },
+  expYear: {
+    type: String,
+  },
+  cardholderName: String,
+  billingZip: String,
+}, { _id: false, discriminatorKey: 't', toJSON: { virtuals: true }, toObject: { virtuals: true } });
 
 
 //export const WOrderPaymentModel = mongoose.model<OrderPayment>(path.basename(__filename).replace(path.extname(__filename), ''), WOrderPaymentSchema);
-export const WCashPaymentSchema = WOrderPaymentSchema.discriminator(PaymentMethod.Cash, 
+export const WCashPaymentSchema = WOrderPaymentSchema.discriminator(PaymentMethod.Cash,
   new Schema<CashPayment>({
-    amountTendered: { 
+    amountTendered: {
       type: WMoney,
-      required: true 
+      required: true
     },
-    change: { 
+    change: {
       type: WMoney,
-      required: true 
+      required: true
     }
-}, {_id: false, discriminatorKey: 't'}));
+  }, { _id: false, discriminatorKey: 't', toJSON: { virtuals: true }, toObject: { virtuals: true } }));
 
-export const WStoreCreditPaymentSchema = WOrderPaymentSchema.discriminator(PaymentMethod.StoreCredit, 
+export const WStoreCreditPaymentSchema = WOrderPaymentSchema.discriminator(PaymentMethod.StoreCredit,
   new Schema<StoreCreditPayment>({
     code: {
       type: String,
@@ -43,11 +78,11 @@ export const WStoreCreditPaymentSchema = WOrderPaymentSchema.discriminator(Payme
       type: WEncryptStringLockSchema,
       required: true
     }
-}, {_id: false, discriminatorKey: 't'}));
+  }, { _id: false, discriminatorKey: 't', toJSON: { virtuals: true }, toObject: { virtuals: true } }));
 
-export const WCreditPaymentSchema = WOrderPaymentSchema.discriminator(PaymentMethod.CreditCard, 
+export const WCreditPaymentSchema = WOrderPaymentSchema.discriminator(PaymentMethod.CreditCard,
   new Schema<CreditPayment>({
-    processor: { 
+    processor: {
       type: String,
       enum: ["SQUARE"],
       required: true
@@ -70,4 +105,4 @@ export const WCreditPaymentSchema = WOrderPaymentSchema.discriminator(PaymentMet
     },
     cardholderName: String,
     billingZip: String,
-}, {_id: false, discriminatorKey: 't'}));
+  }, { _id: false, discriminatorKey: 't', toJSON: { virtuals: true }, toObject: { virtuals: true } }));

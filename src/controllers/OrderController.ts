@@ -51,7 +51,7 @@ export class OrderController implements IExpressController {
         nonce: req.body.nonce
       };
       const response = await OrderManagerInstance.CreateOrder(reqBody, (req.headers['x-real-ip'] as string) || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress);
-      res.status(response.status).json({ success: response.success, result: response.result } as CreateOrderResponse);
+      res.status(response.status).json({ success: response.success, errors: response.errors, result: response.result } as CreateOrderResponse);
     } catch (error) {
       GoogleProviderInstance.SendEmail(
         EMAIL_ADDRESS,
