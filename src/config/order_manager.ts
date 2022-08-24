@@ -128,7 +128,7 @@ const GenerateAutoResponseBodyEscaped = function (
   const confirm = fulfillmentConfig.messages.CONFIRMATION; // [`We're happy to confirm your ${display_time} pickup at`, `We're happy to confirm your ${display_time} at`, `We're happy to confirm your delivery around ${display_time} at`];
   const where = order.fulfillment.deliveryInfo?.validation.validated_address ?? STORE_ADDRESS;
 
-  return encodeURIComponent(`${nice_area_code ? "Hey, nice area code!" : "Thanks!"} ${confirm} ${display_time} at ${where}.\n\n${fulfillmentConfig.messages.INSTRUCTIONS} ${payment_section}`);
+  return encodeURIComponent(`${nice_area_code ? "Hey, nice area code!" : "Thanks!"} ${confirm} ${display_time} order at ${where}.\n\n${fulfillmentConfig.messages.INSTRUCTIONS} ${payment_section}`);
 }
 
 function GenerateOrderPaymentDisplay(payment: OrderPayment, isHtml: boolean) {
@@ -152,7 +152,7 @@ function GenerateOrderPaymentDisplay(payment: OrderPayment, isHtml: boolean) {
 function GenerateOrderLineDiscountDisplay(discount: OrderLineDiscount, isHtml: boolean) {
   switch (discount.t) {
     case DiscountMethod.CreditCodeAmount:
-      return `NOTE BEFORE CLOSING OUT: Apply discount of ${discount.amount}, pre-tax. Credit code used: ${discount.code}.${isHtml ? "<br />" : "\n"}`;
+      return `NOTE BEFORE CLOSING OUT: Apply discount of ${MoneyToDisplayString(discount.amount, true)}, pre-tax. Credit code used: ${discount.code}.${isHtml ? "<br />" : "\n"}`;
   }
 }
 
@@ -378,7 +378,6 @@ We are located ${LOCATION_INFO}</p>`;
   const emailbody = `<p>${ORDER_RESPONSE_PREAMBLE}</p>
 <p>We take your health seriously; be assured your order has been prepared with the utmost care.</p>
 <p>Note that all gratuity is shared with the entire ${STORE_NAME} family.</p>
-<p>${fulfillmentConfig.messages.CONFIRMATION}</p>
 <p>Please take some time to ensure the details of your order as they were entered are correct. If the order is fine, there is no need to respond to this message. If you need to make a correction or have a question, please respond to this message as soon as possible.</p>
     
 <b>Order information:</b><br />
@@ -386,10 +385,10 @@ Service: ${service_title}.<br />
 Phone: ${order.customerInfo.mobileNum}<br />
 Order contents:<br />
 ${cartstring.join("<br />")}
-${special_instructions_section}
-${delivery_section}
-${paymentDisplays}
-${location_section}We thank you for your support!`;
+${special_instructions_section ? '<br />' : ''}${special_instructions_section}
+${delivery_section ? '<br />' : ''}${delivery_section}
+${paymentDisplays ? '<br />' : ''}${paymentDisplays}
+${location_section ? '<br />' : ''}${location_section}We thank you for your support!`;
   return await GoogleProvider.SendEmail(
     {
       name: STORE_NAME,

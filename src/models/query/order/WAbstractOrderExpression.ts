@@ -14,6 +14,10 @@ export const WAbstractOrderExpressionSchema = new Schema<AbstractOrderExpression
     type: String,
     enum: OrderInstanceFunctionType,
     required: true
+  },
+  expr: {
+    type: Schema.Types.Mixed,
+    required: true
   }
 },
   { _id: false, discriminatorKey: 'discriminator', toJSON: { virtuals: true }, toObject: { virtuals: true } });

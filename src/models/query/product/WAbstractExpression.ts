@@ -19,6 +19,10 @@ export const WAbstractExpressionSchema = new Schema<IAbstractExpression>({
     type: String,
     enum: ProductInstanceFunctionType,
     required: true
+  },
+  expr: {
+    type: Schema.Types.Mixed,
+    required: true
   }
 }, { _id: false, discriminatorKey: 'discriminator', toJSON: { virtuals: true }, toObject: { virtuals: true } });
 

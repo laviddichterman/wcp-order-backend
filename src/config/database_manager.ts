@@ -514,6 +514,26 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
   }],
   "0.4.97": [{ major: 0, minor: 4, patch: 98 }, async () => {
   }],
+  "0.4.98": [{ major: 0, minor: 4, patch: 99 }, async () => {
+  }],
+  "0.4.99": [{ major: 0, minor: 4, patch: 100 }, async () => {
+    {
+      // add props to Category
+      const category_update = await WCategoryModel.updateMany(
+        {},
+        {
+          $set: {
+            'serviceDisable': []
+          }
+        });
+      if (category_update.modifiedCount > 0) {
+        logger.debug(`Updated ${category_update.modifiedCount} Categories with empty serviceDisable props.`);
+      }
+      else {
+        logger.warn("No categories had nesting or serviceDisable added");
+      }
+    }
+  }],
 }
 
 export class DatabaseManager implements WProvider {
