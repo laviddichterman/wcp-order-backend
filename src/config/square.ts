@@ -171,7 +171,7 @@ export class SquareProvider implements WProvider {
   }
 
   ProcessPayment = async (nonce: string, amount: IMoney, reference_id: string, square_order_id: string, verificationToken?: string):
-    Promise<{ success: true; result: CreditPayment; error: null; } |
+    Promise<{ success: true; result: CreditPayment; error: []; } |
     { success: false; result: null; error: SquareError[]; }> => {
     const idempotency_key = crypto.randomBytes(22).toString('hex');
     const payments_api = this.#client.paymentsApi;
@@ -212,13 +212,13 @@ export class SquareProvider implements WProvider {
               cardholderName: result.payment.cardDetails.card.cardholderName ?? undefined,
             }
           },
-          error: null
+          error: []
         };
       }
       return {
         success: false,
         result: null,
-        error: result.errors ? result.errors : null
+        error: result.errors ?? []
       };
     } catch (error) {
       logger.error(`Error in payment request: ${JSON.stringify(error)}`);

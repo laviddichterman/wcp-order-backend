@@ -611,15 +611,14 @@ export class OrderManager implements WProvider {
         }
         errors = response.error.map(e => ({ category: e.category, code: e.code, detail: e.detail }));
       } catch (error: any) {
+        hasChargingSucceeded = false;
         logger.error(`Nasty error in processing payment: ${JSON.stringify(error)}.`);
         errors.push({ category: 'PAYMENT_METHOD_ERROR', detail: JSON.stringify(error), code: 'INTERNAL_SERVER_ERROR' });
-        return { status: 500, success: false, result: null, errors };
-      } finally {
-        if (!hasChargingSucceeded && storeCreditResponses.length > 0) {
+      } 
+      if (!hasChargingSucceeded) {
+        if (storeCreditResponses.length > 0) {
           await RefundStoreCreditDebits(storeCreditResponses);
         }
-      }
-      if (!hasChargingSucceeded) {
         return { status: 400, success: false, result: null, errors };
       }
       else {
