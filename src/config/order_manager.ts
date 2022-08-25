@@ -47,11 +47,11 @@ import {
 import { WProvider } from '../types/WProvider';
 
 import { formatRFC3339, format, Interval, isSameMinute, isSameDay, formatISO, intervalToDuration, formatDuration } from 'date-fns';
-import GoogleProvider from "./google";
-import SquareProvider from "./square";
-import StoreCreditProvider from "./store_credit_provider";
-import CatalogProviderInstance from './catalog_provider';
-import DataProviderInstance from './dataprovider';
+import { GoogleProviderInstance } from "./google";
+import { SquareProviderInstance } from "./square";
+import { StoreCreditProviderInstance } from "./store_credit_provider";
+import { CatalogProviderInstance } from './catalog_provider';
+import { DataProviderInstance } from './dataprovider';
 import logger from '../logging';
 import { BigIntStringify } from "../utils";
 import { OrderFunctional } from "@wcp/wcpshared";
@@ -137,22 +137,22 @@ function GenerateOrderPaymentDisplay(payment: OrderPayment, isHtml: boolean) {
     case PaymentMethod.Cash:
       return `Received cash payment of ${MoneyToDisplayString(payment.amount, true)}.${lineBreak}`;
     case PaymentMethod.CreditCard:
-      return `Received payment of ${MoneyToDisplayString(payment.amount, true)} from credit card ending in ${payment.last4}.
+      return `Received payment of ${MoneyToDisplayString(payment.amount, true)} from credit card ending in ${payment.payment.last4}.
       ${lineBreak}
-      ${payment.receiptUrl ?
+      ${payment.payment.receiptUrl ?
           (isHtml ?
-            `<a href="${payment.receiptUrl}">Receipt link</a>${lineBreak}` :
-            `Receipt: ${payment.receiptUrl}${lineBreak}`) :
+            `<a href="${payment.payment.receiptUrl}">Receipt link</a>${lineBreak}` :
+            `Receipt: ${payment.payment.receiptUrl}${lineBreak}`) :
           ""}`;
     case PaymentMethod.StoreCredit:
-      return `Applied store credit value ${MoneyToDisplayString(payment.amount, true)} using code ${payment.code}.${lineBreak}`;
+      return `Applied store credit value ${MoneyToDisplayString(payment.amount, true)} using code ${payment.payment.code}.${lineBreak}`;
   }
 }
 
 function GenerateOrderLineDiscountDisplay(discount: OrderLineDiscount, isHtml: boolean) {
   switch (discount.t) {
     case DiscountMethod.CreditCodeAmount:
-      return `NOTE BEFORE CLOSING OUT: Apply discount of ${MoneyToDisplayString(discount.amount, true)}, pre-tax. Credit code used: ${discount.code}.${isHtml ? "<br />" : "\n"}`;
+      return `NOTE BEFORE CLOSING OUT: Apply discount of ${MoneyToDisplayString(discount.discount.amount, true)}, pre-tax. Credit code used: ${discount.discount.code}.${isHtml ? "<br />" : "\n"}`;
   }
 }
 
@@ -346,7 +346,7 @@ Stages: ${order.metrics.timeToStage.map((t, i) => `S${i}: ${FormatDurationHelper
 Time Bumps: ${order.metrics.numTimeBumps}<br />
 User IP: ${ipAddress}<br />
 <p>Useragent: ${order.metrics.useragent}</p>`;
-  return await GoogleProvider.SendEmail(
+  return await GoogleProviderInstance.SendEmail(
     {
       name: `${order.customerInfo.givenName} ${order.customerInfo.familyName}`,
       address: EMAIL_ADDRESS
@@ -389,7 +389,7 @@ ${special_instructions_section ? '<br />' : ''}${special_instructions_section}
 ${delivery_section ? '<br />' : ''}${delivery_section}
 ${paymentDisplays ? '<br />' : ''}${paymentDisplays}
 ${location_section ? '<br />' : ''}${location_section}We thank you for your support!`;
-  return await GoogleProvider.SendEmail(
+  return await GoogleProviderInstance.SendEmail(
     {
       name: STORE_NAME,
       address: EMAIL_ADDRESS
@@ -418,7 +418,7 @@ const CreateOrderEvent = async (
   const dineInSecrtion = GenerateDineInSection(order.fulfillment.dineInInfo, false);
   const calendar_details = `${shortcart.map(x => `${x.category_name}:\n${x.products.join("\n")}`).join("\n")}\n${dineInSecrtion}ph: ${order.customerInfo.mobileNum}${special_instructions_section}${delivery_section}${payment_section}`;
 
-  return await GoogleProvider.CreateCalendarEvent(calendar_event_title,
+  return await GoogleProviderInstance.CreateCalendarEvent(calendar_event_title,
     order.fulfillment.deliveryInfo?.validation.validated_address ?? "",
     calendar_details,
     {
@@ -432,14 +432,14 @@ const CreateOrderEvent = async (
 }
 
 const CreateSquareOrderAndCharge = async (reference_id: string, balance: IMoney, nonce: string, note: string) => {
-  const create_order_response = await SquareProvider.CreateOrderStoreCredit(reference_id, balance, note);
+  const create_order_response = await SquareProviderInstance.CreateOrderStoreCredit(reference_id, balance, note);
   if (create_order_response.success === true) {
     const square_order_id = create_order_response.result.order.id;
     logger.info(`For internal id ${reference_id} created Square Order ID: ${square_order_id} for ${MoneyToDisplayString(balance, true)}`)
-    const payment_response = await SquareProvider.ProcessPayment(nonce, balance, reference_id, square_order_id);
+    const payment_response = await SquareProviderInstance.ProcessPayment(nonce, balance, reference_id, square_order_id);
     if (payment_response.success === false) {
       logger.error("Failed to process payment: %o", payment_response);
-      await SquareProvider.OrderStateChange(square_order_id, create_order_response.result.order.version + 1, "CANCELED");
+      await SquareProviderInstance.OrderStateChange(square_order_id, create_order_response.result.order.version + 1, "CANCELED");
       return payment_response;
     }
     else {
@@ -454,7 +454,7 @@ const CreateSquareOrderAndCharge = async (reference_id: string, balance: IMoney,
 async function RefundStoreCreditDebits(spends: ValidateLockAndSpendSuccess[]) {
   return Promise.all(spends.map(async (x) => {
     logger.info(`Refunding ${JSON.stringify(x.entry)} after failed processing.`);
-    return StoreCreditProvider.CheckAndRefundStoreCredit(x.entry, x.index);
+    return StoreCreditProviderInstance.CheckAndRefundStoreCredit(x.entry, x.index);
   }))
 }
 
@@ -550,7 +550,7 @@ export class OrderManager implements WProvider {
       await Promise.all(createOrderRequest.creditValidations.map(async (creditUse) => {
         // NOTE: we assume validation of the amount_used field in the RecomputeTotals method
         if (creditUse.amount_used.amount > 0) {
-          const response = await StoreCreditProvider.ValidateLockAndSpend({ code: creditUse.code, amount: creditUse.amount_used, lock: creditUse.validation.lock, updatedBy: STORE_NAME })
+          const response = await StoreCreditProviderInstance.ValidateLockAndSpend({ code: creditUse.code, amount: creditUse.amount_used, lock: creditUse.validation.lock, updatedBy: STORE_NAME })
           if (response.success) {
             storeCreditResponses.push(response);
             switch (creditUse.validation.credit_type) {
@@ -559,9 +559,11 @@ export class OrderManager implements WProvider {
                   status: TenderBaseStatus.COMPLETED,
                   t: DiscountMethod.CreditCodeAmount,
                   createdAt: Date.now(),
-                  amount: creditUse.amount_used,
-                  code: creditUse.code,
-                  lock: creditUse.validation.lock
+                  discount: {
+                    amount: creditUse.amount_used,
+                    code: creditUse.code,
+                    lock: creditUse.validation.lock
+                  }
                 });
                 break;
               case 'MONEY':
@@ -570,8 +572,10 @@ export class OrderManager implements WProvider {
                   t: PaymentMethod.StoreCredit,
                   createdAt: Date.now(),
                   amount: creditUse.amount_used,
-                  code: creditUse.code,
-                  lock: creditUse.validation.lock
+                  payment: {
+                    code: creditUse.code,
+                    lock: creditUse.validation.lock
+                  }
                 });
                 break;
             }
@@ -691,6 +695,4 @@ export class OrderManager implements WProvider {
 
 }
 
-const OrderManagerInstance = new OrderManager();
-export default OrderManagerInstance;
-module.exports = OrderManagerInstance;
+export const OrderManagerInstance = new OrderManager();

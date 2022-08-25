@@ -18,31 +18,30 @@ export const WOrderLineDiscountSchema = new Schema({
     enum: TenderBaseStatus,
     requred: true
   },
-  amount: {
-    type: WMoney,
-  },
-  code: {
-    type: String,
-  },
-  lock: {
-    type: WEncryptStringLockSchema,
+  discount: {
+    type: Schema.Types.Mixed,
+    required: true
   }
 }, { _id: false, discriminatorKey: 't', toJSON: { virtuals: true }, toObject: { virtuals: true } });
 
-
-//export const WOrderLineDiscountModel = mongoose.model<OrderLineDiscount>(path.basename(__filename).replace(path.extname(__filename), ''), WOrderLineDiscount);
 export const WOrderLineDiscountCodeAmountSchema = WOrderLineDiscountSchema.discriminator(DiscountMethod.CreditCodeAmount,
   new Schema<OrderLineDiscountCodeAmount>({
-    amount: {
-      type: WMoney,
-      required: true
-    },
-    code: {
-      type: String,
-      required: true
-    },
-    lock: {
-      type: WEncryptStringLockSchema,
+    discount: {
+      type: {
+        amount: {
+          type: WMoney,
+          required: true
+        },
+        code: {
+          type: String,
+          required: true
+        },
+        lock: {
+          type: WEncryptStringLockSchema,
+          required: true
+        }
+      },
+      _id: false,
       required: true
     }
   }, { _id: false, discriminatorKey: 't', toJSON: { virtuals: true }, toObject: { virtuals: true } }));

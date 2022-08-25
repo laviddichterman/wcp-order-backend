@@ -3,12 +3,12 @@ import { body, query } from 'express-validator';
 import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
 import logger from '../logging';
 
-import DataProviderInstance from '../config/dataprovider';
+import { DataProviderInstance } from '../config/dataprovider';
 import IExpressController from '../types/IExpressController';
 import { CheckJWT, ScopeEditCredit } from '../config/authorization';
-import StoreCreditProviderInstance from '../config/store_credit_provider';
-import GoogleProviderInstance from '../config/google';
-import SquareProviderInstance from '../config/square';
+import { StoreCreditProviderInstance } from '../config/store_credit_provider';
+import { GoogleProviderInstance } from '../config/google';
+import { SquareProviderInstance } from '../config/square';
 import internal, { Stream } from 'stream';
 import { format, parseISO } from 'date-fns';
 import { SpendCreditResponse, WDateUtils, ValidateLockAndSpendRequest, CURRENCY, IssueStoreCreditRequest, StoreCreditType, MoneyToDisplayString, PurchaseStoreCreditRequest } from '@wcp/wcpshared';
@@ -222,8 +222,8 @@ export class StoreCreditController implements IExpressController {
             joint_credit_code: creditCode, 
             square_order_id, 
             amount_money: Number(payment_response.result.amount.amount), 
-            last4: payment_response.result.last4, 
-            receipt_url: payment_response.result.receiptUrl
+            last4: payment_response.result.payment.last4, 
+            receipt_url: payment_response.result.payment.receiptUrl
           });
         }
         else {

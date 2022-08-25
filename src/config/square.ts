@@ -1,8 +1,8 @@
 import { Error as SquareError, Client, CreateOrderRequest, CreateOrderResponse, CreatePaymentRequest, Environment, UpdateOrderRequest, OrderLineItem, Money } from 'square';
 import { WProvider } from '../types/WProvider';
 import crypto from 'crypto';
-import logger from'../logging';
-import DataProviderInstance from './dataprovider';
+import logger from '../logging';
+import { DataProviderInstance } from './dataprovider';
 import { BigIntStringify } from '../utils';
 import { CategorizedRebuiltCart, CreditPayment, CURRENCY, CustomerInfoDto, FulfillmentDto, IMoney, JSFECreditV2, PaymentMethod, TenderBaseStatus } from '@wcp/wcpshared';
 import { RecomputeTotalsResult } from './order_manager';
@@ -11,12 +11,12 @@ import { formatRFC3339, parseISO } from 'date-fns';
 const SQUARE_TAX_RATE_CATALOG_ID = "TMG7E3E5E45OXHJTBOHG2PMS";
 const VARIABLE_PRICE_STORE_CREDIT_CATALOG_ID = "DNP5YT6QDIWTB53H46F3ECIN";
 
-export const BigIntMoneyToIntMoney = (bigIntMoney: Money) : IMoney => ({ amount: Number(bigIntMoney.amount!), currency: bigIntMoney.currency! });
+export const BigIntMoneyToIntMoney = (bigIntMoney: Money): IMoney => ({ amount: Number(bigIntMoney.amount!), currency: bigIntMoney.currency! });
 
-export const IMoneyToBigIntMoney = (money: IMoney) : Money => ({ amount: BigInt(money.amount), currency: money.currency });
+export const IMoneyToBigIntMoney = (money: IMoney): Money => ({ amount: BigInt(money.amount), currency: money.currency });
 
 export class SquareProvider implements WProvider {
-  #client : Client;
+  #client: Client;
   constructor() {
   }
 
@@ -108,13 +108,13 @@ export class SquareProvider implements WProvider {
   //   }
   // }
 
-  CreateOrderStoreCredit = async (reference_id: string, amount: IMoney, note: string) :
-  Promise<{ success: true; result: CreateOrderResponse; error: null; } | 
+  CreateOrderStoreCredit = async (reference_id: string, amount: IMoney, note: string):
+    Promise<{ success: true; result: CreateOrderResponse; error: null; } |
     { success: false; result: null; error: SquareError[]; }> => {
-      // TODO: use idempotency key from order instead
+    // TODO: use idempotency key from order instead
     const idempotency_key = crypto.randomBytes(22).toString('hex');
     const orders_api = this.#client.ordersApi;
-    const request_body : CreateOrderRequest = {
+    const request_body: CreateOrderRequest = {
       idempotencyKey: idempotency_key,
       order: {
         referenceId: reference_id,
@@ -139,15 +139,15 @@ export class SquareProvider implements WProvider {
       try {
         return { success: false, result: null, error: error.errors as SquareError[] };
       } catch (err2) {
-        return { success: false, result: null, error: [{category: "API_ERROR", code: "INTERNAL_SERVER_ERROR", detail: 'Internal Server Error. Please reach out for assistance.'}]};
+        return { success: false, result: null, error: [{ category: "API_ERROR", code: "INTERNAL_SERVER_ERROR", detail: 'Internal Server Error. Please reach out for assistance.' }] };
       }
     }
   }
 
-  OrderStateChange = async (square_order_id : string, order_version : number, new_state : string) => {
+  OrderStateChange = async (square_order_id: string, order_version: number, new_state: string) => {
     const idempotency_key = crypto.randomBytes(22).toString('hex');
     const orders_api = this.#client.ordersApi;
-    const request_body : UpdateOrderRequest = {
+    const request_body: UpdateOrderRequest = {
       idempotencyKey: idempotency_key,
       order: {
         locationId: DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
@@ -168,12 +168,12 @@ export class SquareProvider implements WProvider {
     }
   }
 
-  ProcessPayment = async (nonce : string, amount: IMoney, reference_id : string, square_order_id : string, verificationToken?: string) : 
-    Promise<{ success: true; result: CreditPayment; error: null; } | 
+  ProcessPayment = async (nonce: string, amount: IMoney, reference_id: string, square_order_id: string, verificationToken?: string):
+    Promise<{ success: true; result: CreditPayment; error: null; } |
     { success: false; result: null; error: SquareError[]; }> => {
     const idempotency_key = crypto.randomBytes(22).toString('hex');
     const payments_api = this.#client.paymentsApi;
-    const request_body : CreatePaymentRequest = {
+    const request_body: CreatePaymentRequest = {
       sourceId: nonce,
       amountMoney: {
         "amount": BigInt(amount.amount),
@@ -192,23 +192,26 @@ export class SquareProvider implements WProvider {
       logger.info(`sending payment request: ${BigIntStringify(request_body)}`);
       const { result, ...httpResponse } = await payments_api.createPayment(request_body);
       if (result.payment && result.payment.status === 'COMPLETED') {
-        return { 
-          success: true, 
-          result: { 
+        return {
+          success: true,
+          result: {
             t: PaymentMethod.CreditCard,
-            processor: 'SQUARE',
             createdAt: parseISO(result.payment.createdAt).valueOf(),
+            amount: BigIntMoneyToIntMoney(result.payment.amountMoney),
             status: TenderBaseStatus.COMPLETED,
-            amount: BigIntMoneyToIntMoney(result.payment.amountMoney), 
-            billingZip: result.payment.billingAddress.postalCode,
-            cardBrand: result.payment.cardDetails.card.cardBrand,
-            expYear: result.payment.cardDetails.card.expYear.toString(),
-            last4: result.payment.cardDetails.card.last4,
-            receiptUrl: result.payment.receiptUrl,
-            processorId: result.payment.id,
-            cardholderName:  result.payment.cardDetails.card.cardholderName,
+            payment: {
+              processor: 'SQUARE',
+              billingZip: result.payment.billingAddress.postalCode,
+              cardBrand: result.payment.cardDetails.card.cardBrand,
+              expYear: result.payment.cardDetails.card.expYear.toString(),
+              last4: result.payment.cardDetails.card.last4,
+              receiptUrl: result.payment.receiptUrl,
+              processorId: result.payment.id,
+              cardholderName: result.payment.cardDetails.card.cardholderName,
+            }
           },
-          error: null };  
+          error: null
+        };
       }
       return {
         success: false,
@@ -226,6 +229,4 @@ export class SquareProvider implements WProvider {
   }
 };
 
-const SquareProviderInstance = new SquareProvider();
-export default SquareProviderInstance;
-module.exports = SquareProviderInstance;
+export const SquareProviderInstance = new SquareProvider();
