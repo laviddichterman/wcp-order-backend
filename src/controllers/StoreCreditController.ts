@@ -8,10 +8,8 @@ import IExpressController from '../types/IExpressController';
 import { CheckJWT, ScopeEditCredit } from '../config/authorization';
 import { StoreCreditProviderInstance } from '../config/store_credit_provider';
 import { GoogleProviderInstance } from '../config/google';
-import { SquareProviderInstance } from '../config/square';
-import internal, { Stream } from 'stream';
-import { format, parseISO } from 'date-fns';
-import { SpendCreditResponse, WDateUtils, ValidateLockAndSpendRequest, CURRENCY, IssueStoreCreditRequest, StoreCreditType, MoneyToDisplayString, PurchaseStoreCreditRequest } from '@wcp/wcpshared';
+
+import { SpendCreditResponse, ValidateLockAndSpendRequest, CURRENCY, IssueStoreCreditRequest, StoreCreditType, PurchaseStoreCreditRequest, PurchaseStoreCreditResponse } from '@wcp/wcpshared';
 import { BigIntStringify } from '../utils';
 
 const CreditCodeValidationChain = [
@@ -51,75 +49,6 @@ const IssueStoreCreditValidationChain = [
   body('addedBy').trim().exists().escape(),
   body('reason').trim().exists().escape(),
 ];
-
-const CreateExternalEmailSender = async ({amount, senderEmail, recipientNameFirst, recipientNameLast} : Pick<PurchaseStoreCreditRequest, 'amount' | 'senderEmail' | 'recipientNameFirst' | 'recipientNameLast'>, creditCode : string, qr_code_fs : internal.PassThrough) => {
-  const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
-  const STORE_NAME = DataProviderInstance.KeyValueConfig.STORE_NAME;
-  const amountString = MoneyToDisplayString(amount, true);
-  const recipient = `${recipientNameFirst} ${recipientNameLast}`;
-  const emailbody = `<h2>Thanks for thinking of Windy City Pie and Breezy Town Pizza for someone close to you!</h2>
-  <p>We're happy to acknowledge that we've received a payment of ${amountString} for ${recipient}'s store credit. <br />
-  This gift of store credit never expires and is valid at both Windy City Pie and Breezy Town Pizza locations.<br />
-  Store credit can be used when paying online on our website by copy/pasting the code below or in person using the QR code below. We'll take care of the rest!</p>
-  <p>Give ${recipientNameFirst} this store credit code: <strong>${creditCode}</strong> and this QR code: <br/> <img src="cid:${creditCode}" /></p>
-  <p>Keep this email in your records and let us know if you have any questions!</p>`;
-  await GoogleProviderInstance.SendEmail(
-    {
-      name: STORE_NAME,
-      address: EMAIL_ADDRESS
-    },
-    senderEmail,
-    `Store credit purchase of value ${amountString} for ${recipient}.`,
-    EMAIL_ADDRESS,
-    emailbody,
-    [{filename:"qrcode.png", content: qr_code_fs, cid: creditCode}]);
-};
-
-const CreateExternalEmailRecipient = async ({amount, senderName, recipientNameFirst, recipientNameLast, recipientEmail, recipientMessage}: PurchaseStoreCreditRequest, creditCode : string, qr_code_fs : internal.PassThrough) => {
-  const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
-  const STORE_NAME = DataProviderInstance.KeyValueConfig.STORE_NAME;
-  const amountString = MoneyToDisplayString(amount, true);
-  const recipient = `${recipientNameFirst} ${recipientNameLast}`;
-  const sender_message = recipientMessage && recipientMessage.length > 0 ? `<p><h3>${senderName} wanted us to relay the following to you:</h3><em>${recipientMessage}</em></p>` : "";
-  const emailbody = `<h2>Hey ${recipientNameFirst}, ${senderName} sent you some digital pizza!</h2>
-  <p>This gift of store credit never expires and is valid at both Windy City Pie and Breezy Town Pizza locations.<br />
-  Store credit can be used when paying online on our website by copy/pasting the code below into the "Use Digital Gift Card / Store Credit" field or, in person by showing the QR code at the bottom of this email. We'll take care of the rest!</p>
-  <p>Credit code: <strong>${creditCode}</strong> valuing <strong>${amountString}</strong> for ${recipient}.<br />Keep this email in your records and let us know if you have any questions!</p>  ${sender_message}
-  <p>QR code for in-person redemption: <br/> <img src="cid:${creditCode}" /></p>`;
-  await GoogleProviderInstance.SendEmail(
-    {
-      name: STORE_NAME,
-      address: EMAIL_ADDRESS
-    },
-    recipientEmail,
-    `${recipientNameFirst}, you've got store credit to Windy City Pie and Breezy Town Pizza!`,
-    EMAIL_ADDRESS,
-    emailbody,
-    [{filename:"qrcode.png", content: qr_code_fs, cid: creditCode}]);
-}
-
-const CreateExternalEmail = async ({ amount, recipientNameFirst, recipientNameLast, recipientEmail, expiration} : IssueStoreCreditRequest, creditCode : string, qr_code_fs : internal.PassThrough) => {
-  const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
-  const STORE_NAME = DataProviderInstance.KeyValueConfig.STORE_NAME;
-  const amountString = MoneyToDisplayString(amount, true);
-  const recipient = `${recipientNameFirst} ${recipientNameLast}`;
-  const expiration_section = expiration ? `<br />Please note that this credit will expire at 11:59PM on ${format(parseISO(expiration), WDateUtils.ServiceDateDisplayFormat)}.` : "";
-  const emailbody = `<h2>You've been sent a discount code from ${STORE_NAME}!</h2>
-  <p>Credit code: <strong>${creditCode}</strong> valuing <strong>${amountString}</strong> for ${recipient}.<br />
-  <p>Use this discount code when ordering online or in person at either Windy City Pie or Breezy Town Pizza.${expiration_section}</p><br />
-  Keep this email in your records and let us know if you have any questions!</p>
-  <p>Copy and paste the code above into the "Use Digital Gift Card / Store Credit" field when paying online or, if redeeming in person, show this QR code:<br/> <img src="cid:${creditCode}" /></p>`;
-  await GoogleProviderInstance.SendEmail(
-    {
-      name: STORE_NAME,
-      address: EMAIL_ADDRESS
-    },
-    recipientEmail,
-    `${STORE_NAME} discount code of value ${amountString} for ${recipient}.`,
-    EMAIL_ADDRESS,
-    emailbody,
-    [{filename:"qrcode.png", content: qr_code_fs, cid: creditCode}]);
-};
 
 
 
@@ -185,7 +114,6 @@ export class StoreCreditController implements IExpressController {
 
   private postPurchaseCredit = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const reference_id = Date.now().toString(36).toUpperCase();
       const nonce = req.body.nonce;
       const typedRequest: PurchaseStoreCreditRequest = {
         amount: req.body.amount,
@@ -198,43 +126,8 @@ export class StoreCreditController implements IExpressController {
         sendEmailToRecipient: req.body.sendEmailToRecipient,
         recipientMessage: req.body.recipientMessage
       };
-      const amountString = MoneyToDisplayString(typedRequest.amount, true);
-      const creditCode = StoreCreditProviderInstance.GenerateCreditCode();
-      const qr_code_fs = await StoreCreditProviderInstance.GenerateQRCodeFS(creditCode);
-      const qr_code_fs_a = new Stream.PassThrough();
-      const qr_code_fs_b = new Stream.PassThrough();
-      qr_code_fs.pipe(qr_code_fs_a);
-      qr_code_fs.pipe(qr_code_fs_b);
-      const create_order_response = await SquareProviderInstance.CreateOrderStoreCredit(reference_id, typedRequest.amount, `Purchase of store credit code: ${creditCode}`);
-      if (create_order_response.success === true) {
-        const square_order_id = create_order_response.result.order.id;
-        logger.info(`For internal id ${reference_id} created Square Order ID: ${square_order_id} for ${amountString}`)
-        const payment_response = await SquareProviderInstance.ProcessPayment(nonce, typedRequest.amount, reference_id, square_order_id);
-        if (payment_response.success === true) {
-          CreateExternalEmailSender(typedRequest, creditCode, qr_code_fs_a);
-          if (req.body.send_email_to_recipient) {
-            CreateExternalEmailRecipient(typedRequest, creditCode, qr_code_fs_b);
-          }
-          
-          await StoreCreditProviderInstance.CreateCreditFromCreditCode({...typedRequest, addedBy: 'WARIO',reason: "website purchase", creditType: StoreCreditType.MONEY, creditCode, expiration: null})
-          logger.info(`Store credit code: ${creditCode} and Square Order ID: ${square_order_id} payment for ${amountString} successful, credit logged to spreadsheet.`)
-          return res.status(200).json({reference_id, 
-            joint_credit_code: creditCode, 
-            square_order_id, 
-            amount_money: Number(payment_response.result.amount.amount), 
-            last4: payment_response.result.payment.last4, 
-            receipt_url: payment_response.result.payment.receiptUrl
-          });
-        }
-        else {
-          logger.error("Failed to process payment: %o", payment_response);
-          await SquareProviderInstance.OrderStateChange(square_order_id, create_order_response.result.order.version + 1, "CANCELED");
-          return res.status(400).json(payment_response);
-        }
-      } else {
-        logger.error(BigIntStringify(create_order_response));
-        return res.status(500).json(create_order_response);
-      }
+      const result = await StoreCreditProviderInstance.PurchaseStoreCredit(typedRequest, nonce);
+      return res.status(result.status).json({ error: result.error, result: result.result, success: result.success } as PurchaseStoreCreditResponse);
     } catch (error) {
       GoogleProviderInstance.SendEmail(
         DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS,
@@ -257,13 +150,8 @@ export class StoreCreditController implements IExpressController {
         recipientNameLast: req.body.recipientNameLast,
         expiration: req.body.expiration ? req.body.expiration : null
       }
-      const amountAsString = MoneyToDisplayString(req.body.amount, true);
-      const creditCode = StoreCreditProviderInstance.GenerateCreditCode();
-      const qr_code_fs = await StoreCreditProviderInstance.GenerateQRCodeFS(creditCode);
-      await StoreCreditProviderInstance.CreateCreditFromCreditCode({...typedRequest, creditCode });
-      await CreateExternalEmail(typedRequest, creditCode, qr_code_fs);
-      logger.info(`Store credit code: ${creditCode} of type DISCOUNT for ${amountAsString} added by ${typedRequest.addedBy} for reason: ${typedRequest.reason}.`)
-      return res.status(200).json({ credit_code: creditCode });
+      const result = await StoreCreditProviderInstance.IssueCredit(typedRequest);
+      return res.status(result.status).json({ credit_code: result.credit_code });
     } catch (error) {
       GoogleProviderInstance.SendEmail(
         DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS,
