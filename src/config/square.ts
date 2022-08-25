@@ -3,7 +3,6 @@ import { WProvider } from '../types/WProvider';
 import crypto from 'crypto';
 import logger from '../logging';
 import { DataProviderInstance } from './dataprovider';
-import { BigIntStringify } from '../utils';
 import { CategorizedRebuiltCart, CreditPayment, CURRENCY, CustomerInfoDto, FulfillmentDto, IMoney, JSFECreditV2, PaymentMethod, TenderBaseStatus } from '@wcp/wcpshared';
 import { RecomputeTotalsResult } from './order_manager';
 import { formatRFC3339, parseISO } from 'date-fns';
@@ -97,7 +96,7 @@ export class SquareProvider implements WProvider {
   //     }, 
   //   };
   //   try {
-  //     logger.info(`sending order request: ${BigIntStringify(request_body)}`);
+  //     logger.info(`sending order request: ${JSON.stringify(request_body)}`);
   //     const { result, ...httpResponse } = await orders_api.createOrder(request_body);
   //     return { success: true, result: result, error: null };
   //   } catch (error) {
@@ -132,12 +131,15 @@ export class SquareProvider implements WProvider {
       }
     };
     try {
-      logger.info(`sending order request: ${BigIntStringify(request_body)}`);
+      logger.info(`sending order request: ${JSON.stringify(request_body)}`);
       const { result, ...httpResponse } = await orders_api.createOrder(request_body);
       return { success: true, result: result, error: null };
     } catch (error) {
       try {
-        return { success: false, result: null, error: error.errors as SquareError[] };
+        return { 
+          success: false, 
+          result: null, 
+          error: error && error.errors ? error.errors : [{category: 'INTERNAL_SERVER_ERROR', code: 'INTERNAL_SERVER_ERROR', detail: JSON.stringify(error) }] };
       } catch (err2) {
         return { success: false, result: null, error: [{ category: "API_ERROR", code: "INTERNAL_SERVER_ERROR", detail: 'Internal Server Error. Please reach out for assistance.' }] };
       }
@@ -156,11 +158,11 @@ export class SquareProvider implements WProvider {
       }
     };
     try {
-      logger.info(`sending order status change request: ${BigIntStringify(request_body)}`);
+      logger.info(`sending order status change request: ${JSON.stringify(request_body)}`);
       const { result, ...httpResponse } = await orders_api.updateOrder(square_order_id, request_body);
       return { success: true, response: result };
     } catch (error) {
-      logger.error(`Error in order state change: ${BigIntStringify(error)}`);
+      logger.error(`Error in order state change: ${JSON.stringify(error)}`);
       return {
         success: false,
         response: error
@@ -189,7 +191,7 @@ export class SquareProvider implements WProvider {
       idempotencyKey: idempotency_key
     };
     try {
-      logger.info(`sending payment request: ${BigIntStringify(request_body)}`);
+      logger.info(`sending payment request: ${JSON.stringify(request_body)}`);
       const { result, ...httpResponse } = await payments_api.createPayment(request_body);
       if (result.payment && result.payment.status === 'COMPLETED') {
         return {
@@ -201,13 +203,13 @@ export class SquareProvider implements WProvider {
             status: TenderBaseStatus.COMPLETED,
             payment: {
               processor: 'SQUARE',
-              billingZip: result.payment.billingAddress.postalCode,
-              cardBrand: result.payment.cardDetails.card.cardBrand,
+              billingZip: result.payment.billingAddress?.postalCode ?? undefined,
+              cardBrand: result.payment.cardDetails.card.cardBrand ?? undefined,
               expYear: result.payment.cardDetails.card.expYear.toString(),
               last4: result.payment.cardDetails.card.last4,
               receiptUrl: result.payment.receiptUrl,
               processorId: result.payment.id,
-              cardholderName: result.payment.cardDetails.card.cardholderName,
+              cardholderName: result.payment.cardDetails.card.cardholderName ?? undefined,
             }
           },
           error: null
@@ -219,11 +221,11 @@ export class SquareProvider implements WProvider {
         error: result.errors ? result.errors : null
       };
     } catch (error) {
-      logger.error(`Error in payment request: ${BigIntStringify(error)}`);
+      logger.error(`Error in payment request: ${JSON.stringify(error)}`);
       return {
         success: false,
         result: null,
-        error: error && error.errors ? error.errors : null
+        error: error && error.errors ? error.errors : [{category: 'INTERNAL_SERVER_ERROR', code: 'INTERNAL_SERVER_ERROR', detail: JSON.stringify(error) }]
       };
     }
   }
