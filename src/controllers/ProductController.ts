@@ -6,8 +6,8 @@ import logger from '../logging';
 
 import IExpressController from '../types/IExpressController';
 import { CheckJWT, ScopeDeleteCatalog, ScopeWriteCatalog } from '../config/authorization';
-import CatalogProviderInstance from '../config/catalog_provider';
-import { isValidDisabledValue } from '../types/Validations';
+import { CatalogProviderInstance } from '../config/catalog_provider';
+import { isFulfillmentDefined, isValidDisabledValue } from '../types/Validations';
 
 const ProductClassByIdValidationChain = [
   param('pid').trim().escape().exists().isMongoId(), 
@@ -23,7 +23,7 @@ const ProductClassValidationChain = [
   body('shortcode').trim().escape().exists(),
   body('externalIDs.*').trim().escape(),
   body('disabled').custom(isValidDisabledValue),
-  body('serviceDisable.*').isInt({min:0}),
+  body('serviceDisable.*').custom(isFulfillmentDefined),
   body('displayFlags.flavor_max').isFloat({min: 0}),
   body('displayFlags.bake_max').isFloat({min: 0}),
   body('displayFlags.bake_differential').isFloat({min: 0}),
@@ -37,7 +37,7 @@ const ProductClassValidationChain = [
   body('price.currency').exists().isLength({ min: 3, max: 3 }).isIn(['USD']),
   body('modifiers.*.mtid').trim().escape().exists().isMongoId(),
   body('modifiers.*.enable').optional({nullable: true}).isMongoId(),
-  body('modifiers.*.serviceDisable.*').trim().escape().isMongoId(),
+  body('modifiers.*.serviceDisable.*').custom(isFulfillmentDefined),
   body('category_ids.*').trim().escape().exists().isMongoId(),
 ];
 

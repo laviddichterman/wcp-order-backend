@@ -1,12 +1,12 @@
 require('dotenv').config();
 
-import GoogleProvider from "./config/google";
-import SquareProvider from "./config/square";
-import DatabaseManagerInstance from "./config/database_manager";
-import DataProviderInstance from "./config/dataprovider";
-import CatalogProviderInstance from "./config/catalog_provider";
-import SocketIoProviderInstance from "./config/socketio_provider";
-import OrderManagerInstance from "./config/order_manager";
+import { GoogleProviderInstance } from "./config/google";
+import { SquareProviderInstance } from "./config/square";
+import { DatabaseManagerInstance } from "./config/database_manager";
+import { DataProviderInstance } from "./config/dataprovider";
+import { CatalogProviderInstance } from "./config/catalog_provider";
+import { SocketIoProviderInstance } from "./config/socketio_provider";
+import { OrderManagerInstance } from "./config/order_manager";
 import { DeliveryAddressController } from "./controllers/DeliveryAddressController";
 import { KeyValueStoreController } from "./controllers/KeyValueStoreController";
 import { ModifierController } from "./controllers/ModifierController";
@@ -42,8 +42,8 @@ const app = new WApp(["nsRO"],
   ],
   [DatabaseManagerInstance, 
     DataProviderInstance, 
-    GoogleProvider, 
-    SquareProvider, 
+    GoogleProviderInstance, 
+    SquareProviderInstance, 
     CatalogProviderInstance, 
     SocketIoProviderInstance,
     OrderManagerInstance]

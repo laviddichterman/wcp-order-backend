@@ -1,22 +1,20 @@
 import {
   ICatalog,
   SEMVER,
-  ICatalogCategories,
-  ICatalogModifiers,
   ICategory,
   IOption,
   IOptionType,
   IProduct,
   IProductInstance,
   IProductInstanceFunction,
-  ICatalogProducts,
   FindModifierPlacementExpressionsForMTID,
   FindHasAnyModifierExpressionsForMTID,
   AbstractExpressionModifierPlacementExpression,
   OrderInstanceFunction,
   ReduceArrayToMapByKey,
   RecordOrderInstanceFunctions,
-  RecordProductInstanceFunctions
+  RecordProductInstanceFunctions,
+  CatalogGenerator
 } from "@wcp/wcpshared";
 import DBVersionModel from '../models/DBVersionSchema';
 import { WCategoryModel } from '../models/catalog/category/WCategorySchema';
@@ -26,78 +24,10 @@ import { WOptionModel } from '../models/catalog/options/WOptionSchema';
 import { WOptionTypeModel } from '../models/catalog/options/WOptionTypeSchema';
 import { WProductInstanceFunctionModel } from '../models/query/product/WProductInstanceFunction';
 import { WOrderInstanceFunctionModel } from "../models/query/order/WOrderInstanceFunction";
-import socketIo from "socket.io";
+import { DataProviderInstance } from "./dataprovider";
+import { SocketIoProviderInstance } from "./socketio_provider";
 import logger from '../logging';
 import { WProvider } from "../types/WProvider";
-import { WApp } from "../App";
-import DataProviderInstance from "./dataprovider";
-
-// Returns [ category_map, product_map ] list;
-// category_map entries are mapping of catagory_id to { category, children (id list), product (id list) }
-// product_map is mapping from productId to { product, instances (list of instance objects)}
-// orphan_products is list of orphan product ids
-const CatalogMapGenerator = (categories: ICategory[], products: IProduct[], product_instances: IProductInstance[]) => {
-  const category_map: ICatalogCategories = categories.reduce((acc, cat) => ({ ...acc, [cat.id]: { category: cat, children: [], products: [] } }), {});
-  categories.forEach((curr) => {
-    if (curr.parent_id) {
-      if (category_map[curr.parent_id]) {
-        category_map[curr.parent_id].children.push(curr.id);
-      }
-      else {
-        logger.error(`Missing category ID ${curr.parent_id} specified by ${JSON.stringify(curr)}`);
-      }
-    }
-  });
-  const product_map: ICatalogProducts = products.reduce((acc, p) => {
-    if (p.category_ids.length !== 0) {
-      p.category_ids.forEach((cid) => {
-        category_map[cid] ? category_map[cid].products.push(p.id) : console.error(`Missing category ID: ${cid} in product: ${JSON.stringify(p)}`);
-      });
-    }
-    return { ...acc, [p.id]: { product: p, instances: [] } };
-  }, {});
-  product_instances.forEach((curr) => {
-    product_map[curr.productId].instances.push(curr);
-  })
-  return [category_map, product_map];
-};
-
-const ModifierTypeMapGenerator = (modifier_types: IOptionType[], options: IOption[]) => {
-  var modifier_types_map: ICatalogModifiers = modifier_types.reduce((acc, m) => ({ ...acc, [m.id]: { options: [], modifier_type: m } }), {});
-  options.forEach(o => {
-    if (Object.hasOwn(modifier_types_map, o.modifierTypeId)) {
-      modifier_types_map[o.modifierTypeId].options.push(o);
-    }
-    else {
-      logger.error(`Modifier Type ID ${o.modifierTypeId} referenced by ModifierOption ${o.id} not found!`);
-    }
-  });
-  return modifier_types_map;
-};
-
-const CatalogGenerator = (
-  // REVISIT:
-  // perhaps storing maps of Record<mtid, moid[]> and Record<pid, piid[]> would eliminate some of the duplicate storage
-  categories: ICategory[],
-  modifier_types: IOptionType[],
-  options: IOption[],
-  products: IProduct[],
-  product_instances: IProductInstance[],
-  productInstanceFunctions: RecordProductInstanceFunctions,
-  orderInstanceFunctions: RecordOrderInstanceFunctions,
-  api: SEMVER) => {
-  const modifier_types_map = ModifierTypeMapGenerator(modifier_types, options);
-  const [category_map, product_map] = CatalogMapGenerator(categories, Object.values(products), Object.values(product_instances));
-  return {  
-    modifiers: modifier_types_map,
-    categories: category_map,
-    products: product_map,
-    version: Date.now().toString(36).toUpperCase(),
-    product_instance_functions: {...productInstanceFunctions},
-    orderInstanceFunctions: {...orderInstanceFunctions},
-    api
-  } as ICatalog;
-}
 
 const ValidateProductModifiersFunctionsCategories = function (modifiers: { mtid: string; enable: string | null; }[], category_ids: string[], catalog: CatalogProvider) {
   const found_all_modifiers = modifiers.map(entry =>
@@ -108,9 +38,6 @@ const ValidateProductModifiersFunctionsCategories = function (modifiers: { mtid:
 }
 
 export class CatalogProvider implements WProvider {
-  #socketRO: socketIo.Namespace;
-  // REVISIT:
-  // perhaps storing maps of Record<mtid, moid[]> and Record<pid, piid[]> would eliminate some of the duplicate storage
   #categories: Record<string, ICategory>;
   #modifier_types: IOptionType[];
   #options: IOption[];
@@ -237,18 +164,12 @@ export class CatalogProvider implements WProvider {
     return true;
   }
 
-  EmitCatalog = (dest: socketIo.Socket | socketIo.Namespace) => {
-    dest.emit('WCP_CATALOG', this.#catalog);
-  }
-
   RecomputeCatalog = () => {
     this.#catalog = CatalogGenerator(Object.values(this.#categories), this.#modifier_types, this.#options, this.#products, this.#product_instances, this.#product_instance_functions, this.#orderInstanceFunctions, this.#apiver);
   }
 
-  Bootstrap = async (app: WApp) => {
+  Bootstrap = async () => {
     logger.info(`Starting Bootstrap of CatalogProvider, Loading catalog from database...`);
-    this.#socketRO = app.getSocketIoNamespace('nsRO');
-    // load catalog from DB, do not push to clients as that'll be handled when a new client connects
 
     this.#apiver = await DBVersionModel.findOne().exec()
 
@@ -271,7 +192,7 @@ export class CatalogProvider implements WProvider {
     await doc.save();
     await this.SyncCategories();
     this.RecomputeCatalog();
-    this.EmitCatalog(this.#socketRO);
+    SocketIoProviderInstance.EmitCatalog(this.#catalog);
     return doc;
   };
 
@@ -302,7 +223,7 @@ export class CatalogProvider implements WProvider {
       }
       await this.SyncCategories();
       this.RecomputeCatalog();
-      this.EmitCatalog(this.#socketRO);
+      SocketIoProviderInstance.EmitCatalog(this.#catalog);
       // is this going to still be valid after the Sync above?
       return response.toObject();
     } catch (err) {
@@ -342,7 +263,7 @@ export class CatalogProvider implements WProvider {
       }
       await this.SyncCategories();
       this.RecomputeCatalog();
-      this.EmitCatalog(this.#socketRO);
+      SocketIoProviderInstance.EmitCatalog(this.#catalog);
       return doc;
     } catch (err) {
       throw err;
@@ -354,7 +275,7 @@ export class CatalogProvider implements WProvider {
     await doc.save();
     await this.SyncModifierTypes();
     this.RecomputeCatalog();
-    this.EmitCatalog(this.#socketRO);
+    SocketIoProviderInstance.EmitCatalog(this.#catalog);
     return doc;
   };
 
@@ -370,7 +291,7 @@ export class CatalogProvider implements WProvider {
       }
       await this.SyncModifierTypes();
       this.RecomputeCatalog();
-      this.EmitCatalog(this.#socketRO);
+      SocketIoProviderInstance.EmitCatalog(this.#catalog);
       return updated;
     } catch (err) {
       throw err;
@@ -414,7 +335,7 @@ export class CatalogProvider implements WProvider {
       await this.SyncOptions();
       await this.SyncModifierTypes();
       this.RecomputeCatalog();
-      this.EmitCatalog(this.#socketRO);
+      SocketIoProviderInstance.EmitCatalog(this.#catalog);
       return doc;
     } catch (err) {
       throw err;
@@ -432,7 +353,7 @@ export class CatalogProvider implements WProvider {
     await doc.save();
     await this.SyncOptions();
     this.RecomputeCatalog();
-    this.EmitCatalog(this.#socketRO);
+    SocketIoProviderInstance.EmitCatalog(this.#catalog);
     return doc;
   };
 
@@ -450,7 +371,7 @@ export class CatalogProvider implements WProvider {
       }
       await this.SyncOptions();
       this.RecomputeCatalog();
-      this.EmitCatalog(this.#socketRO);
+      SocketIoProviderInstance.EmitCatalog(this.#catalog);
       return updated;
     } catch (err) {
       throw err;
@@ -483,7 +404,7 @@ export class CatalogProvider implements WProvider {
         }
       }));
       this.RecomputeCatalog();
-      this.EmitCatalog(this.#socketRO);
+      SocketIoProviderInstance.EmitCatalog(this.#catalog);
       return doc;
     } catch (err) {
       throw err;
@@ -499,7 +420,7 @@ export class CatalogProvider implements WProvider {
     await this.SyncProducts();
     if (!suppress_catalog_recomputation) {
       this.RecomputeCatalog();
-      this.EmitCatalog(this.#socketRO);
+      SocketIoProviderInstance.EmitCatalog(this.#catalog);
     }
     return doc;
   };
@@ -532,7 +453,7 @@ export class CatalogProvider implements WProvider {
 
       await this.SyncProducts();
       this.RecomputeCatalog();
-      this.EmitCatalog(this.#socketRO);
+      SocketIoProviderInstance.EmitCatalog(this.#catalog);
       return updated;
     } catch (err) {
       throw err;
@@ -553,7 +474,7 @@ export class CatalogProvider implements WProvider {
       }
       await this.SyncProducts();
       this.RecomputeCatalog();
-      this.EmitCatalog(this.#socketRO);
+      SocketIoProviderInstance.EmitCatalog(this.#catalog);
       return doc;
     } catch (err) {
       throw err;
@@ -565,7 +486,7 @@ export class CatalogProvider implements WProvider {
     await doc.save();
     await this.SyncProductInstances();
     this.RecomputeCatalog();
-    this.EmitCatalog(this.#socketRO);
+    SocketIoProviderInstance.EmitCatalog(this.#catalog);
     return doc;
   };
 
@@ -582,7 +503,7 @@ export class CatalogProvider implements WProvider {
 
       await this.SyncProductInstances();
       this.RecomputeCatalog();
-      this.EmitCatalog(this.#socketRO);
+      SocketIoProviderInstance.EmitCatalog(this.#catalog);
       return updated;
     } catch (err) {
       throw err;
@@ -598,7 +519,7 @@ export class CatalogProvider implements WProvider {
       }
       await this.SyncProductInstances();
       this.RecomputeCatalog();
-      this.EmitCatalog(this.#socketRO);
+      SocketIoProviderInstance.EmitCatalog(this.#catalog);
       return doc;
     } catch (err) {
       throw err;
@@ -610,7 +531,7 @@ export class CatalogProvider implements WProvider {
     await doc.save();
     await this.SyncProductInstanceFunctions();
     this.RecomputeCatalog();
-    this.EmitCatalog(this.#socketRO);
+    SocketIoProviderInstance.EmitCatalog(this.#catalog);
     return doc;
   };
 
@@ -626,7 +547,7 @@ export class CatalogProvider implements WProvider {
       }
       await this.SyncProductInstanceFunctions();
       this.RecomputeCatalog();
-      this.EmitCatalog(this.#socketRO);
+      SocketIoProviderInstance.EmitCatalog(this.#catalog);
       return updated;
     } catch (err) {
       throw err;
@@ -658,7 +579,7 @@ export class CatalogProvider implements WProvider {
       await this.SyncProductInstanceFunctions();
       if (!suppress_catalog_recomputation) {
         this.RecomputeCatalog();
-        this.EmitCatalog(this.#socketRO);
+        SocketIoProviderInstance.EmitCatalog(this.#catalog);
       }
       return doc;
     } catch (err) {
@@ -671,7 +592,7 @@ export class CatalogProvider implements WProvider {
     await doc.save();
     await this.SyncOrderInstanceFunctions();
     this.RecomputeCatalog();
-    this.EmitCatalog(this.#socketRO);
+    SocketIoProviderInstance.EmitCatalog(this.#catalog);
     return doc;
   };
 
@@ -687,7 +608,7 @@ export class CatalogProvider implements WProvider {
       }
       await this.SyncOrderInstanceFunctions();
       this.RecomputeCatalog();
-      this.EmitCatalog(this.#socketRO);
+      SocketIoProviderInstance.EmitCatalog(this.#catalog);
       return updated;
     } catch (err) {
       throw err;
@@ -704,7 +625,7 @@ export class CatalogProvider implements WProvider {
       await this.SyncOrderInstanceFunctions();
       if (!suppress_catalog_recomputation) {
         this.RecomputeCatalog();
-        this.EmitCatalog(this.#socketRO);
+        SocketIoProviderInstance.EmitCatalog(this.#catalog);
       }
       return doc;
     } catch (err) {
@@ -713,8 +634,4 @@ export class CatalogProvider implements WProvider {
   }
 }
 
-
-
-const CatalogProviderInstance = new CatalogProvider();
-export default CatalogProviderInstance;
-module.exports = CatalogProviderInstance;
+export const CatalogProviderInstance = new CatalogProvider();

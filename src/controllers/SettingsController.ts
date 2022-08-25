@@ -1,8 +1,8 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { body } from 'express-validator';
 
-import DataProviderInstance from '../config/dataprovider';
-import SocketIoProviderInstance from '../config/socketio_provider';
+import { DataProviderInstance } from '../config/dataprovider';
+import { SocketIoProviderInstance } from '../config/socketio_provider';
 import IExpressController from '../types/IExpressController';
 import { CheckJWT, ScopeWriteKVStore, ScopeWriteOrderConfig } from '../config/authorization';
 import expressValidationMiddleware from '../middleware/expressValidationMiddleware';

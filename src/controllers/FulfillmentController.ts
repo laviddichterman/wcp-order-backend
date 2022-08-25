@@ -7,8 +7,9 @@ import logger from '../logging';
 
 import IExpressController from '../types/IExpressController';
 import { CheckJWT, ScopeDeleteCatalog, ScopeWriteCatalog } from '../config/authorization';
-import DataProviderInstance from '../config/dataprovider';
-import SocketIoProviderInstance from '../config/socketio_provider';
+import { DataProviderInstance } from '../config/dataprovider';
+import { SocketIoProviderInstance } from '../config/socketio_provider';
+//import { CatalogProviderInstance } from '../config/catalog_provider';
 
 
 const FulfillmentConfigByIdValidationChain = [
@@ -167,6 +168,8 @@ export class FulfillmentController implements IExpressController {
   private deleteFulfillment = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const fulfillmentId = req.params.fid;
+      //CatalogProviderInstance.
+
       DataProviderInstance.deleteFulfillment(fulfillmentId)
       .then(async (doc) => {
         logger.info(`Successfully deleted Fulfillment ${doc}`);

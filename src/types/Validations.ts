@@ -1,5 +1,5 @@
 import { CustomValidator } from 'express-validator';
-import DataProviderInstance from '../config/dataprovider';
+import { DataProviderInstance } from '../config/dataprovider';
 
 
 export const isValidDisabledValue: CustomValidator = (value) => {

@@ -161,5 +161,4 @@ export class DataProvider implements WProvider {
   }
 };
 
-const DataProviderInstance = new DataProvider();
-export default DataProviderInstance;
+export const DataProviderInstance = new DataProvider();

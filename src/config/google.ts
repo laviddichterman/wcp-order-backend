@@ -5,7 +5,7 @@ import { ExponentialBackoff } from '../utils';
 import logger from '../logging';
 import SMTPTransport from "nodemailer/lib/smtp-transport";
 import Mail from "nodemailer/lib/mailer";
-import DataProviderInstance from "./dataprovider";
+import { DataProviderInstance } from "./dataprovider";
 import { WProvider } from '../types/WProvider';
 const OAuth2 = google.auth.OAuth2;
 
@@ -198,6 +198,4 @@ export class GoogleProvider implements WProvider {
   }
 
 };
-const GoogleProviderInstance = new GoogleProvider();
-export default GoogleProviderInstance;
-module.exports = GoogleProviderInstance;
+export const GoogleProviderInstance = new GoogleProvider();

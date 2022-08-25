@@ -6,8 +6,9 @@ import logger from '../logging';
 
 import IExpressController from '../types/IExpressController';
 import { CheckJWT, ScopeDeleteCatalog, ScopeWriteCatalog } from '../config/authorization';
-import CatalogProviderInstance from '../config/catalog_provider';
+import { CatalogProviderInstance } from '../config/catalog_provider';
 import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
+import { isFulfillmentDefined } from '../types/Validations';
 
 const CategoryByIdValidationChain = [
   param('catid').trim().escape().exists().isMongoId(),
@@ -23,7 +24,7 @@ const CategoryValidationChain = [
   body('display_flags.call_line_name').trim().escape(),
   body('display_flags.call_line_display').isIn(Object.keys(CALL_LINE_DISPLAY)),
   body('display_flags.nesting').isIn(Object.keys(CategoryDisplay)),
-  body('serviceDisable.*').trim().escape().isMongoId()
+  body('serviceDisable.*').custom(isFulfillmentDefined)
 ];
 
 const EditCategoryValidationChain = [

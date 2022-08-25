@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import IExpressController from '../types/IExpressController';
 //import { CheckJWT, ScopeAccountingRead, ScopeAccountingWrite } from '../config/authorization';
-import GoogleProviderInstance from '../config/google';
+import { GoogleProviderInstance } from '../config/google';
 import { addDays, formatRFC3339, parseISO, startOfDay } from 'date-fns';
 
 const tipsregex = /Tip Amount: \$([0-9]+(?:\.[0-9]{1,2})?)/;

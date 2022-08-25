@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { body, validationResult } from 'express-validator';
 
-import DataProviderInstance from '../config/dataprovider';
+import { DataProviderInstance } from '../config/dataprovider';
 import IExpressController from '../types/IExpressController';
 import { CheckJWT, ScopeReadKVStore, ScopeWriteKVStore } from '../config/authorization';
 

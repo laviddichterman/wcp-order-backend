@@ -1,8 +1,8 @@
 import { WProvider } from '../types/WProvider';
 import logger from '../logging';
 import { Namespace, Socket } from 'socket.io';
-import CatalogProviderInstance from './catalog_provider';
-import DataProviderInstance from './dataprovider';
+import { CatalogProviderInstance } from './catalog_provider';
+import { DataProviderInstance } from './dataprovider';
 import WApp from '../App';
 import { format, intervalToDuration, formatDuration } from 'date-fns';
 import { zonedTimeToUtc } from 'date-fns-tz';
@@ -61,6 +61,4 @@ export class SocketIoProvider implements WProvider {
   }
 };
 
-const SocketIoProviderInstance = new SocketIoProvider();
-export default SocketIoProviderInstance;
-module.exports = SocketIoProviderInstance;
+export const SocketIoProviderInstance = new SocketIoProvider();

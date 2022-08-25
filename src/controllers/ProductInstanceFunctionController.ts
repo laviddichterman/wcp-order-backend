@@ -8,7 +8,7 @@ import logger from '../logging';
 import IExpressController from '../types/IExpressController';
 import HttpException from '../types/HttpException';
 import { CheckJWT, ScopeDeleteCatalog, ScopeWriteCatalog } from '../config/authorization';
-import CatalogProviderInstance from '../config/catalog_provider';
+import { CatalogProviderInstance } from '../config/catalog_provider';
 const PIFByIdValidationChain = [
   param('fxnid').trim().escape().exists().isMongoId(),
 ];
@@ -39,7 +39,7 @@ export class ProductInstanceFunctionController implements IExpressController {
   private postPIF = async (req: Request, res: Response, next: NextFunction) => {
     try {
       try {
-        const stringified = WFunctional.AbstractExpressionStatementToString(req.body.expression, CatalogProviderInstance.Catalog.modifiers)
+        const stringified = WFunctional.AbstractExpressionStatementToString(req.body.expression, CatalogProviderInstance.Catalog)
         logger.info(`Creating expression with ${stringified}`);
       }
       catch (e) {
@@ -64,7 +64,7 @@ export class ProductInstanceFunctionController implements IExpressController {
   private patchPIF = async (req: Request, res: Response, next: NextFunction) => {
     try {
       try {
-        const stringified = WFunctional.AbstractExpressionStatementToString(req.body.expression, CatalogProviderInstance.Catalog.modifiers)
+        const stringified = WFunctional.AbstractExpressionStatementToString(req.body.expression, CatalogProviderInstance.Catalog)
         logger.info(`Updating expression with ${stringified}`);
       }
       catch (e) {

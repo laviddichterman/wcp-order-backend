@@ -7,7 +7,7 @@ import expressValidationMiddleware from '../middleware/expressValidationMiddlewa
 import IExpressController from '../types/IExpressController';
 import { isValidDisabledValue } from '../types/Validations';
 import { CheckJWT, ScopeDeleteCatalog, ScopeWriteCatalog } from '../config/authorization';
-import CatalogProviderInstance from '../config/catalog_provider';
+import { CatalogProviderInstance } from '../config/catalog_provider';
 const ModifierTypeByIdValidationChain = [
   param('mtid').trim().escape().exists().isMongoId(), 
 ];

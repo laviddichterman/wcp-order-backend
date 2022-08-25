@@ -2,10 +2,10 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { body } from 'express-validator';
 import { CreateOrderRequestV2, CreateOrderResponse } from '@wcp/wcpshared';
 import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
-import DataProviderInstance from '../config/dataprovider';
-import OrderManagerInstance from '../config/order_manager';
+import { DataProviderInstance } from '../config/dataprovider';
+import { OrderManagerInstance } from '../config/order_manager';
 import IExpressController from '../types/IExpressController';
-import GoogleProviderInstance from '../config/google';
+import { GoogleProviderInstance } from '../config/google';
 import { BigIntStringify } from '../utils';
 import { isFulfillmentDefined } from '../types/Validations';
 

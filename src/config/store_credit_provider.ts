@@ -3,8 +3,8 @@ import { startOfDay, isValid, isBefore, parseISO } from 'date-fns';
 import qrcode from 'qrcode';
 import Stream from 'stream';
 import { ValidateLockAndSpendRequest, ValidateLockAndSpendSuccess, ValidateAndLockCreditResponse, WDateUtils, StoreCreditType, IMoney, IssueStoreCreditRequest, CURRENCY, MoneyToDisplayString } from "@wcp/wcpshared";
-import GoogleProviderInstance from "./google";
-import DataProviderInstance from './dataprovider';
+import { GoogleProviderInstance } from "./google";
+import { DataProviderInstance } from './dataprovider';
 import aes256gcm from './crypto-aes-256-gcm';
 import logger from '../logging';
 
@@ -164,4 +164,3 @@ export class StoreCreditProvider {
 };
 
 export const StoreCreditProviderInstance = new StoreCreditProvider();
-export default StoreCreditProviderInstance;

@@ -5,7 +5,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { Client } from "@googlemaps/google-maps-services-js";
 import * as turf from '@turf/turf'
 
-import DataProviderInstance, { DataProvider } from '../config/dataprovider';
+import { DataProviderInstance } from '../config/dataprovider';
 import logger from '../logging';
 import IExpressController from '../types/IExpressController';
 import expressValidationMiddleware from '../middleware/expressValidationMiddleware';

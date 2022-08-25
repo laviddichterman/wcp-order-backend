@@ -582,6 +582,4 @@ export class DatabaseManager implements WProvider {
 
 }
 
-const DatabaseManagerInstance = new DatabaseManager();
-export default DatabaseManagerInstance;
-module.exports = DatabaseManagerInstance;
+export const DatabaseManagerInstance = new DatabaseManager();
