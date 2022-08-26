@@ -78,7 +78,7 @@ const ProductInstanceValidationChain = [
   body('modifiers').isArray(),
   body('modifiers.*.modifierTypeId').trim().escape().exists().isMongoId(),
   body('modifiers.*.options').isArray(),
-  body('modifiers.*.options.*.option_id').trim().escape().exists().isMongoId(),
+  body('modifiers.*.options.*.optionId').trim().escape().exists().isMongoId(),
   body('modifiers.*.options.*.placement').exists().isIn(Object.values(OptionPlacement)),
   body('modifiers.*.options.*.qualifier').exists().isIn(Object.values(OptionQualifier))
 ];
