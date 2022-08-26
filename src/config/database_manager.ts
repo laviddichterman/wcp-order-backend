@@ -7,6 +7,10 @@ import { WProductInstanceFunctionModel as WProductInstanceFunctionModelACTUAL } 
 import { WMoney } from '../models/WMoney';
 import { IntervalSchema } from '../models/IntervalSchema';
 import { WCategoryModel } from '../models/catalog/category/WCategorySchema';
+import { WOptionModel as WOptionModelActual } from '../models/catalog/options/WOptionSchema';
+import { WOptionTypeModel as WOptionTypeModelActual } from '../models/catalog/options/WOptionTypeSchema';
+import { WProductModel as WProductModelActual } from '../models/catalog/products/WProductSchema';
+import { WProductInstanceModel as WProductInstanceModelActual } from '../models/catalog/products/WProductInstanceSchema';
 import mongoose, { Schema } from "mongoose";
 
 const SetVersion = async (new_version: SEMVER) => {
@@ -388,7 +392,8 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
             placement: keyof typeof OptionPlacement;
             qualifier: keyof typeof OptionQualifier;
           }[];
-        }) => ({ modifierTypeId: mod.modifier_type_id, options: mod.options.map(
+        }) => ({
+          modifierTypeId: mod.modifier_type_id, options: mod.options.map(
             x => ({ optionId: x.option_id, placement: OptionPlacement[x.placement], qualifier: OptionQualifier[x.qualifier] }))
         }));
         return await pi.save()
@@ -547,6 +552,21 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
   "0.4.105": [{ major: 0, minor: 4, patch: 106 }, async () => {
   }],
   "0.4.106": [{ major: 0, minor: 5, patch: 0 }, async () => {
+  }],
+  "0.5.0": [{ major: 0, minor: 5, patch: 1 }, async () => {
+    await Promise.all([WOptionModelActual, WOptionTypeModelActual, WProductInstanceModelActual, WProductModelActual].map( async (model) => {
+      const updateQuery = await model.updateMany(
+        {},
+        {
+          externalIDs: []
+        });
+      if (updateQuery.modifiedCount > 0) {
+        logger.debug(`Updated ${updateQuery.modifiedCount} ${model.modelName} documents with empty externalIDs list.`);
+      }
+      else {
+        logger.error("Didn't update WOptionModel");
+      }
+    }));
   }],
 }
 
