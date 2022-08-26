@@ -315,7 +315,7 @@ export class CatalogProvider implements WProvider {
       }
       const products_update = await WProductModel.updateMany({}, { $pull: { modifiers: { mtid: mt_id } } });
       if (products_update.modifiedCount > 0) {
-        const product_instance_update = await WProductInstanceModel.updateMany({}, { 'modifiers': { $unset: { [mt_id]: "" } } });
+        const product_instance_update = await WProductInstanceModel.updateMany({}, { $pull: { modifiers: { modifierTypeId: mt_id } } });
         logger.debug(`Removed ModifierType ID from ${products_update.modifiedCount} products, ${product_instance_update.modifiedCount} product instances.`);
         await this.SyncProducts();
         await this.SyncProductInstances();
@@ -387,7 +387,7 @@ export class CatalogProvider implements WProvider {
       }
       const product_instance_options_delete = await WProductInstanceModel.updateMany(
         { },
-        { $pull: { "modifiers.$.options": { option_id: mo_id } } });
+        { $pull: { "modifiers.$.options": { optionId: mo_id } } });
       if (product_instance_options_delete.modifiedCount > 0) {
         logger.debug(`Removed ${product_instance_options_delete.modifiedCount} Options from Product Instances.`);
         await this.SyncProductInstances();
@@ -444,8 +444,7 @@ export class CatalogProvider implements WProvider {
 
       if (removed_modifiers.length) {
         await Promise.all(removed_modifiers.map(async (mtid) => {
-          /// TODO: FIX THIS !!!!!!! BEFORE SHIP check the other $unset example 
-          const product_instance_update = await WProductInstanceModel.updateMany({ productId: pid }, { modifiers: { $unset: { mtid } } });
+          const product_instance_update = await WProductInstanceModel.updateMany({ productId: pid }, { $pull: { modifiers: { modifierTypeId: mtid } } });
           logger.debug(`Removed ModifierType ID ${mtid} from ${product_instance_update.modifiedCount} product instances.`);
         }));
         await this.SyncProductInstances();
@@ -562,8 +561,8 @@ export class CatalogProvider implements WProvider {
         return null;
       }
       const options_update = await WOptionModel.updateMany(
-        { enable_function: pif_id },
-        { $set: { "enable_function": null } });
+        { enable: pif_id },
+        { $set: { "enable": null } });
       if (options_update.modifiedCount > 0) {
         logger.debug(`Removed ${doc} from ${options_update.modifiedCount} Modifier Options.`);
         await this.SyncOptions();

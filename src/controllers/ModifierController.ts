@@ -19,7 +19,7 @@ const ModifierOptionByIdValidationChain = [
 const ModifierTypeValidationChain = [  
   body('name').trim().exists(),
   body('displayName').trim(),
-  body('ordinal').isInt({min: 0, max:63}).exists(),
+  body('ordinal').isInt({min: 0, max:500}).exists(),
   body('min_selected').isInt({min: 0}).exists(),
   body('max_selected').optional({nullable: true}).isInt({min: 0}),
   body('externalIDs').isArray(),
@@ -52,7 +52,7 @@ const ModifierOptionValidationChain = [
   body('disabled').custom(isValidDisabledValue),
   body('price.amount').isInt({min: 0, max:100000}).exists(),
   body('price.currency').exists().isLength({min:3, max: 3}).isIn(Object.values(CURRENCY)),
-  body('ordinal').isInt({min: 0, max:64}).exists(),
+  body('ordinal').isInt({min: 0, max:500}).exists(),
   body('enable').optional({nullable: true}).isMongoId(),
   body('metadata.flavor_factor').isFloat({ min: 0, max: 5 }),
   body('metadata.bake_factor').isFloat({ min: 0, max: 5 }),
