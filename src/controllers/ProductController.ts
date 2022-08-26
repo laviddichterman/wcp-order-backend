@@ -21,7 +21,9 @@ const ProductClassValidationChain = [
   body('displayName').trim().exists(),
   body('description').trim(),
   body('shortcode').trim().escape().exists(),
-  body('externalIDs.*').trim().escape(),
+  body('externalIDs').isArray(),
+  body('externalIDs.*.key').exists(),
+  body('externalIDs.*.value').exists(),
   body('disabled').custom(isValidDisabledValue),
   body('serviceDisable.*').custom(isFulfillmentDefined),
   body('displayFlags.flavor_max').isFloat({min: 0}),
@@ -56,7 +58,9 @@ const ProductInstanceValidationChain = [
   body('displayName').trim().exists(),
   body('description').trim(),
   body('shortcode').trim().escape().exists(),
-  body('externalIDs.*').trim().escape(),
+  body('externalIDs').isArray(),
+  body('externalIDs.*.key').exists(),
+  body('externalIDs.*.value').exists(),
   body('isBase').toBoolean(true),
   body('displayFlags.menu.ordinal').exists().isInt({min: 0}),
   body('displayFlags.menu.hide').toBoolean(true),
@@ -130,7 +134,7 @@ export class ProductController implements IExpressController {
         };
         const pi = await CatalogProviderInstance.CreateProductInstance({
           ...productInstance,
-          externalIDs: {},
+          externalIDs: [],
           displayFlags: {
             menu: { 
               ordinal: productInstance.ordinal,
@@ -214,7 +218,7 @@ export class ProductController implements IExpressController {
         displayName: req.body.displayName,
         shortcode: req.body.shortcode,
         ordinal: req.body.ordinal,
-        externalIDs: req.body.externalIDs,
+        externalIDs: req.body.externalIDs ?? [],
         modifiers: req.body.modifiers,
         isBase: req.body.isBase,
         displayFlags: req.body.displayFlags

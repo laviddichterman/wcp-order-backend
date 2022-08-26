@@ -2,6 +2,7 @@ import { IProduct } from "@wcp/wcpshared";
 import mongoose, {Schema} from "mongoose";
 import { WMoney } from "../../WMoney";
 import path from 'path';
+import { KeyValueEntrySchema } from "../../settings/KeyValueSchema";
 
 type MT = Omit<IProduct, "id">;
 export const ProductModifierSchema = new Schema({ 
@@ -32,10 +33,8 @@ const WProductSchema = new Schema<MT>({
     end: Number
   },
 
-  // external ids
   externalIDs: {
-    type: Map,
-    of: String,
+    type: [KeyValueEntrySchema],
     required: true
   },
 

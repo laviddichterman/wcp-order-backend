@@ -1,6 +1,7 @@
 import mongoose, {Schema} from "mongoose";
 import path from "path";
 import { IOptionType, DISPLAY_AS, MODIFIER_CLASS } from "@wcp/wcpshared";
+import { KeyValueEntrySchema } from "../../settings/KeyValueSchema";
 
 type MT = Omit<IOptionType, "id">;
 
@@ -11,10 +12,8 @@ export const WOptionTypeSchema = new Schema<MT>({
   // name override for how we display this to a customer
   displayName: String,
 
-  // external ids
   externalIDs: {
-    type: Map,
-    of: String,
+    type: [KeyValueEntrySchema],
     required: true
   },
 

@@ -1,15 +1,25 @@
+import { KeyValue } from "@wcp/wcpshared";
 import mongoose, {Schema} from "mongoose";
 import path from 'path';
 
+export const KeyValueEntrySchema = new Schema<KeyValue>({
+  key: { 
+    type: String, 
+    required: true 
+  },
+  value: { 
+    type: String,
+    required: true 
+  }
+}, { _id: false });
+
 export interface IKeyValueStore {
-  settings: { key: string, value: string }[];
+  settings: KeyValue[];
 };
 
 // generic bucket for authentication credentials
-export const KeyValueSchema = new Schema<IKeyValueStore>({ 
-  settings: [{ 
-    key: String, 
-    value: String 
-  }] }, { _id: false });
+export const SettingsKeyValueSchema = new Schema<IKeyValueStore>({ 
+  settings: [KeyValueEntrySchema]
+ }, { _id: false });
 
-export default mongoose.model<IKeyValueStore>(path.basename(__filename).replace(path.extname(__filename), ''), KeyValueSchema);
+export default mongoose.model<IKeyValueStore>(path.basename(__filename).replace(path.extname(__filename), ''), SettingsKeyValueSchema);

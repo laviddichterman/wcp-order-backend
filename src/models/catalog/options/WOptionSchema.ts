@@ -3,6 +3,7 @@ import path from "path";
 import { IOption } from "@wcp/wcpshared";
 import { WMoney } from "../../WMoney";
 import { IntervalSchema } from "../../IntervalSchema";
+import { KeyValueEntrySchema } from "../../settings/KeyValueSchema";
 
 type MT = Omit<IOption, "id">;
 
@@ -28,8 +29,7 @@ export const WOptionSchema = new Schema<MT>({
   },
 
   externalIDs: {
-    type: Map,
-    of: String,
+    type: [KeyValueEntrySchema],
     required: true
   },
 

@@ -1,4 +1,5 @@
 import { IProductInstance, PriceDisplay } from "@wcp/wcpshared";
+import { KeyValueEntrySchema } from "../../settings/KeyValueSchema";
 import mongoose, {Schema} from "mongoose";
 import path from "path";
 import { ProductModifierSchema } from "../options/WOptionInstanceSchema";
@@ -36,10 +37,8 @@ export const WProductInstanceSchema = new Schema<MT>({
     required: true
   },
 
-  // external ids
   externalIDs: {
-    type: Map,
-    of: String,
+    type: [KeyValueEntrySchema],
     required: true
   },
   
