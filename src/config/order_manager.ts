@@ -277,7 +277,7 @@ const RecomputeTotals = function ({ cart, creditValidations, fulfillment, order,
   const cartSubtotal = { currency: CURRENCY.USD, amount: Object.values(cart).reduce((acc, c) => acc + ComputeCartSubTotal(c).amount, 0) };
   const serviceFee = { currency: CURRENCY.USD, amount: fulfillment.serviceCharge !== null ? OrderFunctional.ProcessOrderInstanceFunction(order, CatalogProviderInstance.Catalog.orderInstanceFunctions[fulfillment.serviceCharge], CatalogProviderInstance.Catalog) as number : 0 };
   const subtotalPreDiscount = ComputeSubtotalPreDiscount(cartSubtotal, serviceFee);
-  const discountApplied = ComputeCreditsApplied(subtotalPreDiscount, creditValidations.filter(x=>x.validation.credit_type===StoreCreditType.DISCOUNT));
+  const discountApplied = ComputeCreditsApplied(subtotalPreDiscount, creditValidations.filter(x => x.validation.credit_type === StoreCreditType.DISCOUNT));
   const amountDiscounted = { amount: discountApplied.reduce((acc, x) => acc + x.amount_used.amount, 0), currency: CURRENCY.USD };
   const subtotalAfterDiscount = ComputeSubtotalAfterDiscount(subtotalPreDiscount, amountDiscounted);
   const taxAmount = ComputeTaxAmount(subtotalAfterDiscount, TAX_RATE);
@@ -285,7 +285,7 @@ const RecomputeTotals = function ({ cart, creditValidations, fulfillment, order,
   const tipMinimum = mainCategoryProductCount >= AUTOGRAT_THRESHOLD ? ComputeTipValue({ isPercentage: true, isSuggestion: true, value: .2 }, tipBasis) : { currency: CURRENCY.USD, amount: 0 };
   const tipAmount = totals.tip;
   const total = ComputeTotal(subtotalAfterDiscount, taxAmount, tipAmount);
-  const giftCartApplied = ComputeCreditsApplied(total, creditValidations.filter(x=>x.validation.credit_type===StoreCreditType.MONEY));
+  const giftCartApplied = ComputeCreditsApplied(total, creditValidations.filter(x => x.validation.credit_type === StoreCreditType.MONEY));
   const amountCredited = { amount: giftCartApplied.reduce((acc, x) => acc + x.amount_used.amount, 0), currency: CURRENCY.USD };
   const balanceAfterCredits = ComputeBalanceAfterCredits(total, amountCredited);
   return {
@@ -403,7 +403,7 @@ ${location_section ? '<br />' : ''}${location_section}We thank you for your supp
 const CreateOrderEvent = async (
   menu: IMenu,
   fulfillmentConfig: FulfillmentConfig,
-  order: WOrderInstance,
+  order: Pick<WOrderInstance, 'customerInfo' | 'fulfillment' | 'payments' | 'discounts'>,
   cart: CategorizedRebuiltCart,
   specialInstructions: string,
   service_time_interval: Interval,
@@ -418,17 +418,17 @@ const CreateOrderEvent = async (
   const dineInSecrtion = GenerateDineInSection(order.fulfillment.dineInInfo, false);
   const calendar_details = `${shortcart.map(x => `${x.category_name}:\n${x.products.join("\n")}`).join("\n")}\n${dineInSecrtion}ph: ${order.customerInfo.mobileNum}${special_instructions_section}${delivery_section}${payment_section}`;
 
-  return await GoogleProviderInstance.CreateCalendarEvent(calendar_event_title,
-    order.fulfillment.deliveryInfo?.validation.validated_address ?? "",
-    calendar_details,
-    {
+  return await GoogleProviderInstance.CreateCalendarEvent({ summary: calendar_event_title,
+    location: order.fulfillment.deliveryInfo?.validation.validated_address ?? "",
+    description: calendar_details,
+    start: {
       dateTime: formatRFC3339(service_time_interval.start),
       timeZone: process.env.TZ
     },
-    {
+    end: {
       dateTime: formatRFC3339(service_time_interval.end),
       timeZone: process.env.TZ
-    });
+    }});
 }
 
 const CreateSquareOrderAndCharge = async (reference_id: string, balance: IMoney, nonce: string, note: string) => {
@@ -614,7 +614,7 @@ export class OrderManager implements WProvider {
         hasChargingSucceeded = false;
         logger.error(`Nasty error in processing payment: ${JSON.stringify(error)}.`);
         errors.push({ category: 'PAYMENT_METHOD_ERROR', detail: JSON.stringify(error), code: 'INTERNAL_SERVER_ERROR' });
-      } 
+      }
       if (!hasChargingSucceeded) {
         if (storeCreditResponses.length > 0) {
           await RefundStoreCreditDebits(storeCreditResponses);
@@ -628,7 +628,7 @@ export class OrderManager implements WProvider {
 
     // 6. send out emails and capture the order to persistent storage
     try {
-      const completedOrderInstance: Omit<WOrderInstance, 'id'> = {
+      const completedOrderInstance: Omit<WOrderInstance, 'id' | 'externalIDs'> = {
         cart: orderInstance.cart,
         customerInfo: orderInstance.customerInfo,
         fulfillment: orderInstance.fulfillment,
@@ -638,8 +638,17 @@ export class OrderManager implements WProvider {
         discounts,
         status: 'COMPLETED'
       };
-
-      return await new WOrderInstanceModel(completedOrderInstance)
+      // create calendar event
+      const orderCalendarEvent = await CreateOrderEvent(
+        menu,
+        fulfillmentConfig,
+        completedOrderInstance,
+        rebuiltCart,
+        createOrderRequest.specialInstructions,
+        dateTimeInterval,
+        isPaid,
+        recomputedTotals);
+      return await new WOrderInstanceModel({...completedOrderInstance, externalIDs: [{key: 'GCALEVENT', value: orderCalendarEvent.data.id}]})
         .save()
         .then(async (dbOrderInstance) => {
           logger.info(`Successfully saved OrderInstance to database: ${JSON.stringify(dbOrderInstance.toJSON())}`)
@@ -647,17 +656,8 @@ export class OrderManager implements WProvider {
           // TODO, need to actually test the failure of these service calls and some sort of retrying
           // for example, the event not created error happens, and it doesn't fail the service call. it should
 
-          // create calendar event
-          const orderCalendarEvent = CreateOrderEvent(
-            menu,
-            fulfillmentConfig,
-            dbOrderInstance,
-            rebuiltCart,
-            createOrderRequest.specialInstructions,
-            dateTimeInterval,
-            isPaid,
-            recomputedTotals);
 
+          // TODO: store the calendar entry in the DB so we can change it as needed if the order is updated
           // send email to customer
           const createExternalEmailInfo = CreateExternalEmail(
             dbOrderInstance,

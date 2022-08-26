@@ -110,33 +110,21 @@ export class GoogleProvider implements WProvider {
     return await ExponentialBackoff(call_fxn, () => true, retry, max_retry);
   };
 
-  CreateCalendarEvent = async (
-    summary : string, 
-    location : string, 
-    description : string, 
-    start : calendar_v3.Schema$EventDateTime, 
-    end : calendar_v3.Schema$EventDateTime, 
+  CreateCalendarEvent = async ( eventJson: calendar_v3.Schema$Event,
     retry=0, 
     max_retry=5) => {
-    const eventjson = {
-      summary: summary,
-      location: location,
-      description: description,
-      start: start,
-      end: end
-    };
     const call_fxn = async () => {
       try { 
         const event = await this.#calendarAPI.events.insert({
           auth: this.#oauth2Client,
           calendarId: 'primary',
-          requestBody: eventjson
+          requestBody: eventJson
         });
         logger.debug("Created event: %o", event);
         return event;
       }
       catch (err) {
-        logger.error("event not created: %o", eventjson);
+        logger.error("event not created: %o", event);
         logger.error(err);
         throw (err);
       }  

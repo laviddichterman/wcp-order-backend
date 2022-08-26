@@ -386,7 +386,7 @@ export class CatalogProvider implements WProvider {
         return null;
       }
       const product_instance_options_delete = await WProductInstanceModel.updateMany(
-        { },
+        { "modifiers.modifierTypeId": doc.modifierTypeId },
         { $pull: { "modifiers.$.options": { optionId: mo_id } } });
       if (product_instance_options_delete.modifiedCount > 0) {
         logger.debug(`Removed ${product_instance_options_delete.modifiedCount} Options from Product Instances.`);

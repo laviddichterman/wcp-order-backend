@@ -7,6 +7,7 @@ import { FulfillmentInfo } from "./WFulfillmentInfo";
 import { WMetricsSchema } from "./WMetrics";
 import { WOrderLineDiscountSchema } from "../payment/WOrderLineDiscount";
 import { WOrderPaymentSchema } from "../payment/WOrderPayment";
+import { KeyValueEntrySchema } from "../settings/KeyValueSchema";
 
 export const WOrderInstanceSchema = new Schema<Omit<WOrderInstance, 'id'>>({
   status: { 
@@ -40,6 +41,10 @@ export const WOrderInstanceSchema = new Schema<Omit<WOrderInstance, 'id'>>({
   },
   metrics: {
     type: WMetricsSchema,
+    required: true
+  },
+  externalIDs: {
+    type: [KeyValueEntrySchema],
     required: true
   },
 }, {id: true, toJSON: {virtuals: true}, toObject: { virtuals: true}});
