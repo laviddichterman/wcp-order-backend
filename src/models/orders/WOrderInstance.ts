@@ -43,10 +43,11 @@ export const WOrderInstanceSchema = new Schema<Omit<WOrderInstance, 'id'>>({
     type: WMetricsSchema,
     required: true
   },
-  externalIDs: {
+  metadata: {
     type: [KeyValueEntrySchema],
     required: true
   },
+  specialInstructions: String
 }, {id: true, toJSON: {virtuals: true}, toObject: { virtuals: true}});
 
 export const WOrderInstanceModel = mongoose.model<WOrderInstance>(path.basename(__filename).replace(path.extname(__filename), ''), WOrderInstanceSchema);

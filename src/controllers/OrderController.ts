@@ -13,8 +13,8 @@ const V2OrderValidationChain = [
   body('fulfillment.selectedService').exists().isMongoId().custom(isFulfillmentDefined),
   body('fulfillment.selectedDate').isISO8601(),
   body('fulfillment.selectedTime').isInt({ min: 0, max: 1440 }).exists(),
-  body('customerInfo.givenName').trim().escape().exists(),
-  body('customerInfo.familyName').trim().escape().exists(),
+  body('customerInfo.givenName').trim().exists(),
+  body('customerInfo.familyName').trim().exists(),
   body('customerInfo.mobileNum').trim().escape().exists(),
   body('customerInfo.email').isEmail().exists(),
   body('customerInfo.referral').trim().escape(),
@@ -22,7 +22,7 @@ const V2OrderValidationChain = [
   body('cart.*.categoryId').exists().isMongoId(),
   body('cart.*.quantity').exists().isInt({ min: 1 }),
   body('cart.*.product').exists(),
-  body('specialInstructions').trim().escape()
+  body('specialInstructions').optional({nullable: true}).trim()
 ];
 
 export class OrderController implements IExpressController {

@@ -21,8 +21,8 @@ const PurchaseStoreCreditValidationChain = [
   body('amount.currency').exists().isIn(Object.values(CURRENCY)),
   body('senderName').trim().exists(),
   body('senderEmail').isEmail().exists(),
-  body('recipientNameFirst').trim().exists().escape(),
-  body('recipientNameLast').trim().exists().escape(),
+  body('recipientNameFirst').trim().exists(),
+  body('recipientNameLast').trim().exists(),
   body('recipientEmail').optional({nullable: true, checkFalsy: true}).trim().isEmail(),
   body('sendEmailToRecipient').toBoolean(true),
   body('recipientMessage').optional({nullable: true}).trim()
@@ -41,13 +41,13 @@ const SpendStoreCreditValidationChain = [
 const IssueStoreCreditValidationChain = [
   body('amount.amount').isInt({ min: 100, max: 50000 }).exists(),
   body('amount.currency').exists().isIn(Object.values(CURRENCY)),
-  body('recipientNameFirst').trim().exists().escape(),
-  body('recipientNameLast').trim().exists().escape(),
+  body('recipientNameFirst').trim().exists(),
+  body('recipientNameLast').trim().exists(),
   body('recipientEmail').exists().trim().isEmail(),
   body('creditType').trim().exists().isIn(Object.keys(StoreCreditType)),
   body('expiration').optional({nullable: true, checkFalsy: true}).isISO8601(),
-  body('addedBy').trim().exists().escape(),
-  body('reason').trim().exists().escape(),
+  body('addedBy').trim().exists(),
+  body('reason').trim().exists(),
 ];
 
 

@@ -226,15 +226,9 @@ const ServiceTitleBuilder = (service_option_display_string: string, fulfillmentI
   return `${service_option_display_string} for ${customer_name}${GenerateDineInPlusString(fulfillmentInfo.dineInInfo)} on ${format(service_time_interval.start, WDateUtils.ServiceDateDisplayFormat)} at ${display_service_time_interval}`;
 }
 
-const GenerateDisplayCartStringListFromProducts = (cart: CategorizedRebuiltCart) => {
-  const display_cart_string_list: string[] = [];
-  Object.values(cart).forEach((category_cart) => {
-    category_cart.forEach((item) => {
-      display_cart_string_list.push(`${item.quantity}x: ${item.product.m.name}`)
-    });
-  });
-  return display_cart_string_list;
-}
+const GenerateDisplayCartStringListFromProducts = (cart: CategorizedRebuiltCart) => 
+  Object.values(cart).map((category_cart) => category_cart.map((item) => `${item.quantity}x: ${item.product.m.name}`)).flat(1);
+
 
 const GenerateShortCartFromFullCart = (cart: CategorizedRebuiltCart) => {
   const catalogCategories = CatalogProviderInstance.Catalog.categories;
@@ -311,7 +305,6 @@ const CreateInternalEmail = async (
   requestTime: Date | number,
   dateTimeInterval: Interval,
   cart: CategorizedRebuiltCart,
-  special_instructions: string,
   isPaid: boolean,
   totals: RecomputeTotalsResult,
   ipAddress: string) => {
@@ -324,7 +317,7 @@ const CreateInternalEmail = async (
   const delivery_section = GenerateDeliverySection(order.fulfillment.deliveryInfo, true);
   const dineInSection = GenerateDineInSection(order.fulfillment.dineInInfo, true);
   const shortcart = GenerateShortCartFromFullCart(cart);
-  const special_instructions_section = special_instructions && special_instructions.length > 0 ? "<br />Special Instructions: " + special_instructions : "";
+  const special_instructions_section = order.specialInstructions && order.specialInstructions.length > 0 ? "<br />Special Instructions: " + order.specialInstructions : "";
   const emailbody = `<p>From: ${order.customerInfo.givenName} ${order.customerInfo.familyName} ${order.customerInfo.email}</p>${dineInSection}
 <p>${shortcart.map(x => `<strong>${x.category_name}:</strong><br />${x.products.join("<br />")}`).join("<br />")}
 ${special_instructions_section}<br />
@@ -359,12 +352,8 @@ User IP: ${ipAddress}<br />
 
 const CreateExternalEmail = async (
   order: WOrderInstance,
-  fulfillmentConfig: FulfillmentConfig,
   service_title: string,
-  cart: CategorizedRebuiltCart,
-  specialInstructions: string,
-  isPaid: boolean
-) => {
+  cart: CategorizedRebuiltCart) => {
   const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
   const STORE_NAME = DataProviderInstance.KeyValueConfig.STORE_NAME;
   const ORDER_RESPONSE_PREAMBLE = DataProviderInstance.KeyValueConfig.ORDER_RESPONSE_PREAMBLE;
@@ -374,7 +363,7 @@ const CreateExternalEmail = async (
   const delivery_section = GenerateDeliverySection(order.fulfillment.deliveryInfo, true);
   const location_section = delivery_section ? "" : `<p><strong>Location Information:</strong>
 We are located ${LOCATION_INFO}</p>`;
-  const special_instructions_section = specialInstructions && specialInstructions.length > 0 ? `<p><strong>Special Instructions</strong>: ${specialInstructions} </p>` : "";
+  const special_instructions_section = order.specialInstructions && order.specialInstructions.length > 0 ? `<p><strong>Special Instructions</strong>: ${order.specialInstructions} </p>` : "";
   const emailbody = `<p>${ORDER_RESPONSE_PREAMBLE}</p>
 <p>We take your health seriously; be assured your order has been prepared with the utmost care.</p>
 <p>Note that all gratuity is shared with the entire ${STORE_NAME} family.</p>
@@ -403,16 +392,15 @@ ${location_section ? '<br />' : ''}${location_section}We thank you for your supp
 const CreateOrderEvent = async (
   menu: IMenu,
   fulfillmentConfig: FulfillmentConfig,
-  order: Pick<WOrderInstance, 'customerInfo' | 'fulfillment' | 'payments' | 'discounts'>,
+  order: Pick<WOrderInstance, 'customerInfo' | 'fulfillment' | 'payments' | 'discounts' | 'specialInstructions'>,
   cart: CategorizedRebuiltCart,
-  specialInstructions: string,
   service_time_interval: Interval,
   isPaid: boolean,
   totals: RecomputeTotalsResult) => {
   const shortcart = GenerateShortCartFromFullCart(cart);
   const customerName = `${order.customerInfo.givenName} ${order.customerInfo.familyName}`;
-  const calendar_event_title = EventTitleStringBuilder(menu, fulfillmentConfig, customerName, order.fulfillment.dineInInfo, cart, specialInstructions, isPaid);
-  const special_instructions_section = specialInstructions && specialInstructions.length > 0 ? "\nSpecial Instructions: " + specialInstructions : "";
+  const calendar_event_title = EventTitleStringBuilder(menu, fulfillmentConfig, customerName, order.fulfillment.dineInInfo, cart, order.specialInstructions, isPaid);
+  const special_instructions_section = order.specialInstructions && order.specialInstructions.length > 0 ? `\nSpecial Instructions: ${order.specialInstructions}` : "";
   const payment_section = isPaid ? "\n" + GeneratePaymentSection(totals, order.discounts, order.payments, false) : "";
   const delivery_section = GenerateDeliverySection(order.fulfillment.deliveryInfo, false);
   const dineInSecrtion = GenerateDineInSection(order.fulfillment.dineInInfo, false);
@@ -494,7 +482,8 @@ export class OrderManager implements WProvider {
       cart: createOrderRequest.cart,
       customerInfo: createOrderRequest.customerInfo,
       fulfillment: createOrderRequest.fulfillment,
-      metrics: createOrderRequest.metrics
+      metrics: createOrderRequest.metrics,
+      specialInstructions: createOrderRequest.specialInstructions
     }
 
     // 3. recompute the totals to ensure everything matches up, and to get some needed computations that we don't want to pass over the wire and blindly trust
@@ -628,7 +617,7 @@ export class OrderManager implements WProvider {
 
     // 6. send out emails and capture the order to persistent storage
     try {
-      const completedOrderInstance: Omit<WOrderInstance, 'id' | 'externalIDs'> = {
+      const completedOrderInstance: Omit<WOrderInstance, 'id' | 'metadata'> = {
         cart: orderInstance.cart,
         customerInfo: orderInstance.customerInfo,
         fulfillment: orderInstance.fulfillment,
@@ -636,7 +625,8 @@ export class OrderManager implements WProvider {
         refunds: [],
         payments,
         discounts,
-        status: 'COMPLETED'
+        status: 'COMPLETED',
+        specialInstructions: orderInstance.specialInstructions
       };
       // create calendar event
       const orderCalendarEvent = await CreateOrderEvent(
@@ -644,11 +634,10 @@ export class OrderManager implements WProvider {
         fulfillmentConfig,
         completedOrderInstance,
         rebuiltCart,
-        createOrderRequest.specialInstructions,
         dateTimeInterval,
         isPaid,
         recomputedTotals);
-      return await new WOrderInstanceModel({...completedOrderInstance, externalIDs: [{key: 'GCALEVENT', value: orderCalendarEvent.data.id}]})
+      return await new WOrderInstanceModel({...completedOrderInstance, metadata: [{key: 'GCALEVENT', value: orderCalendarEvent.data.id}]})
         .save()
         .then(async (dbOrderInstance) => {
           logger.info(`Successfully saved OrderInstance to database: ${JSON.stringify(dbOrderInstance.toJSON())}`)
@@ -661,11 +650,8 @@ export class OrderManager implements WProvider {
           // send email to customer
           const createExternalEmailInfo = CreateExternalEmail(
             dbOrderInstance,
-            fulfillmentConfig,
             service_title,
-            rebuiltCart,
-            createOrderRequest.specialInstructions,
-            isPaid);
+            rebuiltCart);
 
           // send email to eat(pie)
           const createInternalEmailInfo = CreateInternalEmail(
@@ -675,7 +661,6 @@ export class OrderManager implements WProvider {
             requestTime,
             dateTimeInterval,
             rebuiltCart,
-            createOrderRequest.specialInstructions,
             isPaid,
             recomputedTotals,
             ipAddress);
