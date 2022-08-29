@@ -13,7 +13,6 @@ import {
   ComputeTaxAmount,
   ComputeTipBasis,
   ComputeTipValue,
-  TotalsV2,
   ComputeTotal,
   ComputeBalanceAfterCredits,
   JSFECreditV2,
@@ -75,7 +74,6 @@ interface RecomputeTotalsArgs {
   cart: CategorizedRebuiltCart;
   creditValidations: JSFECreditV2[];
   fulfillment: FulfillmentConfig;
-  totals: TotalsV2;
 }
 
 export interface RecomputeTotalsResult {
@@ -263,9 +261,9 @@ const RebuildOrderState = function (menu: IMenu, cart: CoreCartEntry<WCPProductV
 }
 
 
-const RecomputeTotals = function ({ cart, creditValidations, fulfillment, order, totals }: RecomputeTotalsArgs): RecomputeTotalsResult {
+const RecomputeTotals = function ({ cart, creditValidations, fulfillment, order }: RecomputeTotalsArgs): RecomputeTotalsResult {
   const TAX_RATE = DataProviderInstance.Settings.config.TAX_RATE as number;
-  const AUTOGRAT_THRESHOLD = DataProviderInstance.Settings.config.AUTOGRAT_THRESHOLD as number;
+  const AUTOGRAT_THRESHOLD = DataProviderInstance.Settings.config.AUTOGRAT_THRESHOLD as number ?? 5;
 
   const mainCategoryProductCount = ComputeMainProductCategoryCount(fulfillment.orderBaseCategoryId, order.cart);
   const cartSubtotal = { currency: CURRENCY.USD, amount: Object.values(cart).reduce((acc, c) => acc + ComputeCartSubTotal(c).amount, 0) };
@@ -277,7 +275,7 @@ const RecomputeTotals = function ({ cart, creditValidations, fulfillment, order,
   const taxAmount = ComputeTaxAmount(subtotalAfterDiscount, TAX_RATE);
   const tipBasis = ComputeTipBasis(subtotalPreDiscount, taxAmount);
   const tipMinimum = mainCategoryProductCount >= AUTOGRAT_THRESHOLD ? ComputeTipValue({ isPercentage: true, isSuggestion: true, value: .2 }, tipBasis) : { currency: CURRENCY.USD, amount: 0 };
-  const tipAmount = totals.tip;
+  const tipAmount = ComputeTipValue(order.tip, tipBasis);
   const total = ComputeTotal(subtotalAfterDiscount, taxAmount, tipAmount);
   const giftCartApplied = ComputeCreditsApplied(total, creditValidations.filter(x => x.validation.credit_type === StoreCreditType.MONEY));
   const amountCredited = { amount: giftCartApplied.reduce((acc, x) => acc + x.amount_used.amount, 0), currency: CURRENCY.USD };
@@ -419,19 +417,19 @@ const CreateOrderEvent = async (
     }});
 }
 
-const CreateSquareOrderAndCharge = async (reference_id: string, balance: IMoney, nonce: string, note: string) => {
-  const create_order_response = await SquareProviderInstance.CreateOrderStoreCredit(reference_id, balance, note);
+const CreateSquareOrderAndCharge = async (referenceId: string, amount: IMoney, nonce: string, note: string) => {
+  const create_order_response = await SquareProviderInstance.CreateOrderStoreCredit(referenceId, amount, note);
   if (create_order_response.success === true) {
-    const square_order_id = create_order_response.result.order.id;
-    logger.info(`For internal id ${reference_id} created Square Order ID: ${square_order_id} for ${MoneyToDisplayString(balance, true)}`)
-    const payment_response = await SquareProviderInstance.ProcessPayment(nonce, balance, reference_id, square_order_id);
+    const squareOrderId = create_order_response.result.order.id;
+    logger.info(`For internal id ${referenceId} created Square Order ID: ${squareOrderId} for ${MoneyToDisplayString(amount, true)}`)
+    const payment_response = await SquareProviderInstance.ProcessPayment({nonce, amount, referenceId, squareOrderId});
     if (payment_response.success === false) {
       logger.error("Failed to process payment: %o", payment_response);
-      await SquareProviderInstance.OrderStateChange(square_order_id, create_order_response.result.order.version + 1, "CANCELED");
+      await SquareProviderInstance.OrderStateChange(squareOrderId, create_order_response.result.order.version + 1, "CANCELED");
       return payment_response;
     }
     else {
-      logger.info(`For internal id ${reference_id} and Square Order ID: ${square_order_id} payment for ${MoneyToDisplayString(balance, true)} successful.`)
+      logger.info(`For internal id ${referenceId} and Square Order ID: ${squareOrderId} payment for ${MoneyToDisplayString(amount, true)} successful.`)
       return payment_response;
     }
   }
@@ -483,13 +481,14 @@ export class OrderManager implements WProvider {
       customerInfo: createOrderRequest.customerInfo,
       fulfillment: createOrderRequest.fulfillment,
       metrics: createOrderRequest.metrics,
+      tip: createOrderRequest.tip,
       specialInstructions: createOrderRequest.specialInstructions
     }
 
     // 3. recompute the totals to ensure everything matches up, and to get some needed computations that we don't want to pass over the wire and blindly trust
-    const recomputedTotals = RecomputeTotals({ cart: rebuiltCart, creditValidations: createOrderRequest.creditValidations, fulfillment: fulfillmentConfig, totals: createOrderRequest.totals, order: orderInstance });
-    if (createOrderRequest.totals.balance.amount !== recomputedTotals.balanceAfterCredits.amount) {
-      const errorDetail = `Computed different balance of ${MoneyToDisplayString(recomputedTotals.balanceAfterCredits, true)} vs sent: ${MoneyToDisplayString(createOrderRequest.totals.balance, true)}`;
+    const recomputedTotals = RecomputeTotals({ cart: rebuiltCart, creditValidations: createOrderRequest.creditValidations, fulfillment: fulfillmentConfig, order: orderInstance });
+    if (createOrderRequest.balance.amount !== recomputedTotals.balanceAfterCredits.amount) {
+      const errorDetail = `Computed different balance of ${MoneyToDisplayString(recomputedTotals.balanceAfterCredits, true)} vs sent: ${MoneyToDisplayString(createOrderRequest.balance, true)}`;
       logger.error(errorDetail)
       return {
         status: 500,
@@ -499,8 +498,8 @@ export class OrderManager implements WProvider {
       };
     }
     // we've only set the tip if we've proceeded to checkout with CC, so no need to check tip fudging if not closing out here
-    if (createOrderRequest.nonce && createOrderRequest.totals.tip.amount < recomputedTotals.tipMinimum.amount) {
-      const errorDetail = `Computed tip below minimum of ${MoneyToDisplayString(recomputedTotals.tipMinimum, true)} vs sent: ${MoneyToDisplayString(createOrderRequest.totals.tip, true)}`;
+    if (createOrderRequest.nonce && recomputedTotals.tipAmount.amount < recomputedTotals.tipMinimum.amount) {
+      const errorDetail = `Computed tip below minimum of ${MoneyToDisplayString(recomputedTotals.tipMinimum, true)} vs sent: ${MoneyToDisplayString(recomputedTotals.tipAmount, true)}`;
       logger.error(errorDetail)
       return {
         status: 500,
@@ -515,7 +514,6 @@ export class OrderManager implements WProvider {
     const optionsForSelectedDate = WDateUtils.GetOptionsForDate(availabilityMap, createOrderRequest.fulfillment.selectedDate, formatISO(requestTime))
     const foundTimeOptionIndex = optionsForSelectedDate.findIndex(x => x.value === createOrderRequest.fulfillment.selectedTime);
     if (foundTimeOptionIndex === -1 || optionsForSelectedDate[foundTimeOptionIndex].disabled) {
-      // TODO: FIX THIS MESSAGE, for some reason it shows as no other options available even if there are.
       const display_time = DateTimeIntervalToDisplayServiceInterval(dateTimeInterval);
       const errorDetail = `Requested fulfillment (${fulfillmentConfig.displayName}) at ${display_time} is no longer valid. ${optionsForSelectedDate.length > 0 ? `Next available time for date selected is ${WDateUtils.MinutesToPrintTime(optionsForSelectedDate[0].value)}. Please submit the order again.` : 'No times left for selected date.'}`;
       logger.error(errorDetail)
@@ -588,12 +586,20 @@ export class OrderManager implements WProvider {
       isPaid = true;
     }
 
+    const orderInstanceBeforeCharging: Omit<WOrderInstance, 'id' | 'metadata' | 'status'> = {
+      ...orderInstance,
+      taxes: [{ amount: recomputedTotals.taxAmount }],
+      refunds: [],
+      payments: payments.slice(),
+      discounts: discounts.slice()
+    };
+
     // Payment part B: attempt to charge balance to credit card
     let errors = [] as WError[];
     let hasChargingSucceeded = false;
     if (recomputedTotals.balanceAfterCredits.amount > 0 && createOrderRequest.nonce) {
       try {
-        const response = await CreateSquareOrderAndCharge(reference_id, createOrderRequest.totals.balance, createOrderRequest.nonce, `This credit is applied to your order for: ${service_title}`);
+        const response = await CreateSquareOrderAndCharge(reference_id, recomputedTotals.balanceAfterCredits, createOrderRequest.nonce, `This credit is applied to your order for: ${service_title}`);
         if (response.success) {
           payments.push(response.result);
           hasChargingSucceeded = true;
@@ -615,59 +621,71 @@ export class OrderManager implements WProvider {
       }
     }
 
-    // 6. send out emails and capture the order to persistent storage
+    const completedOrderInstance: Omit<WOrderInstance, 'id' | 'metadata'> = {
+      ...orderInstanceBeforeCharging,
+      payments: payments.slice(),
+      discounts: discounts.slice(),
+      status: 'COMPLETED',
+    };
+
+    // 6. create calendar event
     try {
-      const completedOrderInstance: Omit<WOrderInstance, 'id' | 'metadata'> = {
-        cart: orderInstance.cart,
-        customerInfo: orderInstance.customerInfo,
-        fulfillment: orderInstance.fulfillment,
-        metrics: orderInstance.metrics,
-        refunds: [],
-        payments,
-        discounts,
-        status: 'COMPLETED',
-        specialInstructions: orderInstance.specialInstructions
-      };
-      // create calendar event
-      const orderCalendarEvent = await CreateOrderEvent(
+      return await CreateOrderEvent(
         menu,
         fulfillmentConfig,
         completedOrderInstance,
         rebuiltCart,
         dateTimeInterval,
         isPaid,
-        recomputedTotals);
-      return await new WOrderInstanceModel({...completedOrderInstance, metadata: [{key: 'GCALEVENT', value: orderCalendarEvent.data.id}]})
-        .save()
-        .then(async (dbOrderInstance) => {
-          logger.info(`Successfully saved OrderInstance to database: ${JSON.stringify(dbOrderInstance.toJSON())}`)
-
-          // TODO, need to actually test the failure of these service calls and some sort of retrying
-          // for example, the event not created error happens, and it doesn't fail the service call. it should
-
-
-          // TODO: store the calendar entry in the DB so we can change it as needed if the order is updated
-          // send email to customer
-          const createExternalEmailInfo = CreateExternalEmail(
-            dbOrderInstance,
-            service_title,
-            rebuiltCart);
-
-          // send email to eat(pie)
-          const createInternalEmailInfo = CreateInternalEmail(
-            dbOrderInstance,
-            fulfillmentConfig,
-            service_title,
-            requestTime,
-            dateTimeInterval,
-            rebuiltCart,
-            isPaid,
-            recomputedTotals,
-            ipAddress);
-          return { status: 200, success: true, errors, result: dbOrderInstance.toObject() };
+        recomputedTotals)
+        .then(async (orderEvent) => {
+          return await new WOrderInstanceModel({...completedOrderInstance, metadata: [{key: 'GCALEVENT', value: orderEvent.data.id}]})
+          .save()
+          .then(async (dbOrderInstance) => {
+            logger.info(`Successfully saved OrderInstance to database: ${JSON.stringify(dbOrderInstance.toJSON())}`)
+            // TODO, need to actually test the failure of these service calls and some sort of retrying
+            // for example, the event not created error happens, and it doesn't fail the service call. it should
+  
+            // send email to customer
+            const createExternalEmailInfo = CreateExternalEmail(
+              dbOrderInstance,
+              service_title,
+              rebuiltCart);
+  
+            // send email to eat(pie)
+            const createInternalEmailInfo = CreateInternalEmail(
+              dbOrderInstance,
+              fulfillmentConfig,
+              service_title,
+              requestTime,
+              dateTimeInterval,
+              rebuiltCart,
+              isPaid,
+              recomputedTotals,
+              ipAddress);
+            return { status: 200, success: true, errors, result: dbOrderInstance.toObject() };
+          })
+          .catch(async (error: any) => {
+            logger.error(`Caught error while saving order to database: ${JSON.stringify(error)}`);
+            errors.push({ category: "INTERNAL_SERVER_ERROR", code: "INTERNAL_SERVER_ERROR", detail: "Unable to save order to database" });
+            throw error;
+          });
+        }).catch(async (error: any) => {
+          logger.error(`Caught error while saving calendary entry: ${JSON.stringify(error)}`);
+          errors.push({ category: "INTERNAL_SERVER_ERROR", code: "INTERNAL_SERVER_ERROR", detail: "Unable to create order entry" });
+          throw error;
         });
     } catch (err) {
-      throw err;
+      await Promise.all(payments.map(async (payment) => {
+        if (payment.t === PaymentMethod.CreditCard) {
+          return await SquareProviderInstance.RefundPayment(payment, "Order creation pipeline failure");
+        }
+        return true;
+      }));
+      if (storeCreditResponses.length > 0) {
+        await RefundStoreCreditDebits(storeCreditResponses);
+      }
+      return { status: 500, success: false, result: null, errors };
     }
   };
 

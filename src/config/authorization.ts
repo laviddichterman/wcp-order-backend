@@ -66,3 +66,11 @@ export const ScopeAccountingRead = requiredScopes("read:accounting");
 * Allows writing accounting information
 */
 export const ScopeAccountingWrite = requiredScopes("write:accounting");
+/**
+ * Allows writing to the timing-related order settings
+ */
+ export const ScopeReadOrders = requiredScopes("read:order");
+/**
+ * Allows writing to the timing-related order settings
+ */
+ export const ScopeWriteOrders = requiredScopes("write:order");

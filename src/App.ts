@@ -12,8 +12,10 @@ import { WProvider } from './types/WProvider';
 import errorMiddleware from './middleware/errorMiddleware';
 
 const PORT = process.env.PORT || 4001;
+// TODO: move to env config
 const ORIGINS = [/https:\/\/.*\.windycitypie\.com$/,
   /https:\/\/windycitypie\.com$/, 
+  /https:\/\/.*\.breezytownpizza\.com$/,
   /https:\/\/breezytownpizza\.com$/, 
 `http://127.0.0.1:3000`, 
 `http://localhost:3000`, 

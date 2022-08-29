@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { body, param } from 'express-validator';
-import { IProduct, IProductInstance, OptionPlacement, OptionQualifier, PriceDisplay } from '@wcp/wcpshared';
+import { CURRENCY, IProduct, IProductInstance, OptionPlacement, OptionQualifier, PriceDisplay } from '@wcp/wcpshared';
 import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
 import logger from '../logging';
 
@@ -35,8 +35,8 @@ const ProductClassValidationChain = [
   body('displayFlags.order_guide.warnings.*').trim().escape().exists().isMongoId(), 
   body('displayFlags.order_guide.suggestions.*').trim().escape().exists().isMongoId(), 
   body('ordinal').optional({nullable: true}).isInt({min: 0}),
-  body('price.amount').isInt({ min: 0 }).exists(),
-  body('price.currency').exists().isLength({ min: 3, max: 3 }).isIn(['USD']),
+  body('price.amount').isInt({min: 0}).exists(),
+  body('price.currency').exists().isIn(Object.values(CURRENCY)),
   body('modifiers.*.mtid').trim().escape().exists().isMongoId(),
   body('modifiers.*.enable').optional({nullable: true}).isMongoId(),
   body('modifiers.*.serviceDisable.*').custom(isFulfillmentDefined),

@@ -1,7 +1,7 @@
 import voucher_codes from 'voucher-code-generator';
 import { startOfDay, isValid, isBefore, parseISO, format } from 'date-fns';
 import qrcode from 'qrcode';
-import { ValidateLockAndSpendRequest, ValidateLockAndSpendSuccess, ValidateAndLockCreditResponse, WDateUtils, StoreCreditType, IMoney, IssueStoreCreditRequest, CURRENCY, MoneyToDisplayString, PurchaseStoreCreditRequest, PurchaseStoreCreditResponse } from "@wcp/wcpshared";
+import { ValidateLockAndSpendRequest, ValidateLockAndSpendSuccess, ValidateAndLockCreditResponse, WDateUtils, StoreCreditType, IMoney, IssueStoreCreditRequest, CURRENCY, MoneyToDisplayString, PurchaseStoreCreditRequest, PurchaseStoreCreditResponse, PaymentMethod, OrderPayment, CreditPayment } from "@wcp/wcpshared";
 import { GoogleProviderInstance } from "./google";
 import { SquareProviderInstance } from "./square";
 import { DataProviderInstance } from './dataprovider';
@@ -250,35 +250,51 @@ export class StoreCreditProvider {
     if (create_order_response.success === true) {
       const squareOrderId = create_order_response.result.order.id;
       logger.info(`For internal id ${referenceId} created Square Order ID: ${squareOrderId} for ${amountString}`)
-      const payment_response = await SquareProviderInstance.ProcessPayment(nonce, request.amount, referenceId, squareOrderId);
+      const payment_response = await SquareProviderInstance.ProcessPayment({ nonce, amount: request.amount, referenceId, squareOrderId });
       if (payment_response.success === true) {
+        const orderPayment = payment_response.result;
         await CreateExternalEmailSender(request, creditCode, qr_code_fs_a);
         if (request.sendEmailToRecipient) {
           await CreateExternalEmailRecipient(request, creditCode, qr_code_fs_b);
         }
-
-        await this.CreateCreditFromCreditCode({ ...request, addedBy: 'WARIO', reason: "website purchase", creditType: StoreCreditType.MONEY, creditCode, expiration: null })
-        logger.info(`Store credit code: ${creditCode} and Square Order ID: ${squareOrderId} payment for ${amountString} successful, credit logged to spreadsheet.`)
-        return {
-          status: 200, error: [], result: {
-            referenceId,
-            code: creditCode,
-            squareOrderId,
-            amount: payment_response.result.amount,
-            last4: payment_response.result.payment.last4,
-            receiptUrl: payment_response.result.payment.receiptUrl
-          }, success: true
-        };
+        return await this.CreateCreditFromCreditCode({
+          ...request,
+          addedBy: 'WARIO',
+          reason: "website purchase",
+          creditType: StoreCreditType.MONEY,
+          creditCode,
+          expiration: null
+        })
+        .then(async (_) => {
+          logger.info(`Store credit code: ${creditCode} and Square Order ID: ${squareOrderId} payment for ${amountString} successful, credit logged to spreadsheet.`)
+          return {
+            status: 200, error: [], result: {
+              referenceId,
+              code: creditCode,
+              squareOrderId,
+              amount: orderPayment.amount,
+              last4: orderPayment.payment.last4,
+              receiptUrl: orderPayment.payment.receiptUrl
+            }, success: true
+          };
+        })
+        // TODO: figure out why this has a type error
+        // .catch(async (err: any) => {
+        //   const errorDetail = `Failed to create credit code, got error: ${JSON.stringify(err)}`;
+        //   logger.error(errorDetail);
+        //   await SquareProviderInstance.RefundPayment(orderPayment, "Failed to create credit code");
+        //   return { status: 500, success: false, result: null, error: [] };
+        // });
       }
       else {
         logger.error("Failed to process payment: %o", payment_response);
-        await SquareProviderInstance.OrderStateChange(squareOrderId, create_order_response.result.order.version + 1, "CANCELED");
-        return { status: 400, success: false, result: null, error: payment_response.error.map(x=>({category: x.category, code: x.code, detail: x.detail!})) };
+        await SquareProviderInstance.OrderStateChange(squareOrderId, create_order_response.result.order.version + 2, "CANCELED");
+        return { status: 400, success: false, result: null, error: payment_response.error.map(x => ({ category: x.category, code: x.code, detail: x.detail! })) };
       }
     } else {
       const errorDetail = JSON.stringify(create_order_response);
       logger.error(errorDetail);
-      return { status: 500, success: false, result: null, error: [{category: 'INTERNAL_SERVER_ERROR', code: 'INTERNAL_SERVER_ERROR', detail: errorDetail }] };
+      return { status: 500, success: false, result: null, error: [{ category: 'INTERNAL_SERVER_ERROR', code: 'INTERNAL_SERVER_ERROR', detail: errorDetail }] };
     }
   };
 
