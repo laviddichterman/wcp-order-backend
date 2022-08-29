@@ -76,8 +76,12 @@ export class SquareProvider implements WProvider {
     logger.info(`Finished Bootstrap of SquareProvider`);
   }
 
+
+
+  
+
   CreateOrderCart = async (reference_id : string, 
-    orderBeforeCharging: Omit<WOrderInstance, 'id' | 'metadata' | 'status' | 'payments' | 'refunds'>,
+    orderBeforeCharging: Omit<WOrderInstance, 'id' | 'metadata' | 'status' | 'refunds'>,
     tipAmount: IMoney,
     promisedTime: Date | number,
     cart: CategorizedRebuiltCart, 
@@ -99,20 +103,36 @@ export class SquareProvider implements WProvider {
           // we don't fill out applied taxes at the item level
           name: x.product.m.name
         } as OrderLineItem))),
-        discounts: orderBeforeCharging.discounts.map(discount => ({ 
-          type: "FIXED_AMOUNT",
+        discounts: [...orderBeforeCharging.discounts.map(discount => ({ 
+          type: 'VARIABLE_AMOUNT',
+          scope: 'ORDER',
+          catalogObjectId: 'AKIYDPB5WJD2HURCWWZSAIF5',
+          name: `Discount Code: ${discount.discount.code}`,
           amountMoney: IMoneyToBigIntMoney(discount.discount.amount),
           appliedMoney: IMoneyToBigIntMoney(discount.discount.amount),
           metadata: { 
-            "enc": discount.discount.lock.enc,
-            "iv": discount.discount.lock.iv,
-            "auth": discount.discount.lock.auth,
-            "code": discount.discount.code
+            enc: discount.discount.lock.enc,
+            iv: discount.discount.lock.iv,
+            auth: discount.discount.lock.auth,
+            code: discount.discount.code
           }
         })),
-        // pricingOptions: {
-        //   autoApplyTaxes: true
-        // },
+        // we apply these non-square payments of store credit that were purchased with square
+        // accounting will need to address this later
+        ...orderBeforeCharging.payments.map(nonSquarePayment => ({ 
+          type: "FIXED_AMOUNT",
+          amountMoney: IMoneyToBigIntMoney(nonSquarePayment.amount),
+          appliedMoney: IMoneyToBigIntMoney(nonSquarePayment.amount),
+          metadata: (nonSquarePayment.t === PaymentMethod.StoreCredit ? {
+            code: nonSquarePayment.payment.code,
+            ...nonSquarePayment.payment.lock
+          }  : {})
+        })),
+        ],
+        pricingOptions: {
+          autoApplyDiscounts: true,
+          autoApplyTaxes: true
+        },
         taxes: orderBeforeCharging.taxes.map(tax=>({ 
           catalogObjectId: SQUARE_TAX_RATE_CATALOG_ID, 
           appliedMoney: IMoneyToBigIntMoney(tax.amount),
