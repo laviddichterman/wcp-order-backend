@@ -40,21 +40,22 @@ import {
   DateTimeIntervalBuilder,
   ComputeMainProductCategoryCount,
   ComputeCreditsApplied,
-  StoreCreditType
+  StoreCreditType,
+  StoreCreditPayment
 } from "@wcp/wcpshared";
 
 import { WProvider } from '../types/WProvider';
 
 import { formatRFC3339, format, Interval, isSameMinute, isSameDay, formatISO, intervalToDuration, formatDuration } from 'date-fns';
 import { GoogleProviderInstance } from "./google";
-import { SquareProviderInstance } from "./square";
+import { SquarePayment, SquareProviderInstance } from "./square";
 import { StoreCreditProviderInstance } from "./store_credit_provider";
 import { CatalogProviderInstance } from './catalog_provider';
 import { DataProviderInstance } from './dataprovider';
 import logger from '../logging';
-import { BigIntStringify } from "../utils";
 import { OrderFunctional } from "@wcp/wcpshared";
 import { WOrderInstanceModel } from "../models/orders/WOrderInstance";
+import { Order as SquareOrder } from "square";
 
 const WCP = "Windy City Pie";
 
@@ -224,7 +225,7 @@ const ServiceTitleBuilder = (service_option_display_string: string, fulfillmentI
   return `${service_option_display_string} for ${customer_name}${GenerateDineInPlusString(fulfillmentInfo.dineInInfo)} on ${format(service_time_interval.start, WDateUtils.ServiceDateDisplayFormat)} at ${display_service_time_interval}`;
 }
 
-const GenerateDisplayCartStringListFromProducts = (cart: CategorizedRebuiltCart) => 
+const GenerateDisplayCartStringListFromProducts = (cart: CategorizedRebuiltCart) =>
   Object.values(cart).map((category_cart) => category_cart.map((item) => `${item.quantity}x: ${item.product.m.name}`)).flat(1);
 
 
@@ -404,7 +405,8 @@ const CreateOrderEvent = async (
   const dineInSecrtion = GenerateDineInSection(order.fulfillment.dineInInfo, false);
   const calendar_details = `${shortcart.map(x => `${x.category_name}:\n${x.products.join("\n")}`).join("\n")}\n${dineInSecrtion}ph: ${order.customerInfo.mobileNum}${special_instructions_section}${delivery_section}${payment_section}`;
 
-  return await GoogleProviderInstance.CreateCalendarEvent({ summary: calendar_event_title,
+  return await GoogleProviderInstance.CreateCalendarEvent({
+    summary: calendar_event_title,
     location: order.fulfillment.deliveryInfo?.validation.validated_address ?? "",
     description: calendar_details,
     start: {
@@ -414,27 +416,8 @@ const CreateOrderEvent = async (
     end: {
       dateTime: formatRFC3339(service_time_interval.end),
       timeZone: process.env.TZ
-    }});
-}
-
-const CreateSquareOrderAndCharge = async (referenceId: string, amount: IMoney, nonce: string, note: string) => {
-  const create_order_response = await SquareProviderInstance.CreateOrderStoreCredit(referenceId, amount, note);
-  if (create_order_response.success === true) {
-    const squareOrderId = create_order_response.result.order.id;
-    logger.info(`For internal id ${referenceId} created Square Order ID: ${squareOrderId} for ${MoneyToDisplayString(amount, true)}`)
-    const payment_response = await SquareProviderInstance.ProcessPayment({nonce, amount, referenceId, squareOrderId});
-    if (payment_response.success === false) {
-      logger.error("Failed to process payment: %o", payment_response);
-      await SquareProviderInstance.OrderStateChange(squareOrderId, create_order_response.result.order.version + 1, "CANCELED");
-      return payment_response;
     }
-    else {
-      logger.info(`For internal id ${referenceId} and Square Order ID: ${squareOrderId} payment for ${MoneyToDisplayString(amount, true)} successful.`)
-      return payment_response;
-    }
-  }
-  logger.error(`Got error in creating order ${BigIntStringify(create_order_response)}`);
-  return create_order_response;
+  });
 }
 
 async function RefundStoreCreditDebits(spends: ValidateLockAndSpendSuccess[]) {
@@ -442,6 +425,18 @@ async function RefundStoreCreditDebits(spends: ValidateLockAndSpendSuccess[]) {
     logger.info(`Refunding ${JSON.stringify(x.entry)} after failed processing.`);
     return StoreCreditProviderInstance.CheckAndRefundStoreCredit(x.entry, x.index);
   }))
+}
+
+async function RefundSquarePayments(payments: SquarePayment[]) {
+  return Promise.all(payments
+    .filter(x=>x.payment.status === TenderBaseStatus.COMPLETED)
+    .map(x => SquareProviderInstance.RefundPayment(x.squarePaymentId, x.payment.amount, 'Refunding failed order')));
+}
+
+async function CancelSquarePayments(payments: SquarePayment[]) {
+  return Promise.all(payments
+    .filter(x=>x.payment.status === TenderBaseStatus.AUTHORIZED)
+    .map(x => SquareProviderInstance.CancelPayment(x.squarePaymentId)));
 }
 
 export class OrderManager implements WProvider {
@@ -457,6 +452,7 @@ export class OrderManager implements WProvider {
     }
     const fulfillmentConfig = DataProviderInstance.Fulfillments[createOrderRequest.fulfillment.selectedService];
     const STORE_NAME = DataProviderInstance.KeyValueConfig.STORE_NAME;
+    const USE_SQUARE_ITEMIZED_ORDERING = DataProviderInstance.KeyValueConfig.USE_SQUARE_ITEMIZED_ORDERING === '1';
     const reference_id = requestTime.toString(36).toUpperCase();
     const dateTimeInterval = DateTimeIntervalBuilder(createOrderRequest.fulfillment, fulfillmentConfig);
     const customer_name = [createOrderRequest.customerInfo.givenName, createOrderRequest.customerInfo.familyName].join(" ");
@@ -497,6 +493,16 @@ export class OrderManager implements WProvider {
         errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'INSUFFICIENT_FUNDS', detail: errorDetail }]
       };
     }
+    if (recomputedTotals.balanceAfterCredits.amount > 0 && !createOrderRequest.nonce) {
+      const errorDetail = 'Order balance is non-zero and no payment method provided.';
+      logger.error(errorDetail)
+      return {
+        status: 500,
+        success: false,
+        result: null,
+        errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'INSUFFICIENT_FUNDS', detail: errorDetail }]
+      };
+    }
     // we've only set the tip if we've proceeded to checkout with CC, so no need to check tip fudging if not closing out here
     if (createOrderRequest.nonce && recomputedTotals.tipAmount.amount < recomputedTotals.tipMinimum.amount) {
       const errorDetail = `Computed tip below minimum of ${MoneyToDisplayString(recomputedTotals.tipMinimum, true)} vs sent: ${MoneyToDisplayString(recomputedTotals.tipAmount, true)}`;
@@ -527,8 +533,9 @@ export class OrderManager implements WProvider {
 
     // 5. enter payment subsection
     let isPaid = false;
+    let tipAmountRemaining = USE_SQUARE_ITEMIZED_ORDERING ? recomputedTotals.tipAmount.amount : 0;
     const discounts: OrderLineDiscount[] = [];
-    const payments: OrderPayment[] = [];
+    const moneyCreditPayments: StoreCreditPayment[] = [];
 
     // Payment part A: attempt to process store credits, keep track of old store credit balance in case of failure
     const storeCreditResponses: ValidateLockAndSpendSuccess[] = [];
@@ -554,7 +561,10 @@ export class OrderManager implements WProvider {
                 });
                 break;
               case 'MONEY':
-                payments.push({
+                const tipAmountToApply = Math.min(tipAmountRemaining, creditUse.amount_used.amount);
+                tipAmountRemaining -= tipAmountToApply;
+                moneyCreditPayments.push({
+                  tipAmount: { currency: recomputedTotals.tipAmount.currency, amount: tipAmountToApply },
                   status: TenderBaseStatus.COMPLETED,
                   t: PaymentMethod.StoreCredit,
                   createdAt: Date.now(),
@@ -590,29 +600,117 @@ export class OrderManager implements WProvider {
       ...orderInstance,
       taxes: [{ amount: recomputedTotals.taxAmount }],
       refunds: [],
-      payments: payments.slice(),
+      payments: moneyCreditPayments.slice(),
       discounts: discounts.slice()
     };
 
-    // Payment part B: attempt to charge balance to credit card
-    let errors = [] as WError[];
+    // Payment Part B: we've processed any credits, make an order
+    let errors: WError[] = [];
     let hasChargingSucceeded = false;
-    if (recomputedTotals.balanceAfterCredits.amount > 0 && createOrderRequest.nonce) {
+    let squareOrder: SquareOrder | null = null;
+    const squarePayments: SquarePayment[] = [];
+    const payments: OrderPayment[] = moneyCreditPayments.slice();
+    if (USE_SQUARE_ITEMIZED_ORDERING || recomputedTotals.balanceAfterCredits.amount > 0) {
       try {
-        const response = await CreateSquareOrderAndCharge(reference_id, recomputedTotals.balanceAfterCredits, createOrderRequest.nonce, `This credit is applied to your order for: ${service_title}`);
-        if (response.success) {
-          payments.push(response.result);
-          hasChargingSucceeded = true;
+        const squareOrderResponse = await (USE_SQUARE_ITEMIZED_ORDERING ?
+          SquareProviderInstance.CreateOrderCart(
+            reference_id,
+            orderInstanceBeforeCharging,
+            dateTimeInterval.start,
+            rebuiltCart,
+            "") :
+          SquareProviderInstance.CreateOrderStoreCredit(
+            reference_id,
+            recomputedTotals.balanceAfterCredits,
+            `This credit is applied to your order for: ${service_title}`));
+        if (squareOrderResponse.success === true) {
+          squareOrder = squareOrderResponse.result.order;
+          logger.info(`For internal id ${reference_id} created Square Order ID: ${squareOrder.id}`);
+          // Payment Part C: create payments
+          //  substep i: close out the order via credit card payment or if no money credit payments either, a 0 cash money payment, 
+          if (recomputedTotals.balanceAfterCredits.amount > 0 || moneyCreditPayments.length === 0) {
+            const squarePaymentResponse = await SquareProviderInstance.CreatePayment({
+              sourceId: recomputedTotals.balanceAfterCredits.amount > 0 ? createOrderRequest.nonce : 'CASH',
+              amount: recomputedTotals.balanceAfterCredits,
+              tipAmount: { currency: recomputedTotals.tipAmount.currency, amount: tipAmountRemaining },
+              referenceId: reference_id,
+              squareOrderId: squareOrder.id,
+              autocomplete: false
+            });
+            if (squarePaymentResponse.success === true) {
+              logger.info(`For internal id ${reference_id} and Square Order ID: ${squareOrder.id} payment for ${MoneyToDisplayString(squarePaymentResponse.result.payment.amount, true)} successful.`)
+              payments.push(squarePaymentResponse.result.payment);
+              squarePayments.push(squarePaymentResponse.result);
+            } else {
+              const errorDetail = `Failed to process payment: ${JSON.stringify(squarePaymentResponse)}`;
+              logger.error(errorDetail);
+              squarePaymentResponse.error.forEach(e => errors.push({ category: e.category, code: e.code, detail: e.detail }))
+              // throw for flow control
+              throw errorDetail;
+            }
+          }
+          if (USE_SQUARE_ITEMIZED_ORDERING) {
+            // Payment Part C, substep ii: process money store credit payments
+            await Promise.all(moneyCreditPayments.map(async (payment) => {
+              try {
+                const squareMoneyCreditPaymentResponse = await SquareProviderInstance.CreatePayment({
+                  sourceId: "EXTERNAL",
+                  storeCreditPayment: payment,
+                  amount: payment.amount,
+                  tipAmount: payment.tipAmount,
+                  referenceId: payment.payment.code,
+                  squareOrderId: squareOrder.id,
+                  autocomplete: false
+                });
+                if (squareMoneyCreditPaymentResponse.success === true) {
+                  logger.info(`For internal id ${reference_id} and Square Order ID: ${squareOrder.id} payment for ${MoneyToDisplayString(squareMoneyCreditPaymentResponse.result.payment.amount, true)} successful.`)
+                  //this next line duplicates the store credit payments, since we already have them independently processed
+                  //payments.push(squareMoneyCreditPaymentResponse.result.payment);
+                  squarePayments.push(squareMoneyCreditPaymentResponse.result);
+                } else {
+                  const errorDetail = `Failed to process payment: ${JSON.stringify(squareMoneyCreditPaymentResponse)}`;
+                  logger.error(errorDetail);
+                  squareMoneyCreditPaymentResponse.error.forEach(e => (errors.push({ category: e.category, code: e.code, detail: e.detail })));
+                }
+              }
+              catch (err: any) {
+                logger.error(`got error in processing money store credit of ${JSON.stringify(payment)} and error: ${JSON.stringify(err)}`);
+                throw err;
+              }
+            }));
+          }
+          // Payment Part D: mark the order paid via PayOrder endpoint
+          const payOrderResponse = await SquareProviderInstance.PayOrder(squareOrder.id, squarePayments.map(x => x.squarePaymentId));
+          if (payOrderResponse.success) {
+            logger.info(`Square order successfully marked paid.`);
+            // THE GOAL YALL
+            hasChargingSucceeded = true;
+          } else {
+            const errorDetail = `Failed to pay the order: ${JSON.stringify(payOrderResponse)}`;
+            logger.error(errorDetail);
+            payOrderResponse.error.forEach(e => (errors.push({ category: e.category, code: e.code, detail: e.detail })));
+          }
+        } else {
+          logger.error(`Failed to create order: ${JSON.stringify(squareOrderResponse.error)}`);
+          squareOrderResponse.error.map(e => errors.concat({ category: e.category, code: e.code, detail: e.detail }))
         }
-        errors = response.error.map(e => ({ category: e.category, code: e.code, detail: e.detail }));
-      } catch (error: any) {
-        hasChargingSucceeded = false;
-        logger.error(`Nasty error in processing payment: ${JSON.stringify(error)}.`);
-        errors.push({ category: 'PAYMENT_METHOD_ERROR', detail: JSON.stringify(error), code: 'INTERNAL_SERVER_ERROR' });
+      } catch (err: any) {
+        logger.error(JSON.stringify(err));
+        // pass
       }
+      // Payment part E: make sure it worked and if not, undo the payments
       if (!hasChargingSucceeded) {
-        if (storeCreditResponses.length > 0) {
-          await RefundStoreCreditDebits(storeCreditResponses);
+        try {
+          if (squareOrder !== null) {
+            SquareProviderInstance.OrderStateChange(squareOrder.id, "CANCELED");
+          }
+          RefundSquarePayments(squarePayments);
+          CancelSquarePayments(squarePayments);
+          RefundStoreCreditDebits(storeCreditResponses);
+        }
+        catch (err: any) {
+          logger.error(`Got error when unwinding the order after failure: ${JSON.stringify(err)}`);
+          return { status: 500, success: false, result: null, errors };
         }
         return { status: 400, success: false, result: null, errors };
       }
@@ -639,52 +737,45 @@ export class OrderManager implements WProvider {
         isPaid,
         recomputedTotals)
         .then(async (orderEvent) => {
-          return await new WOrderInstanceModel({...completedOrderInstance, metadata: [{key: 'GCALEVENT', value: orderEvent.data.id}]})
-          .save()
-          .then(async (dbOrderInstance) => {
-            logger.info(`Successfully saved OrderInstance to database: ${JSON.stringify(dbOrderInstance.toJSON())}`)
-            // TODO, need to actually test the failure of these service calls and some sort of retrying
-            // for example, the event not created error happens, and it doesn't fail the service call. it should
-  
-            // send email to customer
-            const createExternalEmailInfo = CreateExternalEmail(
-              dbOrderInstance,
-              service_title,
-              rebuiltCart);
-  
-            // send email to eat(pie)
-            const createInternalEmailInfo = CreateInternalEmail(
-              dbOrderInstance,
-              fulfillmentConfig,
-              service_title,
-              requestTime,
-              dateTimeInterval,
-              rebuiltCart,
-              isPaid,
-              recomputedTotals,
-              ipAddress);
-            return { status: 200, success: true, errors, result: dbOrderInstance.toObject() };
-          })
-          .catch(async (error: any) => {
-            logger.error(`Caught error while saving order to database: ${JSON.stringify(error)}`);
-            errors.push({ category: "INTERNAL_SERVER_ERROR", code: "INTERNAL_SERVER_ERROR", detail: "Unable to save order to database" });
-            throw error;
-          });
+          return await new WOrderInstanceModel({ ...completedOrderInstance, metadata: [{ key: 'GCALEVENT', value: orderEvent.data.id }] })
+            .save()
+            .then(async (dbOrderInstance) => {
+              logger.info(`Successfully saved OrderInstance to database: ${JSON.stringify(dbOrderInstance.toJSON())}`)
+              // TODO, need to actually test the failure of these service calls and some sort of retrying
+              // for example, the event not created error happens, and it doesn't fail the service call. it should
+
+              // send email to customer
+              const createExternalEmailInfo = CreateExternalEmail(
+                dbOrderInstance,
+                service_title,
+                rebuiltCart);
+
+              // send email to eat(pie)
+              const createInternalEmailInfo = CreateInternalEmail(
+                dbOrderInstance,
+                fulfillmentConfig,
+                service_title,
+                requestTime,
+                dateTimeInterval,
+                rebuiltCart,
+                isPaid,
+                recomputedTotals,
+                ipAddress);
+              return { status: 200, success: true, errors, result: dbOrderInstance.toObject() };
+            })
+            .catch(async (error: any) => {
+              logger.error(`Caught error while saving order to database: ${JSON.stringify(error)}`);
+              errors.push({ category: "INTERNAL_SERVER_ERROR", code: "INTERNAL_SERVER_ERROR", detail: "Unable to save order to database" });
+              throw error;
+            });
         }).catch(async (error: any) => {
           logger.error(`Caught error while saving calendary entry: ${JSON.stringify(error)}`);
           errors.push({ category: "INTERNAL_SERVER_ERROR", code: "INTERNAL_SERVER_ERROR", detail: "Unable to create order entry" });
           throw error;
         });
     } catch (err) {
-      await Promise.all(payments.map(async (payment) => {
-        if (payment.t === PaymentMethod.CreditCard) {
-          return await SquareProviderInstance.RefundPayment(payment, "Order creation pipeline failure");
-        }
-        return true;
-      }));
-      if (storeCreditResponses.length > 0) {
-        await RefundStoreCreditDebits(storeCreditResponses);
-      }
+      await RefundSquarePayments(squarePayments);
+      await RefundStoreCreditDebits(storeCreditResponses);
       return { status: 500, success: false, result: null, errors };
     }
   };

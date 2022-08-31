@@ -6,7 +6,6 @@ import { DataProviderInstance } from '../config/dataprovider';
 import { OrderManagerInstance } from '../config/order_manager';
 import IExpressController from '../types/IExpressController';
 import { GoogleProviderInstance } from '../config/google';
-import { BigIntStringify } from '../utils';
 import { isFulfillmentDefined } from '../types/Validations';
 
 const V2OrderValidationChain = [
@@ -64,7 +63,7 @@ export class OrderController implements IExpressController {
         { name: EMAIL_ADDRESS, address: "dave@windycitypie.com" },
         "ERROR IN ORDER PROCESSING. CONTACT DAVE IMMEDIATELY",
         "dave@windycitypie.com",
-        `<p>Order request: ${BigIntStringify(req.body)}</p><p>Error info:${BigIntStringify(error)}</p>`);
+        `<p>Order request: ${JSON.stringify(req.body)}</p><p>Error info:${JSON.stringify(error)}</p>`);
       next(error)
     }
   }
