@@ -236,7 +236,7 @@ export class SquareProvider implements WProvider {
     const request_body: CreatePaymentRequest = {
       sourceId: storeCreditPayment ? "EXTERNAL" : sourceId,
       externalDetails: storeCreditPayment ? { type: 'STORED_BALANCE', source: "WARIO" } : undefined,
-      amountMoney: IMoneyToBigIntMoney({ currency: amount.currency, amount: amount.amount - tipAmount.amount }),
+      amountMoney: IMoneyToBigIntMoney({ currency: amount.currency, amount: amount.amount - (tipAmount?.amount ?? 0) }),
       tipMoney: tipAmount ? IMoneyToBigIntMoney(tipAmount) : undefined,
       referenceId: storeCreditPayment ? storeCreditPayment.payment.code : referenceId,
       orderId: squareOrderId,
