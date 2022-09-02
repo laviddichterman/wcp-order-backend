@@ -249,9 +249,9 @@ export class StoreCreditProvider {
     let orderUpdateCount = 0;
     const create_order_response = await SquareProviderInstance.CreateOrderStoreCredit(referenceId, request.amount, `Purchase of store credit code: ${creditCode}`);
     if (create_order_response.success === true) {
-      const squareOrderId = create_order_response.result.order.id;
-      logger.info(`For internal id ${referenceId} created Square Order ID: ${squareOrderId} for ${amountString}`)
-      const payment_response = await SquareProviderInstance.ProcessPayment({ sourceId: nonce, amount: request.amount, referenceId, squareOrderId });
+      const squareOrder = create_order_response.result.order;
+      logger.info(`For internal id ${referenceId} created Square Order ID: ${squareOrder.id} for ${amountString}`)
+      const payment_response = await SquareProviderInstance.ProcessPayment({ sourceId: nonce, amount: request.amount, referenceId, squareOrderId: squareOrder.id });
       orderUpdateCount += 1;
       if (payment_response.success === true && payment_response.result.payment.t === PaymentMethod.CreditCard) {
         const orderPayment = payment_response.result.payment;
@@ -268,12 +268,12 @@ export class StoreCreditProvider {
           expiration: null
         })
         .then(async (_) => {
-          logger.info(`Store credit code: ${creditCode} and Square Order ID: ${squareOrderId} payment for ${amountString} successful, credit logged to spreadsheet.`)
+          logger.info(`Store credit code: ${creditCode} and Square Order ID: ${squareOrder.id} payment for ${amountString} successful, credit logged to spreadsheet.`)
           return {
             status: 200, error: [], result: {
               referenceId,
               code: creditCode,
-              squareOrderId,
+              squareOrderId: squareOrder.id,
               amount: orderPayment.amount,
               last4: orderPayment.payment.last4,
               receiptUrl: orderPayment.payment.receiptUrl
@@ -291,7 +291,7 @@ export class StoreCreditProvider {
       else {
         logger.error("Failed to process payment: %o", payment_response);
         if (create_order_response.result) {
-          await SquareProviderInstance.OrderStateChange(squareOrderId, orderUpdateCount, "CANCELED");
+          await SquareProviderInstance.OrderStateChange(squareOrder.id, squareOrder.version + orderUpdateCount, "CANCELED");
         }
         return { status: 400, success: false, result: null, error: payment_response.error.map(x => ({ category: x.category, code: x.code, detail: x.detail! })) };
       }

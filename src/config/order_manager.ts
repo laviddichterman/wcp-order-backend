@@ -684,7 +684,7 @@ export class OrderManager implements WProvider {
           }
           // Payment Part D: mark the order paid via PayOrder endpoint
           const payOrderResponse = await SquareProviderInstance.PayOrder(squareOrder.id, squarePayments.map(x => x.squarePaymentId));
-          orderUpdateCount += 1;
+          orderUpdateCount = orderUpdateCount + 1;
           if (payOrderResponse.success) {
             logger.info(`Square order successfully marked paid.`);
             // THE GOAL YALL
@@ -696,7 +696,7 @@ export class OrderManager implements WProvider {
           }
         } else {
           logger.error(`Failed to create order: ${JSON.stringify(squareOrderResponse.error)}`);
-          squareOrderResponse.error.map(e => errors.concat({ category: e.category, code: e.code, detail: e.detail }))
+          squareOrderResponse.error.map(e => errors.push({ category: e.category, code: e.code, detail: e.detail }))
         }
       } catch (err: any) {
         logger.error(JSON.stringify(err));
@@ -706,7 +706,7 @@ export class OrderManager implements WProvider {
       if (!hasChargingSucceeded) {
         try {
           if (squareOrder !== null) {
-            SquareProviderInstance.OrderStateChange(squareOrder.id, orderUpdateCount, "CANCELED");
+            SquareProviderInstance.OrderStateChange(squareOrder.id, squareOrder.version + orderUpdateCount, "CANCELED");
           }
           RefundSquarePayments(squarePayments);
           CancelSquarePayments(squarePayments);

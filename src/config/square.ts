@@ -44,9 +44,9 @@ const SquareRequestHandler = async <T>(apiRequestMaker: () => Promise<SquareProv
     }
     catch (error) {
       if (error instanceof ApiError) {
-        throw { success: false, result: null, error: error.errors as SquareError[] };
+        return { success: false, result: null, error: error.errors as SquareError[] };
       }
-      throw { success: false, result: null, error: [{ category: "API_ERROR", code: "INTERNAL_SERVER_ERROR", detail: 'Internal Server Error. Please reach out for assistance.' }] };
+      return { success: false, result: null, error: [{ category: "API_ERROR", code: "INTERNAL_SERVER_ERROR", detail: 'Internal Server Error. Please reach out for assistance.' }] };
     }
   }
   return await call_fxn();
