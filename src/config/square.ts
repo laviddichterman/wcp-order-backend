@@ -209,14 +209,14 @@ export class SquareProvider implements WProvider {
     return await SquareRequestHandler(callFxn);
   }
 
-  OrderStateChange = async (square_order_id: string, new_state: string) => {
+  OrderStateChange = async (square_order_id: string, version: number, new_state: string) => {
     const idempotency_key = crypto.randomBytes(22).toString('hex');
     const orders_api = this.#client.ordersApi;
     const request_body: UpdateOrderRequest = {
       idempotencyKey: idempotency_key,
       order: {
         locationId: DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
-        //version: order_version ?? undefined,
+        version,
         state: new_state,
       }
     };

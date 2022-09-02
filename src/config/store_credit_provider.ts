@@ -246,11 +246,13 @@ export class StoreCreditProvider {
     const qr_code_fs_b = new Stream.PassThrough();
     qr_code_fs.pipe(qr_code_fs_a);
     qr_code_fs.pipe(qr_code_fs_b);
+    let orderUpdateCount = 0;
     const create_order_response = await SquareProviderInstance.CreateOrderStoreCredit(referenceId, request.amount, `Purchase of store credit code: ${creditCode}`);
     if (create_order_response.success === true) {
       const squareOrderId = create_order_response.result.order.id;
       logger.info(`For internal id ${referenceId} created Square Order ID: ${squareOrderId} for ${amountString}`)
       const payment_response = await SquareProviderInstance.ProcessPayment({ sourceId: nonce, amount: request.amount, referenceId, squareOrderId });
+      orderUpdateCount += 1;
       if (payment_response.success === true && payment_response.result.payment.t === PaymentMethod.CreditCard) {
         const orderPayment = payment_response.result.payment;
         await CreateExternalEmailSender(request, creditCode, qr_code_fs_a);
@@ -289,7 +291,7 @@ export class StoreCreditProvider {
       else {
         logger.error("Failed to process payment: %o", payment_response);
         if (create_order_response.result) {
-          await SquareProviderInstance.OrderStateChange(squareOrderId, "CANCELED");
+          await SquareProviderInstance.OrderStateChange(squareOrderId, orderUpdateCount, "CANCELED");
         }
         return { status: 400, success: false, result: null, error: payment_response.error.map(x => ({ category: x.category, code: x.code, detail: x.detail! })) };
       }

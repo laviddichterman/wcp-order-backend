@@ -608,6 +608,7 @@ export class OrderManager implements WProvider {
     let errors: WError[] = [];
     let hasChargingSucceeded = false;
     let squareOrder: SquareOrder | null = null;
+    let orderUpdateCount = 0;
     const squarePayments: SquarePayment[] = [];
     const payments: OrderPayment[] = moneyCreditPayments.slice();
     if (USE_SQUARE_ITEMIZED_ORDERING || recomputedTotals.balanceAfterCredits.amount > 0) {
@@ -637,6 +638,7 @@ export class OrderManager implements WProvider {
               squareOrderId: squareOrder.id,
               autocomplete: false
             });
+            orderUpdateCount += 1;
             if (squarePaymentResponse.success === true) {
               logger.info(`For internal id ${reference_id} and Square Order ID: ${squareOrder.id} payment for ${MoneyToDisplayString(squarePaymentResponse.result.payment.amount, true)} successful.`)
               payments.push(squarePaymentResponse.result.payment);
@@ -662,6 +664,7 @@ export class OrderManager implements WProvider {
                   squareOrderId: squareOrder.id,
                   autocomplete: false
                 });
+                orderUpdateCount += 1;
                 if (squareMoneyCreditPaymentResponse.success === true) {
                   logger.info(`For internal id ${reference_id} and Square Order ID: ${squareOrder.id} payment for ${MoneyToDisplayString(squareMoneyCreditPaymentResponse.result.payment.amount, true)} successful.`)
                   //this next line duplicates the store credit payments, since we already have them independently processed
@@ -681,6 +684,7 @@ export class OrderManager implements WProvider {
           }
           // Payment Part D: mark the order paid via PayOrder endpoint
           const payOrderResponse = await SquareProviderInstance.PayOrder(squareOrder.id, squarePayments.map(x => x.squarePaymentId));
+          orderUpdateCount += 1;
           if (payOrderResponse.success) {
             logger.info(`Square order successfully marked paid.`);
             // THE GOAL YALL
@@ -702,7 +706,7 @@ export class OrderManager implements WProvider {
       if (!hasChargingSucceeded) {
         try {
           if (squareOrder !== null) {
-            SquareProviderInstance.OrderStateChange(squareOrder.id, "CANCELED");
+            SquareProviderInstance.OrderStateChange(squareOrder.id, orderUpdateCount, "CANCELED");
           }
           RefundSquarePayments(squarePayments);
           CancelSquarePayments(squarePayments);
