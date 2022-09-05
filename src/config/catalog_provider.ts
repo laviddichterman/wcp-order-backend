@@ -197,77 +197,69 @@ export class CatalogProvider implements WProvider {
   };
 
   UpdateCategory = async (category_id: string, category: Omit<ICategory, "id">) => {
-    try {
-      if (!Object.hasOwn(this.#categories, category_id)) {
-        // not found
-        return null;
-      }
-      var cycle_update_promise = null;
-      if (this.#categories[category_id].parent_id !== category.parent_id && category.parent_id) {
-        // need to check for potential cycle
-        var cur = category.parent_id;
-        while (cur && this.#categories[cur].parent_id !== category_id) {
-          cur = this.#categories[cur].parent_id;
-        }
-        // if the cursor is not empty/null/blank then we stopped because we found the cycle
-        if (cur) {
-          logger.debug(`In changing ${category_id}'s parent_id to ${category.parent_id}, found cycle at ${cur}, blanking out ${cur}'s parent_id to prevent cycle.`);
-          // this assignment to #categories seems suspect
-          this.#categories[cur].parent_id = null;
-          cycle_update_promise = WCategoryModel.findByIdAndUpdate(cur, { parent_id: null });
-        }
-      }
-      const response = await WCategoryModel.findByIdAndUpdate(category_id, category);
-      if (cycle_update_promise) {
-        await cycle_update_promise;
-      }
-      await this.SyncCategories();
-      this.RecomputeCatalog();
-      SocketIoProviderInstance.EmitCatalog(this.#catalog);
-      // is this going to still be valid after the Sync above?
-      return response.toObject();
-    } catch (err) {
-      throw err;
+    if (!Object.hasOwn(this.#categories, category_id)) {
+      // not found
+      return null;
     }
+    var cycle_update_promise = null;
+    if (this.#categories[category_id].parent_id !== category.parent_id && category.parent_id) {
+      // need to check for potential cycle
+      var cur = category.parent_id;
+      while (cur && this.#categories[cur].parent_id !== category_id) {
+        cur = this.#categories[cur].parent_id;
+      }
+      // if the cursor is not empty/null/blank then we stopped because we found the cycle
+      if (cur) {
+        logger.debug(`In changing ${category_id}'s parent_id to ${category.parent_id}, found cycle at ${cur}, blanking out ${cur}'s parent_id to prevent cycle.`);
+        // this assignment to #categories seems suspect
+        this.#categories[cur].parent_id = null;
+        cycle_update_promise = WCategoryModel.findByIdAndUpdate(cur, { parent_id: null }).exec();
+      }
+    }
+    const response = await WCategoryModel.findByIdAndUpdate(category_id, category).exec();
+    if (cycle_update_promise) {
+      await cycle_update_promise;
+    }
+    await this.SyncCategories();
+    this.RecomputeCatalog();
+    SocketIoProviderInstance.EmitCatalog(this.#catalog);
+    // is this going to still be valid after the Sync above?
+    return response.toObject();
   };
 
   DeleteCategory = async (category_id: string) => {
     logger.debug(`Removing ${category_id}`);
-    try {
-      // first make sure this isn't used in a fulfillment
-      Object.values(DataProviderInstance.Fulfillments).map((x) => {
-        if (x.menuBaseCategoryId === category_id) {
-          throw Error(`CategoryId: ${category_id} found as Menu Base for FulfillmentId: ${x.id} (${x.displayName})`); 
-        }
-        if (x.orderBaseCategoryId === category_id) {
-          throw Error(`CategoryId: ${category_id} found as Order Base for FulfillmentId: ${x.id} (${x.displayName})`); 
-        }
-        if (x.orderSupplementaryCategoryId === category_id) {
-          throw Error(`CategoryId: ${category_id} found as Order Supplementary for FulfillmentId: ${x.id} (${x.displayName})`); 
-        }
-      });
+    // first make sure this isn't used in a fulfillment
+    Object.values(DataProviderInstance.Fulfillments).map((x) => {
+      if (x.menuBaseCategoryId === category_id) {
+        throw Error(`CategoryId: ${category_id} found as Menu Base for FulfillmentId: ${x.id} (${x.displayName})`);
+      }
+      if (x.orderBaseCategoryId === category_id) {
+        throw Error(`CategoryId: ${category_id} found as Order Base for FulfillmentId: ${x.id} (${x.displayName})`);
+      }
+      if (x.orderSupplementaryCategoryId === category_id) {
+        throw Error(`CategoryId: ${category_id} found as Order Supplementary for FulfillmentId: ${x.id} (${x.displayName})`);
+      }
+    });
 
-      const doc = await WCategoryModel.findByIdAndDelete(category_id);
-      if (!doc) {
-        return null;
-      }
-      await Promise.all(Object.values(this.#categories).map(async (cat) => {
-        if (cat.parent_id && cat.parent_id === category_id) {
-          await WCategoryModel.findByIdAndUpdate(cat.id, { parent_id: null });
-        }
-      }));
-      const products_update = await WProductModel.updateMany({}, { $pull: { category_ids: category_id } });
-      if (products_update.modifiedCount > 0) {
-        logger.debug(`Removed Category ID from ${products_update.modifiedCount} products.`);
-        await this.SyncProducts();
-      }
-      await this.SyncCategories();
-      this.RecomputeCatalog();
-      SocketIoProviderInstance.EmitCatalog(this.#catalog);
-      return doc;
-    } catch (err) {
-      throw err;
+    const doc = await WCategoryModel.findByIdAndDelete(category_id).exec();
+    if (!doc) {
+      return null;
     }
+    await Promise.all(Object.values(this.#categories).map(async (cat) => {
+      if (cat.parent_id && cat.parent_id === category_id) {
+        await WCategoryModel.findByIdAndUpdate(cat.id, { parent_id: null }).exec();
+      }
+    }));
+    const products_update = await WProductModel.updateMany({}, { $pull: { category_ids: category_id } }).exec();
+    if (products_update.modifiedCount > 0) {
+      logger.debug(`Removed Category ID from ${products_update.modifiedCount} products.`);
+      await this.SyncProducts();
+    }
+    await this.SyncCategories();
+    this.RecomputeCatalog();
+    SocketIoProviderInstance.EmitCatalog(this.#catalog);
+    return doc;
   }
 
   CreateModifierType = async (modifierType: Omit<IOptionType, "id">) => {
@@ -279,73 +271,64 @@ export class CatalogProvider implements WProvider {
     return doc;
   };
 
-  UpdateModifierType = async (id: string, modifierType: Omit<IOptionType, "id">) => {
-    try {
-      const updated = await WOptionTypeModel.findByIdAndUpdate(
-        id,
-        modifierType,
-        { new: true }
-      ).exec();
-      if (!updated) {
-        return null;
-      }
-      await this.SyncModifierTypes();
-      this.RecomputeCatalog();
-      SocketIoProviderInstance.EmitCatalog(this.#catalog);
-      return updated;
-    } catch (err) {
-      throw err;
+  UpdateModifierType = async (id: string, modifierType: Partial<Omit<IOptionType, "id">>) => {
+    const updated = await WOptionTypeModel
+      .findByIdAndUpdate(id, modifierType, { new: true })
+      .exec();
+    if (!updated) {
+      return null;
     }
+    await this.SyncModifierTypes();
+    this.RecomputeCatalog();
+    SocketIoProviderInstance.EmitCatalog(this.#catalog);
+    return updated;
   };
 
   DeleteModifierType = async (mt_id: string) => {
     logger.debug(`Removing Modifier Type: ${mt_id}`);
-    try {
-      const doc = await WOptionTypeModel.findByIdAndDelete(mt_id);
-      if (!doc) {
-        logger.warn("Unable to delete the ModifierType from the database.");
-        return null;
-      }
-      const options_delete = await WOptionModel.deleteMany({ modifierTypeId: mt_id });
-      if (this.#catalog.modifiers[mt_id].options.length !== options_delete.deletedCount) {
-        logger.error(`Mismatch between number of modifier options deleted and the number the catalog sees as child of this modifier type.`);
-      }
-      if (options_delete.deletedCount > 0) {
-        logger.debug(`Removed ${options_delete.deletedCount} Options from the catalog.`);
-      }
-      const products_update = await WProductModel.updateMany({}, { $pull: { modifiers: { mtid: mt_id } } });
-      if (products_update.modifiedCount > 0) {
-        const product_instance_update = await WProductInstanceModel.updateMany({}, { $pull: { modifiers: { modifierTypeId: mt_id } } });
-        logger.debug(`Removed ModifierType ID from ${products_update.modifiedCount} products, ${product_instance_update.modifiedCount} product instances.`);
-        await this.SyncProducts();
-        await this.SyncProductInstances();
-      }
-      // need to delete any ProductInstanceFunctions that use this MT
-      await Promise.all(Object.values(this.#product_instance_functions).map(async (pif) => {
-        if (FindModifierPlacementExpressionsForMTID(pif.expression, mt_id).length > 0) {
-          logger.debug(`Found product instance function composed of ${mt_id}, removing PIF with ID: ${pif.id}.`);
-          // the PIF and any dependent objects will be synced, but the catalog will not be recomputed / emitted
-          await this.DeleteProductInstanceFunction(pif.id, true);
-        } else if (FindHasAnyModifierExpressionsForMTID(pif.expression, mt_id).length > 0) {
-          logger.debug(`Found product instance function composed of ${mt_id}, removing PIF with ID: ${pif.id}.`);
-          // the PIF and any dependent objects will be synced, but the catalog will not be recomputed / emitted
-          await this.DeleteProductInstanceFunction(pif.id, true);
-        }
-      }));
-      await this.SyncOptions();
-      await this.SyncModifierTypes();
-      this.RecomputeCatalog();
-      SocketIoProviderInstance.EmitCatalog(this.#catalog);
-      return doc;
-    } catch (err) {
-      throw err;
+    const doc = await WOptionTypeModel.findByIdAndDelete(mt_id).exec();
+    if (!doc) {
+      logger.warn("Unable to delete the ModifierType from the database.");
+      return null;
     }
+    const options_delete = await WOptionModel.deleteMany({ modifierTypeId: mt_id }).exec();
+    if (this.#catalog.modifiers[mt_id].options.length !== options_delete.deletedCount) {
+      logger.error(`Mismatch between number of modifier options deleted and the number the catalog sees as child of this modifier type.`);
+    }
+    if (options_delete.deletedCount > 0) {
+      logger.debug(`Removed ${options_delete.deletedCount} Options from the catalog.`);
+    }
+    const products_update = await WProductModel
+      .updateMany({}, { $pull: { modifiers: { mtid: mt_id } } })
+      .exec();
+    if (products_update.modifiedCount > 0) {
+      const product_instance_update = await WProductInstanceModel.updateMany({}, { $pull: { modifiers: { modifierTypeId: mt_id } } }).exec();
+      logger.debug(`Removed ModifierType ID from ${products_update.modifiedCount} products, ${product_instance_update.modifiedCount} product instances.`);
+      await this.SyncProducts();
+      await this.SyncProductInstances();
+    }
+    // need to delete any ProductInstanceFunctions that use this MT
+    await Promise.all(Object.values(this.#product_instance_functions).map(async (pif) => {
+      if (FindModifierPlacementExpressionsForMTID(pif.expression, mt_id).length > 0) {
+        logger.debug(`Found product instance function composed of ${mt_id}, removing PIF with ID: ${pif.id}.`);
+        // the PIF and any dependent objects will be synced, but the catalog will not be recomputed / emitted
+        await this.DeleteProductInstanceFunction(pif.id, true);
+      } else if (FindHasAnyModifierExpressionsForMTID(pif.expression, mt_id).length > 0) {
+        logger.debug(`Found product instance function composed of ${mt_id}, removing PIF with ID: ${pif.id}.`);
+        // the PIF and any dependent objects will be synced, but the catalog will not be recomputed / emitted
+        await this.DeleteProductInstanceFunction(pif.id, true);
+      }
+    }));
+    await this.SyncOptions();
+    await this.SyncModifierTypes();
+    this.RecomputeCatalog();
+    SocketIoProviderInstance.EmitCatalog(this.#catalog);
+    return doc;
   }
 
   CreateOption = async (modifierOption: Omit<IOption, 'id'>) => {
     // first find the Modifier Type ID in the catalog
-    var option_type = this.#modifier_types.find(x => x.id === modifierOption.modifierTypeId);
-    if (!option_type) {
+    if (!Object.hasOwn(this.Catalog.modifiers, modifierOption.modifierTypeId)) {
       return null;
     }
 
@@ -357,58 +340,48 @@ export class CatalogProvider implements WProvider {
     return doc;
   };
 
-  UpdateModifierOption = async (id: string, modifierOption: Omit<IOption, 'id' | 'modifierTypeId'>) => {
-    try {
-      //TODO: post update: rebuild all products with the said modifier option since the ordinal might have changed
-      // 
-      const updated = await WOptionModel.findByIdAndUpdate(
-        id,
-        modifierOption,
-        { new: true }
-      ).exec();
-      if (!updated) {
-        return null;
-      }
-      await this.SyncOptions();
-      this.RecomputeCatalog();
-      SocketIoProviderInstance.EmitCatalog(this.#catalog);
-      return updated;
-    } catch (err) {
-      throw err;
+  UpdateModifierOption = async (id: string, modifierOption: Partial<Omit<IOption, 'id' | 'modifierTypeId'>>) => {
+    //TODO: post update: rebuild all products with the said modifier option since the ordinal might have changed
+    // 
+    const updated = await WOptionModel
+      .findByIdAndUpdate(id, modifierOption, { new: true })
+      .exec();
+    if (!updated) {
+      return null;
     }
+    await this.SyncOptions();
+    this.RecomputeCatalog();
+    SocketIoProviderInstance.EmitCatalog(this.#catalog);
+    return updated;
   };
 
   DeleteModifierOption = async (mo_id: string) => {
     logger.debug(`Removing Modifier Option ${mo_id}`);
-    try {
-      const doc = await WOptionModel.findByIdAndDelete(mo_id);
-      if (!doc) {
-        return null;
-      }
-      const product_instance_options_delete = await WProductInstanceModel.updateMany(
-        { "modifiers.modifierTypeId": doc.modifierTypeId },
-        { $pull: { "modifiers.$.options": { optionId: mo_id } } });
-      if (product_instance_options_delete.modifiedCount > 0) {
-        logger.debug(`Removed ${product_instance_options_delete.modifiedCount} Options from Product Instances.`);
-        await this.SyncProductInstances();
-      }
-      await this.SyncOptions();
-      // need to delete any ProductInstanceFunctions that use this MO
-      await Promise.all(Object.values(this.#product_instance_functions).map(async (pif) => {
-        const dependent_pfi_expressions = FindModifierPlacementExpressionsForMTID(pif.expression, doc.modifierTypeId) as AbstractExpressionModifierPlacementExpression[];
-        const filtered = dependent_pfi_expressions.filter(x => x.expr.moid === mo_id)
-        if (filtered.length > 0) {
-          logger.debug(`Found product instance function composed of ${doc.modifierTypeId}:${mo_id}, removing PIF with ID: ${pif.id}.`);
-          // the PIF and any dependent objects will be synced, but the catalog will not be recomputed / emitted
-          await this.DeleteProductInstanceFunction(pif.id, true);
-        }
-      }));
-      this.RecomputeCatalog();
-      SocketIoProviderInstance.EmitCatalog(this.#catalog);
-      return doc;
-    } catch (err) {
-      throw err;
+    const doc = await WOptionModel.findByIdAndDelete(mo_id).exec();
+    if (!doc) {
+      return null;
     }
+    const product_instance_options_delete = await WProductInstanceModel.updateMany(
+      { "modifiers.modifierTypeId": doc.modifierTypeId },
+      { $pull: { "modifiers.$.options": { optionId: mo_id } } }).exec();
+    if (product_instance_options_delete.modifiedCount > 0) {
+      logger.debug(`Removed ${product_instance_options_delete.modifiedCount} Options from Product Instances.`);
+      await this.SyncProductInstances();
+    }
+    await this.SyncOptions();
+    // need to delete any ProductInstanceFunctions that use this MO
+    await Promise.all(Object.values(this.#product_instance_functions).map(async (pif) => {
+      const dependent_pfi_expressions = FindModifierPlacementExpressionsForMTID(pif.expression, doc.modifierTypeId) as AbstractExpressionModifierPlacementExpression[];
+      const filtered = dependent_pfi_expressions.filter(x => x.expr.moid === mo_id)
+      if (filtered.length > 0) {
+        logger.debug(`Found product instance function composed of ${doc.modifierTypeId}:${mo_id}, removing PIF with ID: ${pif.id}.`);
+        // the PIF and any dependent objects will be synced, but the catalog will not be recomputed / emitted
+        await this.DeleteProductInstanceFunction(pif.id, true);
+      }
+    }));
+    this.RecomputeCatalog();
+    SocketIoProviderInstance.EmitCatalog(this.#catalog);
+    return doc;
   }
 
   CreateProduct = async (product: Omit<IProduct, 'id'>, suppress_catalog_recomputation = false) => {
@@ -425,22 +398,21 @@ export class CatalogProvider implements WProvider {
     return doc;
   };
 
-  UpdateProduct = async (pid: string, product: Omit<IProduct, 'id'>) => {
-    try {
-      if (!ValidateProductModifiersFunctionsCategories(product.modifiers, product.category_ids, this)) {
-        return null;
-      }
-      const old_modifiers = this.#catalog.products[pid].product.modifiers.map(x => x.mtid.toString());
-      const new_modifiers_mtids = product.modifiers.map(x => String(x.mtid));
+  UpdateProduct = async (pid: string, product: Partial<Omit<IProduct, 'id'>>) => {
+    if (!ValidateProductModifiersFunctionsCategories(product.modifiers, product.category_ids, this)) {
+      return null;
+    }
+    const updated = await WProductModel
+      .findByIdAndUpdate(pid, product, { new: true })
+      .exec();
+    if (!updated) {
+      return null;
+    }
+
+    if (product.modifiers) {
+      const old_modifiers = this.#catalog.products[pid].product.modifiers.map(x => x.mtid);
+      const new_modifiers_mtids = product.modifiers.map(x => x.mtid);
       const removed_modifiers = old_modifiers.filter(x => !new_modifiers_mtids.includes(x));
-      const updated = await WProductModel.findByIdAndUpdate(
-        pid,
-        product,
-        { new: true }
-      ).exec();
-      if (!updated) {
-        return null;
-      }
 
       if (removed_modifiers.length) {
         await Promise.all(removed_modifiers.map(async (mtid) => {
@@ -449,35 +421,29 @@ export class CatalogProvider implements WProvider {
         }));
         await this.SyncProductInstances();
       }
-
-      await this.SyncProducts();
-      this.RecomputeCatalog();
-      SocketIoProviderInstance.EmitCatalog(this.#catalog);
-      return updated;
-    } catch (err) {
-      throw err;
     }
+
+    await this.SyncProducts();
+    this.RecomputeCatalog();
+    SocketIoProviderInstance.EmitCatalog(this.#catalog);
+    return updated;
   };
 
   DeleteProduct = async (p_id: string) => {
     logger.debug(`Removing Product ${p_id}`);
-    try {
-      const doc = await WProductModel.findByIdAndDelete(p_id);
-      if (!doc) {
-        return null;
-      }
-      const product_instance_delete = await WProductInstanceModel.deleteMany({ productId: p_id });
-      if (product_instance_delete.deletedCount > 0) {
-        logger.debug(`Removed ${product_instance_delete.deletedCount} Product Instances.`);
-        await this.SyncProductInstances();
-      }
-      await this.SyncProducts();
-      this.RecomputeCatalog();
-      SocketIoProviderInstance.EmitCatalog(this.#catalog);
-      return doc;
-    } catch (err) {
-      throw err;
+    const doc = await WProductModel.findByIdAndDelete(p_id).exec();
+    if (!doc) {
+      return null;
     }
+    const product_instance_delete = await WProductInstanceModel.deleteMany({ productId: p_id });
+    if (product_instance_delete.deletedCount > 0) {
+      logger.debug(`Removed ${product_instance_delete.deletedCount} Product Instances.`);
+      await this.SyncProductInstances();
+    }
+    await this.SyncProducts();
+    this.RecomputeCatalog();
+    SocketIoProviderInstance.EmitCatalog(this.#catalog);
+    return doc;
   }
 
   CreateProductInstance = async (productInstance: Omit<IProductInstance, 'id'>) => {
@@ -489,40 +455,30 @@ export class CatalogProvider implements WProvider {
     return doc;
   };
 
-  UpdateProductInstance = async (piid: string, productInstance: Omit<IProductInstance, 'id' | 'productId'>) => {
-    try {
-      const updated = await WProductInstanceModel.findByIdAndUpdate(
-        piid,
-        productInstance,
-        { new: true }
-      ).exec();
-      if (!updated) {
-        return null;
-      }
-
-      await this.SyncProductInstances();
-      this.RecomputeCatalog();
-      SocketIoProviderInstance.EmitCatalog(this.#catalog);
-      return updated;
-    } catch (err) {
-      throw err;
+  UpdateProductInstance = async (piid: string, productInstance: Partial<Omit<IProductInstance, 'id' | 'productId'>>) => {
+    const updated = await WProductInstanceModel
+      .findByIdAndUpdate(piid, productInstance, { new: true })
+      .exec();
+    if (!updated) {
+      return null;
     }
+
+    await this.SyncProductInstances();
+    this.RecomputeCatalog();
+    SocketIoProviderInstance.EmitCatalog(this.#catalog);
+    return updated;
   };
 
   DeleteProductInstance = async (pi_id: string) => {
     logger.debug(`Removing Product Instance: ${pi_id}`);
-    try {
-      const doc = await WProductInstanceModel.findByIdAndDelete(pi_id);
-      if (!doc) {
-        return null;
-      }
-      await this.SyncProductInstances();
-      this.RecomputeCatalog();
-      SocketIoProviderInstance.EmitCatalog(this.#catalog);
-      return doc;
-    } catch (err) {
-      throw err;
+    const doc = await WProductInstanceModel.findByIdAndDelete(pi_id).exec();
+    if (!doc) {
+      return null;
     }
+    await this.SyncProductInstances();
+    this.RecomputeCatalog();
+    SocketIoProviderInstance.EmitCatalog(this.#catalog);
+    return doc;
   }
 
   CreateProductInstanceFunction = async (productInstanceFunction: Omit<IProductInstanceFunction, 'id'>) => {
@@ -535,57 +491,46 @@ export class CatalogProvider implements WProvider {
   };
 
   UpdateProductInstanceFunction = async (pif_id: string, productInstanceFunction: Omit<IProductInstanceFunction, 'id'>) => {
-    try {
-      const updated = await WProductInstanceFunctionModel.findByIdAndUpdate(
-        pif_id,
-        productInstanceFunction,
-        { new: true }
-      ).exec();
-      if (!updated) {
-        return null;
-      }
-      await this.SyncProductInstanceFunctions();
-      this.RecomputeCatalog();
-      SocketIoProviderInstance.EmitCatalog(this.#catalog);
-      return updated;
-    } catch (err) {
-      throw err;
+    const updated = await WProductInstanceFunctionModel
+      .findByIdAndUpdate(pif_id, productInstanceFunction, { new: true }).exec();
+    if (!updated) {
+      return null;
     }
+    await this.SyncProductInstanceFunctions();
+    this.RecomputeCatalog();
+    SocketIoProviderInstance.EmitCatalog(this.#catalog);
+    return updated;
   };
 
   DeleteProductInstanceFunction = async (pif_id: string, suppress_catalog_recomputation = false) => {
     logger.debug(`Removing Product Instance Function: ${pif_id}`);
-    try {
-      const doc = await WProductInstanceFunctionModel.findByIdAndDelete(pif_id);
-      if (!doc) {
-        return null;
-      }
-      const options_update = await WOptionModel.updateMany(
-        { enable: pif_id },
-        { $set: { "enable": null } });
-      if (options_update.modifiedCount > 0) {
-        logger.debug(`Removed ${doc} from ${options_update.modifiedCount} Modifier Options.`);
-        await this.SyncOptions();
-      }
-      const products_update = await WProductModel.updateMany(
-        { "modifiers.enable": pif_id },
-        { $set: { "modifiers.$.enable": null } });
-      if (products_update.modifiedCount > 0) {
-        logger.debug(`Removed ${doc} from ${products_update.modifiedCount} Products.`);
-        await this.SyncProducts();
-      }
-
-      await this.SyncProductInstanceFunctions();
-      if (!suppress_catalog_recomputation) {
-        this.RecomputeCatalog();
-        SocketIoProviderInstance.EmitCatalog(this.#catalog);
-      }
-      return doc;
-    } catch (err) {
-      throw err;
+    const doc = await WProductInstanceFunctionModel.findByIdAndDelete(pif_id).exec();
+    if (!doc) {
+      return null;
+    }
+    const options_update = await WOptionModel.updateMany(
+      { enable: pif_id },
+      { $set: { "enable": null } }).exec();
+    if (options_update.modifiedCount > 0) {
+      logger.debug(`Removed ${doc} from ${options_update.modifiedCount} Modifier Options.`);
+      await this.SyncOptions();
+    }
+    const products_update = await WProductModel.updateMany(
+      { "modifiers.enable": pif_id },
+      { $set: { "modifiers.$.enable": null } }).exec();
+    if (products_update.modifiedCount > 0) {
+      logger.debug(`Removed ${doc} from ${products_update.modifiedCount} Products.`);
+      await this.SyncProducts();
     }
 
+    await this.SyncProductInstanceFunctions();
+    if (!suppress_catalog_recomputation) {
+      this.RecomputeCatalog();
+      SocketIoProviderInstance.EmitCatalog(this.#catalog);
+    }
+    return doc;
   }
+
   CreateOrderInstanceFunction = async (orderInstanceFunction: Omit<OrderInstanceFunction, 'id'>) => {
     const doc = new WOrderInstanceFunctionModel(orderInstanceFunction);
     await doc.save();
@@ -595,41 +540,29 @@ export class CatalogProvider implements WProvider {
     return doc;
   };
 
-  UpdateOrderInstanceFunction = async (id: string, orderInstanceFunction: Omit<OrderInstanceFunction, 'id'>) => {
-    try {
-      const updated = await WOrderInstanceFunctionModel.findByIdAndUpdate(
-        id,
-        orderInstanceFunction,
-        { new: true }
-      ).exec();
-      if (!updated) {
-        return null;
-      }
-      await this.SyncOrderInstanceFunctions();
-      this.RecomputeCatalog();
-      SocketIoProviderInstance.EmitCatalog(this.#catalog);
-      return updated;
-    } catch (err) {
-      throw err;
+  UpdateOrderInstanceFunction = async (id: string, orderInstanceFunction: Partial<Omit<OrderInstanceFunction, 'id'>>) => {
+    const updated = await WOrderInstanceFunctionModel.findByIdAndUpdate(id, orderInstanceFunction, { new: true });
+    if (!updated) {
+      return null;
     }
+    await this.SyncOrderInstanceFunctions();
+    this.RecomputeCatalog();
+    SocketIoProviderInstance.EmitCatalog(this.#catalog);
+    return updated;
   };
 
   DeleteOrderInstanceFunction = async (id: string, suppress_catalog_recomputation = false) => {
     logger.debug(`Removing Order Instance Function: ${id}`);
-    try {
-      const doc = await WOrderInstanceFunctionModel.findByIdAndDelete(id);
-      if (!doc) {
-        return null;
-      }
-      await this.SyncOrderInstanceFunctions();
-      if (!suppress_catalog_recomputation) {
-        this.RecomputeCatalog();
-        SocketIoProviderInstance.EmitCatalog(this.#catalog);
-      }
-      return doc;
-    } catch (err) {
-      throw err;
+    const doc = await WOrderInstanceFunctionModel.findByIdAndDelete(id);
+    if (!doc) {
+      return null;
     }
+    await this.SyncOrderInstanceFunctions();
+    if (!suppress_catalog_recomputation) {
+      this.RecomputeCatalog();
+      SocketIoProviderInstance.EmitCatalog(this.#catalog);
+    }
+    return doc;
   }
 }
 

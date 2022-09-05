@@ -580,6 +580,42 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
   }],
   "0.5.6": [{ major: 0, minor: 5, patch: 7 }, async () => {
   }],
+  "0.5.7": [{ major: 0, minor: 5, patch: 8 }, async () => {
+  }],
+  "0.5.8": [{ major: 0, minor: 5, patch: 9 }, async () => {
+    {
+      // re-do nesting CategoryDisplay enum TAB -> FLAT
+      const category_update = await WCategoryModel.updateMany(
+        { 'display_flags.nesting': 'TAB'},
+        {
+          $set: {
+            "display_flags.nesting": "FLAT"
+          }
+        });
+      if (category_update.modifiedCount > 0) {
+        logger.debug(`Updated ${category_update.modifiedCount} Categories from 'TAB' to 'FLAT' nesting field`);
+      }
+      else {
+        logger.warn("No categories had nesting modified from 'TAB'");
+      }
+    }
+    {
+      // re-do nesting CategoryDisplay enum TAB_IMMEDIATE -> TAB
+      const category_update = await WCategoryModel.updateMany(
+        { 'display_flags.nesting': 'TAB_IMMEDIATE'},
+        {
+          $set: {
+            "display_flags.nesting": "TAB"
+          }
+        });
+      if (category_update.modifiedCount > 0) {
+        logger.debug(`Updated ${category_update.modifiedCount} Categories from 'TAB_IMMEDIATE' to 'TAB' nesting field`);
+      }
+      else {
+        logger.warn("No categories had nesting modified from 'TAB_IMMEDIATE'");
+      }
+    }
+  }],
 }
 
 export class DatabaseManager implements WProvider {

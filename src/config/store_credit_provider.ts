@@ -252,7 +252,7 @@ export class StoreCreditProvider {
       const squareOrder = create_order_response.result.order;
       logger.info(`For internal id ${referenceId} created Square Order ID: ${squareOrder.id} for ${amountString}`)
       const payment_response = await SquareProviderInstance.ProcessPayment({ sourceId: nonce, amount: request.amount, referenceId, squareOrderId: squareOrder.id });
-      orderUpdateCount += 1;
+      orderUpdateCount = orderUpdateCount + 1;
       if (payment_response.success === true && payment_response.result.payment.t === PaymentMethod.CreditCard) {
         const orderPayment = payment_response.result.payment;
         await CreateExternalEmailSender(request, creditCode, qr_code_fs_a);
