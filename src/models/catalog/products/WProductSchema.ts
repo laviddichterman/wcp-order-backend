@@ -16,6 +16,8 @@ export const ProductModifierSchema = new Schema({
 
 // represents a class of products that can be made and inserted into the catalog
 const WProductSchema = new Schema<MT>({  
+  // this should be required but we need to break a cyclic dependency in creation of a new product class
+  baseProductId: { type: String, ref: 'WProductInstanceSchema' },
 
   // Moneys in base currency unit (300 is $3)
   price: { 

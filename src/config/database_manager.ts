@@ -554,7 +554,8 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
   "0.4.106": [{ major: 0, minor: 5, patch: 0 }, async () => {
   }],
   "0.5.0": [{ major: 0, minor: 5, patch: 1 }, async () => {
-    await Promise.all([WOptionModelActual, WOptionTypeModelActual, WProductInstanceModelActual, WProductModelActual].map( async (model) => {
+    // Note: using the actual model only works in the moment this is written... probably can't do this safely
+    await Promise.all([WOptionModelActual, WOptionTypeModelActual, WProductInstanceModelActual, WProductModelActual].map(async (model) => {
       const updateQuery = await model.updateMany(
         {},
         {
@@ -586,7 +587,7 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
     {
       // re-do nesting CategoryDisplay enum TAB -> FLAT
       const category_update = await WCategoryModel.updateMany(
-        { 'display_flags.nesting': 'TAB'},
+        { 'display_flags.nesting': 'TAB' },
         {
           $set: {
             "display_flags.nesting": "FLAT"
@@ -602,7 +603,7 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
     {
       // re-do nesting CategoryDisplay enum TAB_IMMEDIATE -> TAB
       const category_update = await WCategoryModel.updateMany(
-        { 'display_flags.nesting': 'TAB_IMMEDIATE'},
+        { 'display_flags.nesting': 'TAB_IMMEDIATE' },
         {
           $set: {
             "display_flags.nesting": "TAB"
@@ -614,6 +615,40 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
       else {
         logger.warn("No categories had nesting modified from 'TAB_IMMEDIATE'");
       }
+    }
+  }],
+  "0.5.9": [{ major: 0, minor: 5, patch: 10 }, async () => {
+    {
+      // set baseProductId on all WProductSchema
+      const WProductInstanceModel = mongoose.model('wpROductinstanceSchema', new Schema({ displayName: String, isBase: Schema.Types.Boolean, productId: String }, { id: true }));
+      const WProductModel = mongoose.model('wpROductSchema', new Schema({ baseProductId: String }, { id: true }));
+      const baseInstances = await WProductInstanceModel.find({ 'isBase': true }).exec();
+      await Promise.all(baseInstances.map(async (basePi) => {
+        try {
+          const updatedProduct = await WProductModel.findByIdAndUpdate(basePi.productId!, { baseProductId: basePi.id }, { new: true }).exec();
+          logger.info(`Updated product Id: ${updatedProduct.id} with baseProductId of ${updatedProduct.baseProductId}`);
+          return updatedProduct;
+        } catch (err) { 
+          const errMsg = `Failed updating Base ProductInstance ${basePi.displayName} (${basePi.id}), suggest deleting.`
+          logger.error(errMsg);
+        }
+      }));
+
+      // find any WProductSchema without a baseProductId and delete
+      const orphanedProducts = await WProductModel.find({ baseProductId: undefined }).exec();
+      if (orphanedProducts.length > 0) {
+        logger.warn(`Found products without baseProductId set, will delete: ${orphanedProducts.map(x=>x.id).join(", ")}`);
+        await WProductModel.deleteMany({ baseProductId: undefined }).exec();  
+        await Promise.all(orphanedProducts.map(async (product) => {
+          const deleteProductInstanceResult = await WProductInstanceModel.deleteMany({productId: product.id});
+          logger.warn(`Deleted ${deleteProductInstanceResult.deletedCount} product instances for newly delete parent product id ${product.id}`);
+          return deleteProductInstanceResult;
+        }))
+      }
+      
+      // remove isBase from all product instances
+      const removeIsBaseUpdateResponse = await WProductInstanceModel.updateMany({}, { $unset: { isBase: "" } }).exec();
+      logger.info(`Removed isBase from ${removeIsBaseUpdateResponse.modifiedCount} ProductInstances`);
     }
   }],
 }

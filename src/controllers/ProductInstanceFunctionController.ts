@@ -39,7 +39,7 @@ export class ProductInstanceFunctionController implements IExpressController {
   private postPIF = async (req: Request, res: Response, next: NextFunction) => {
     try {
       try {
-        const stringified = WFunctional.AbstractExpressionStatementToString(req.body.expression, CatalogProviderInstance.Catalog)
+        const stringified = WFunctional.AbstractExpressionStatementToString(req.body.expression, CatalogProviderInstance.CatalogSelectors)
         logger.info(`Creating expression with ${stringified}`);
       }
       catch (e) {
@@ -64,7 +64,7 @@ export class ProductInstanceFunctionController implements IExpressController {
   private patchPIF = async (req: Request, res: Response, next: NextFunction) => {
     try {
       try {
-        const stringified = WFunctional.AbstractExpressionStatementToString(req.body.expression, CatalogProviderInstance.Catalog)
+        const stringified = WFunctional.AbstractExpressionStatementToString(req.body.expression, CatalogProviderInstance.CatalogSelectors)
         logger.info(`Updating expression with ${stringified}`);
       }
       catch (e) {

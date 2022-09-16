@@ -6,7 +6,7 @@ import { DataProviderInstance } from './dataprovider';
 import WApp from '../App';
 import { format, intervalToDuration, formatDuration } from 'date-fns';
 import { zonedTimeToUtc } from 'date-fns-tz';
-import { FulfillmentConfig, ICatalog, IWSettings } from '@wcp/wcpshared';
+import type { FulfillmentConfig, ICatalog, IWSettings, WOrderInstance } from '@wcp/wcpshared';
 
 
 export class SocketIoProvider implements WProvider {
@@ -32,6 +32,12 @@ export class SocketIoProvider implements WProvider {
   }
   EmitCatalog = (catalog: ICatalog) => {
     return this.EmitCatalogTo(this.socketRO, catalog);
+  }
+  EmitOrderTo = (dest: Socket | Namespace, order: WOrderInstance) => {
+    return this.socketRO.emit('WCP_ORDERS_TEMP', order);
+  }
+  EmitOrder = (order: WOrderInstance) => {
+    return this.EmitOrderTo(this.socketRO, order);
   }
 
   Bootstrap = (app : WApp) => {

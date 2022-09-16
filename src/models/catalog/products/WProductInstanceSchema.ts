@@ -1,6 +1,6 @@
 import { IProductInstance, PriceDisplay } from "@wcp/wcpshared";
 import { KeyValueEntrySchema } from "../../settings/KeyValueSchema";
-import mongoose, {Schema} from "mongoose";
+import mongoose, { Schema } from "mongoose";
 import path from "path";
 import { ProductModifierSchema } from "../options/WOptionInstanceSchema";
 
@@ -20,7 +20,7 @@ export const WProductInstanceSchema = new Schema<MT>({
 
   // Nice name of the product
   // eg: House Sausage
-  displayName: { 
+  displayName: {
     type: String,
     required: true
   },
@@ -32,19 +32,13 @@ export const WProductInstanceSchema = new Schema<MT>({
   description: String,
 
   // abbreviation used in store
-  shortcode: { 
+  shortcode: {
     type: String,
     required: true
   },
 
   externalIDs: {
     type: [KeyValueEntrySchema],
-    required: true
-  },
-  
-  // flag to note that this product instance is the "default" form of the product to which all others should be compared
-  isBase: { 
-    type: Boolean,
     required: true
   },
 
@@ -55,9 +49,9 @@ export const WProductInstanceSchema = new Schema<MT>({
       // flag to hide this from the menu
       hide: Boolean,
       // governs how prices get displayed in the menu page according to the enum      
-      price_display: {    
-          type: String,
-          enum: PriceDisplay
+      price_display: {
+        type: String,
+        enum: PriceDisplay
       },
       // HTML-friendly message wrapping the display of this PI in the menu page
       adornment: String,
@@ -75,7 +69,7 @@ export const WProductInstanceSchema = new Schema<MT>({
       // flag to skip going right to customization when the user adds this to their order
       skip_customization: Boolean,
       // governs how prices get displayed in the order page according to the enum
-      price_display: {    
+      price_display: {
         type: String,
         enum: PriceDisplay
       },
@@ -86,6 +80,6 @@ export const WProductInstanceSchema = new Schema<MT>({
       suppress_exhaustive_modifier_list: Boolean
     },
   }
-}, {id: true, toJSON: {virtuals: true}, toObject: { virtuals: true}});
+}, { id: true, toJSON: { virtuals: true }, toObject: { virtuals: true } });
 
 export const WProductInstanceModel = mongoose.model<IProductInstance>(path.basename(__filename).replace(path.extname(__filename), ''), WProductInstanceSchema);

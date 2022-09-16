@@ -1,6 +1,6 @@
-import mongoose, {Schema} from "mongoose";
+import mongoose, { Schema } from "mongoose";
 import path from "path";
-import { WOrderInstance } from "@wcp/wcpshared";
+import { WOrderInstance, WOrderStatus } from "@wcp/wcpshared";
 import { CustomerInfoSchema } from "./WCustomerInfo";
 import { OrderCartEntrySchema } from "./WOrderCartEntry";
 import { FulfillmentInfo } from "./WFulfillmentInfo";
@@ -10,9 +10,9 @@ import { WOrderPaymentSchema } from "../payment/WOrderPayment";
 import { KeyValueEntrySchema } from "../settings/KeyValueSchema";
 
 export const WOrderInstanceSchema = new Schema<Omit<WOrderInstance, 'id'>>({
-  status: { 
+  status: {
     type: String,
-    enum: ['OPEN', 'COMPLETED', 'CANCELED'],
+    enum: WOrderStatus,
     required: true
   },
   customerInfo: {
@@ -47,8 +47,9 @@ export const WOrderInstanceSchema = new Schema<Omit<WOrderInstance, 'id'>>({
     type: [KeyValueEntrySchema],
     required: true
   },
-  specialInstructions: String
-}, {id: true, toJSON: {virtuals: true}, toObject: { virtuals: true}});
+  specialInstructions: String,
+  locked: String
+}, { id: true, toJSON: { virtuals: true }, toObject: { virtuals: true } });
 
 export const WOrderInstanceModel = mongoose.model<WOrderInstance>(path.basename(__filename).replace(path.extname(__filename), ''), WOrderInstanceSchema);
 //WOrderInstanceSchema.path('payments').discriminator(PaymentMethod.StoreCredit, WStoreCreditPaymentSchema);

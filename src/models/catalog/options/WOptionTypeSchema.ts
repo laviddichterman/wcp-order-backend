@@ -1,4 +1,4 @@
-import mongoose, {Schema} from "mongoose";
+import mongoose, { Schema } from "mongoose";
 import path from "path";
 import { IOptionType, DISPLAY_AS, MODIFIER_CLASS } from "@wcp/wcpshared";
 import { KeyValueEntrySchema } from "../../settings/KeyValueSchema";
@@ -61,11 +61,11 @@ export const WOptionTypeSchema = new Schema<MT>({
 
     // when the section is not empty, string to PREpend to the whole modifier type section when used in description/title, etc
     non_empty_group_prefix: String,
-    
+
     // when the section is not empty, string to append to the whole modifier type section when used in description/title, etc
     non_empty_group_suffix: String,
   },
 
-}, {id: true, toJSON: {virtuals: true}, toObject: { virtuals: true}});
+}, { id: true, toJSON: { virtuals: true }, toObject: { virtuals: true } });
 
 export const WOptionTypeModel = mongoose.model<IOptionType>(path.basename(__filename).replace(path.extname(__filename), ''), WOptionTypeSchema);

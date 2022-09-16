@@ -1,10 +1,10 @@
-import { Error as SquareError, Client, CreateOrderRequest, CreateOrderResponse, CreatePaymentRequest, Environment, UpdateOrderRequest, OrderLineItem, Money, ApiError, UpdateOrderResponse, PaymentRefund, RefundPaymentRequest, PayOrderRequest, PayOrderResponse, Payment } from 'square';
+import { Error as SquareError, Client, CreateOrderRequest, CreateOrderResponse, CreatePaymentRequest, Environment, UpdateOrderRequest, OrderLineItem, Money, ApiError, UpdateOrderResponse, PaymentRefund, RefundPaymentRequest, PayOrderRequest, PayOrderResponse, Payment, OrderLineItemModifier } from 'square';
 import { WProvider } from '../types/WProvider';
 import crypto from 'crypto';
 import logger from '../logging';
 import { DataProviderInstance } from './dataprovider';
 import { CatalogProviderInstance } from './catalog_provider';
-import { CategorizedRebuiltCart, IMoney, PaymentMethod, TenderBaseStatus, WOrderInstance, OrderPayment } from '@wcp/wcpshared';
+import { CategorizedRebuiltCart, IMoney, PaymentMethod, TenderBaseStatus, WOrderInstance, OrderPayment, PRODUCT_LOCATION } from '@wcp/wcpshared';
 import { formatRFC3339, parseISO } from 'date-fns';
 import { StoreCreditPayment } from '@wcp/wcpshared';
 
@@ -91,7 +91,7 @@ export class SquareProvider implements WProvider {
 
 
   CreateOrderCart = async (reference_id: string,
-    orderBeforeCharging: Omit<WOrderInstance, 'id' | 'metadata' | 'status' | 'refunds'>,
+    orderBeforeCharging: Omit<WOrderInstance, 'id' | 'metadata' | 'status' | 'refunds' | 'locked'>,
     promisedTime: Date | number,
     cart: CategorizedRebuiltCart,
     note: string): Promise<SquareProviderApiCallReturnValue<CreateOrderResponse>> => {
@@ -103,12 +103,21 @@ export class SquareProvider implements WProvider {
       order: {
         referenceId: reference_id,
         lineItems: Object.values(cart).flatMap(e => e.map(x => {
+          // left and right catalog product instance are the same, 
+          if (x.product.m.pi[PRODUCT_LOCATION.LEFT] === x.product.m.pi[PRODUCT_LOCATION.RIGHT]) {
+            const catalogProductInstance = CatalogProviderInstance.Catalog.productInstances[x.product.m.pi[PRODUCT_LOCATION.LEFT]];
+            const wholeModifiers: OrderLineItemModifier[] = x.product.m.exhaustive_modifiers.whole.map(mtid_moid => {
+              const catalogOption = CatalogProviderInstance.Catalog.options[mtid_moid[1]];
+              return { basePriceMoney: IMoneyToBigIntMoney(catalogOption.price), name: catalogOption.displayName }
+            })
+          } else { // left and right catalog product instance aren't the same. this isn't really supported by square, so we'll do our best
+            // TODO: grab a special square variation item ID or use the base product's ID
+          }
           return { 
             quantity: x.quantity.toString(10),
             //catalogObjectId: VARIABLE_PRICE_STORE_CREDIT_CATALOG_ID,
             basePriceMoney: IMoneyToBigIntMoney(x.product.p.PRODUCT_CLASS.price),
             itemType: "ITEM",
-            // we don't fill out applied taxes at the item level
             name: x.product.m.name, // its either catalogObjectId or name
             modifiers: x.product.p.modifiers.flatMap(mod => mod.options.map(option => {
               const catalogOption = CatalogProviderInstance.Catalog.options[option.optionId];

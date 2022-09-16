@@ -41,7 +41,9 @@ import {
   ComputeMainProductCategoryCount,
   ComputeCreditsApplied,
   StoreCreditType,
-  StoreCreditPayment
+  StoreCreditPayment,
+  WOrderStatus,
+  FulfillmentTime
 } from "@wcp/wcpshared";
 
 import { WProvider } from '../types/WProvider';
@@ -56,6 +58,7 @@ import logger from '../logging';
 import { OrderFunctional } from "@wcp/wcpshared";
 import { WOrderInstanceModel } from "../models/orders/WOrderInstance";
 import { Order as SquareOrder } from "square";
+import { SocketIoProviderInstance } from "./socketio_provider";
 
 const WCP = "Windy City Pie";
 
@@ -241,14 +244,13 @@ const GenerateShortCartFromFullCart = (cart: CategorizedRebuiltCart) => {
 }
 
 const RebuildOrderState = function (menu: IMenu, cart: CoreCartEntry<WCPProductV2Dto>[], service_time: Date | number, fulfillmentConfig: FulfillmentConfig) {
-  const catalog = CatalogProviderInstance.Catalog;
-  const catalogCategories = catalog.categories;
+  const catalogSelectors = CatalogProviderInstance.CatalogSelectors;
   const noLongerAvailable: CoreCartEntry<WCPProductV2Dto>[] = [];
 
   const rebuiltCart: CategorizedRebuiltCart = cart.reduce(
     (acc, entry) => {
-      const product = CreateProductWithMetadataFromV2Dto(entry.product, catalog, menu, service_time, fulfillmentConfig.id);
-      if (!CanThisBeOrderedAtThisTimeAndFulfillment(product.p, menu, catalog, service_time, fulfillmentConfig.id) || !Object.hasOwn(catalogCategories, entry.categoryId)) {
+      const product = CreateProductWithMetadataFromV2Dto(entry.product, catalogSelectors, service_time, fulfillmentConfig.id);
+      if (!CanThisBeOrderedAtThisTimeAndFulfillment(product.p, menu, catalogSelectors, service_time, fulfillmentConfig.id) || !catalogSelectors.category(entry.categoryId)) {
         noLongerAvailable.push(entry);
       }
       const rebuiltEntry: CoreCartEntry<WProduct> = { ...entry, product };
@@ -268,7 +270,7 @@ const RecomputeTotals = function ({ cart, creditValidations, fulfillment, order 
 
   const mainCategoryProductCount = ComputeMainProductCategoryCount(fulfillment.orderBaseCategoryId, order.cart);
   const cartSubtotal = { currency: CURRENCY.USD, amount: Object.values(cart).reduce((acc, c) => acc + ComputeCartSubTotal(c).amount, 0) };
-  const serviceFee = { currency: CURRENCY.USD, amount: fulfillment.serviceCharge !== null ? OrderFunctional.ProcessOrderInstanceFunction(order, CatalogProviderInstance.Catalog.orderInstanceFunctions[fulfillment.serviceCharge], CatalogProviderInstance.Catalog) as number : 0 };
+  const serviceFee = { currency: CURRENCY.USD, amount: fulfillment.serviceCharge !== null ? OrderFunctional.ProcessOrderInstanceFunction(order, CatalogProviderInstance.Catalog.orderInstanceFunctions[fulfillment.serviceCharge], CatalogProviderInstance.CatalogSelectors) as number : 0 };
   const subtotalPreDiscount = ComputeSubtotalPreDiscount(cartSubtotal, serviceFee);
   const discountApplied = ComputeCreditsApplied(subtotalPreDiscount, creditValidations.filter(x => x.validation.credit_type === StoreCreditType.DISCOUNT));
   const amountDiscounted = { amount: discountApplied.reduce((acc, x) => acc + x.amount_used.amount, 0), currency: CURRENCY.USD };
@@ -429,19 +431,38 @@ async function RefundStoreCreditDebits(spends: ValidateLockAndSpendSuccess[]) {
 
 async function RefundSquarePayments(payments: SquarePayment[]) {
   return Promise.all(payments
-    .filter(x=>x.payment.status === TenderBaseStatus.COMPLETED)
+    .filter(x => x.payment.status === TenderBaseStatus.COMPLETED)
     .map(x => SquareProviderInstance.RefundPayment(x.squarePaymentId, x.payment.amount, 'Refunding failed order')));
 }
 
 async function CancelSquarePayments(payments: SquarePayment[]) {
   return Promise.all(payments
-    .filter(x=>x.payment.status === TenderBaseStatus.AUTHORIZED)
+    .filter(x => x.payment.status === TenderBaseStatus.AUTHORIZED)
     .map(x => SquareProviderInstance.CancelPayment(x.squarePaymentId)));
 }
 
 export class OrderManager implements WProvider {
   constructor() {
   }
+
+  public CancelOrder = async (orderId: string, reason: string) => {
+    // refund square payments
+    // refund store credits
+    // cancel order
+    // free up order slot and unblock time as appropriate
+    // return message
+  };
+
+  public AdjustOrderTime = async (orderId: string, newTime: FulfillmentTime, emailCustomer: boolean) => {
+    // adjust calendar event
+    // adjust DB event
+    // send email to customer
+    // return success/failure
+  }
+
+  public ConfirmOrder = async (orderId: string) => {
+    // add fulfillment to order
+  };
 
   public CreateOrder = async (createOrderRequest: CreateOrderRequestV2, ipAddress: string): Promise<CreateOrderResponse & { status: number }> => {
     const requestTime = Date.now();
@@ -460,7 +481,7 @@ export class OrderManager implements WProvider {
 
 
     // 2. Rebuild the order from the menu/catalog
-    const menu = GenerateMenu(CatalogProviderInstance.Catalog, dateTimeInterval.start, createOrderRequest.fulfillment.selectedService);
+    const menu = GenerateMenu(CatalogProviderInstance.CatalogSelectors, CatalogProviderInstance.Catalog.version, dateTimeInterval.start, createOrderRequest.fulfillment.selectedService);
     const { noLongerAvailable, rebuiltCart } = RebuildOrderState(menu, createOrderRequest.cart, dateTimeInterval.start, fulfillmentConfig);
     if (noLongerAvailable.length > 0) {
       return {
@@ -596,7 +617,7 @@ export class OrderManager implements WProvider {
       isPaid = true;
     }
 
-    const orderInstanceBeforeCharging: Omit<WOrderInstance, 'id' | 'metadata' | 'status'> = {
+    const orderInstanceBeforeCharging: Omit<WOrderInstance, 'id' | 'metadata' | 'status' | 'locked'> = {
       ...orderInstance,
       taxes: [{ amount: recomputedTotals.taxAmount }],
       refunds: [],
@@ -727,7 +748,8 @@ export class OrderManager implements WProvider {
       ...orderInstanceBeforeCharging,
       payments: payments.slice(),
       discounts: discounts.slice(),
-      status: 'COMPLETED',
+      status: WOrderStatus.OPEN,
+      locked: null
     };
 
     // 6. create calendar event
@@ -741,7 +763,12 @@ export class OrderManager implements WProvider {
         isPaid,
         recomputedTotals)
         .then(async (orderEvent) => {
-          return await new WOrderInstanceModel({ ...completedOrderInstance, metadata: [{ key: 'GCALEVENT', value: orderEvent.data.id }] })
+          return await new WOrderInstanceModel({
+            ...completedOrderInstance,
+            metadata: [
+              { key: 'SQORDER', value: squareOrder.id },
+              { key: 'GCALEVENT', value: orderEvent.data.id }]
+          })
             .save()
             .then(async (dbOrderInstance) => {
               logger.info(`Successfully saved OrderInstance to database: ${JSON.stringify(dbOrderInstance.toJSON())}`)
@@ -765,6 +792,9 @@ export class OrderManager implements WProvider {
                 isPaid,
                 recomputedTotals,
                 ipAddress);
+
+              SocketIoProviderInstance.EmitOrder(dbOrderInstance.toObject());
+
               return { status: 200, success: true, errors, result: dbOrderInstance.toObject() };
             })
             .catch(async (error: any) => {

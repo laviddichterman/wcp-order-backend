@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { body, param } from 'express-validator';
-import { CURRENCY, IProduct, IProductInstance, OptionPlacement, OptionQualifier, PriceDisplay } from '@wcp/wcpshared';
+import { CURRENCY, IProduct, OptionPlacement, OptionQualifier, PriceDisplay } from '@wcp/wcpshared';
 import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
 import logger from '../logging';
 
@@ -10,82 +10,83 @@ import { CatalogProviderInstance } from '../config/catalog_provider';
 import { isFulfillmentDefined, isValidDisabledValue } from '../types/Validations';
 
 const ProductClassByIdValidationChain = [
-  param('pid').trim().escape().exists().isMongoId(), 
+  param('pid').trim().escape().exists().isMongoId(),
 ];
 
 const ProductInstanceByIdValidationChain = [
-  param('piid').trim().escape().exists().isMongoId(), 
+  param('piid').trim().escape().exists().isMongoId(),
+];
+
+const ProductInstanceValidationChain = (prefix: string) => [
+  body(`${prefix}displayName`).trim().exists(),
+  body(`${prefix}description`).trim(),
+  body(`${prefix}shortcode`).trim().escape().exists(),
+  body(`${prefix}externalIDs`).isArray(),
+  body(`${prefix}externalIDs.*.key`).exists(),
+  body(`${prefix}externalIDs.*.value`).exists(),
+  body(`${prefix}displayFlags.menu.ordinal`).exists().isInt({ min: 0 }),
+  body(`${prefix}displayFlags.menu.hide`).toBoolean(true),
+  body(`${prefix}displayFlags.menu.price_display`).exists().isIn(Object.keys(PriceDisplay)),
+  body(`${prefix}displayFlags.menu.adornment`).trim(),
+  body(`${prefix}displayFlags.menu.suppress_exhaustive_modifier_list`).toBoolean(true),
+  body(`${prefix}displayFlags.menu.show_modifier_options`).toBoolean(true),
+  body(`${prefix}displayFlags.order.ordinal`).exists().isInt({ min: 0 }),
+  body(`${prefix}displayFlags.order.hide`).toBoolean(true),
+  body(`${prefix}displayFlags.order.skip_customization`).toBoolean(true),
+  body(`${prefix}displayFlags.order.price_display`).exists().isIn(Object.keys(PriceDisplay)),
+  body(`${prefix}displayFlags.order.adornment`).trim(),
+  body(`${prefix}displayFlags.order.suppress_exhaustive_modifier_list`).toBoolean(true),
+  body(`${prefix}ordinal`).exists().isInt({ min: 0 }),
+  body(`${prefix}modifiers`).isArray(),
+  body(`${prefix}modifiers.*.modifierTypeId`).trim().escape().exists().isMongoId(),
+  body(`${prefix}modifiers.*.options`).isArray(),
+  body(`${prefix}modifiers.*.options.*.optionId`).trim().escape().exists().isMongoId(),
+  body(`${prefix}modifiers.*.options.*.placement`).exists().isIn(Object.values(OptionPlacement)),
+  body(`${prefix}modifiers.*.options.*.qualifier`).exists().isIn(Object.values(OptionQualifier))
 ];
 
 const ProductClassValidationChain = [
-  body('displayName').trim().exists(),
-  body('description').trim(),
-  body('shortcode').trim().escape().exists(),
+  body('price.amount').isInt({ min: 0 }).exists(),
+  body('price.currency').exists().isIn(Object.values(CURRENCY)),
+  body('disabled').custom(isValidDisabledValue),
+  body('serviceDisable.*').custom(isFulfillmentDefined),
   body('externalIDs').isArray(),
   body('externalIDs.*.key').exists(),
   body('externalIDs.*.value').exists(),
-  body('disabled').custom(isValidDisabledValue),
-  body('serviceDisable.*').custom(isFulfillmentDefined),
-  body('displayFlags.flavor_max').isFloat({min: 0}),
-  body('displayFlags.bake_max').isFloat({min: 0}),
-  body('displayFlags.bake_differential').isFloat({min: 0}),
+  body('modifiers.*.mtid').trim().escape().exists().isMongoId(),
+  body('modifiers.*.enable').optional({ nullable: true }).isMongoId(),
+  body('modifiers.*.serviceDisable.*').custom(isFulfillmentDefined),
+  body('category_ids.*').trim().escape().exists().isMongoId(),
+  body('displayFlags.flavor_max').isFloat({ min: 0 }),
+  body('displayFlags.bake_max').isFloat({ min: 0 }),
+  body('displayFlags.bake_differential').isFloat({ min: 0 }),
   // TODO: ensure show_name_of_base_product is TRUE if modifier list length === 0
   body('displayFlags.show_name_of_base_product').toBoolean(true),
   body('displayFlags.singular_noun').trim(),
-  body('displayFlags.order_guide.warnings.*').trim().escape().exists().isMongoId(), 
-  body('displayFlags.order_guide.suggestions.*').trim().escape().exists().isMongoId(), 
-  body('ordinal').optional({nullable: true}).isInt({min: 0}),
-  body('price.amount').isInt({min: 0}).exists(),
-  body('price.currency').exists().isIn(Object.values(CURRENCY)),
-  body('modifiers.*.mtid').trim().escape().exists().isMongoId(),
-  body('modifiers.*.enable').optional({nullable: true}).isMongoId(),
-  body('modifiers.*.serviceDisable.*').custom(isFulfillmentDefined),
-  body('category_ids.*').trim().escape().exists().isMongoId(),
+  body('displayFlags.order_guide.warnings.*').trim().escape().exists().isMongoId(),
+  body('displayFlags.order_guide.suggestions.*').trim().escape().exists().isMongoId(),
+
 ];
 
 const AddProductClassValidationChain = [
   ...ProductClassValidationChain,
-  body('create_product_instance').toBoolean(true),
-  body('suppress_catalog_recomputation').toBoolean(true)
+  ...ProductInstanceValidationChain('instance.')
 ]
 
 const EditProductClassValidationChain = [
   ...ProductClassByIdValidationChain,
   ...ProductClassValidationChain
 ];
-const ProductInstanceValidationChain = [  
+
+const AddProductInstanceValidationChain = [
   ...ProductClassByIdValidationChain,
-  body('displayName').trim().exists(),
-  body('description').trim(),
-  body('shortcode').trim().escape().exists(),
-  body('externalIDs').isArray(),
-  body('externalIDs.*.key').exists(),
-  body('externalIDs.*.value').exists(),
-  body('isBase').toBoolean(true),
-  body('displayFlags.menu.ordinal').exists().isInt({min: 0}),
-  body('displayFlags.menu.hide').toBoolean(true),
-  body('displayFlags.menu.price_display').exists().isIn(Object.keys(PriceDisplay)),
-  body('displayFlags.menu.adornment').trim(),
-  body('displayFlags.menu.suppress_exhaustive_modifier_list').toBoolean(true),
-  body('displayFlags.menu.show_modifier_options').toBoolean(true),
-  body('displayFlags.order.ordinal').exists().isInt({min: 0}),
-  body('displayFlags.order.hide').toBoolean(true),
-  body('displayFlags.order.skip_customization').toBoolean(true),
-  body('displayFlags.order.price_display').exists().isIn(Object.keys(PriceDisplay)),
-  body('displayFlags.order.adornment').trim(),
-  body('displayFlags.order.suppress_exhaustive_modifier_list').toBoolean(true),
-  body('ordinal').exists().isInt({min: 0}),
-  body('modifiers').isArray(),
-  body('modifiers.*.modifierTypeId').trim().escape().exists().isMongoId(),
-  body('modifiers.*.options').isArray(),
-  body('modifiers.*.options.*.optionId').trim().escape().exists().isMongoId(),
-  body('modifiers.*.options.*.placement').exists().isIn(Object.values(OptionPlacement)),
-  body('modifiers.*.options.*.qualifier').exists().isIn(Object.values(OptionQualifier))
+  ...ProductInstanceValidationChain("")
 ];
 
-const EditProductInstanceValidationChain = [  
+
+const EditProductInstanceValidationChain = [
   ...ProductInstanceByIdValidationChain,
-  ...ProductInstanceValidationChain
+  ...ProductInstanceValidationChain("")
 ];
 
 
@@ -101,72 +102,41 @@ export class ProductController implements IExpressController {
     this.router.post(`${this.path}`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(AddProductClassValidationChain), this.postProductClass);
     this.router.patch(`${this.path}/:pid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(EditProductClassValidationChain), this.patchProductClass);
     this.router.delete(`${this.path}/:pid`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware(ProductClassByIdValidationChain), this.deleteProductClass);
-    this.router.post(`${this.path}/:pid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(ProductInstanceValidationChain), this.postProductInstance);
+    this.router.post(`${this.path}/:pid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(AddProductInstanceValidationChain), this.postProductInstance);
     this.router.patch(`${this.path}/:pid/:piid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(EditProductInstanceValidationChain), this.patchProductInstance);
     this.router.delete(`${this.path}/:pid/:piid`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware([...ProductClassByIdValidationChain, ...ProductInstanceByIdValidationChain]), this.deleteProductInstance);
   };
   private postProductClass = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const productClass: Omit<IProduct, "id"> = {
+      const productClass: Omit<IProduct, 'id' | 'baseProductId'> = {
         price: req.body.price,
-        disabled: req.body.disabled ? req.body.disabled : null, 
+        disabled: req.body.disabled ? req.body.disabled : null,
         serviceDisable: req.body.serviceDisable || [],
         externalIDs: req.body.externalIDs,
         modifiers: req.body.modifiers,
         category_ids: req.body.category_ids,
-        displayFlags: req.body.displayFlags,
+        displayFlags: req.body.displayFlags
       };
-      const newproduct = await CatalogProviderInstance.CreateProduct(
-        productClass, 
-        req.body.create_product_instance || req.body.suppress_catalog_recomputation // aka : suppress_catalog_recomputation
+      const newProductInstance = await CatalogProviderInstance.CreateProduct(
+        productClass,
+        {
+          description: req.body.instance.description,
+          displayName: req.body.instance.displayName,
+          shortcode: req.body.instance.shortcode,
+          ordinal: req.body.instance.ordinal,
+          externalIDs: req.body.instance.externalIDs ?? [],
+          modifiers: req.body.instance.modifiers,
+          displayFlags: req.body.instance.displayFlags
+        }
       );
-      if (!newproduct) {
+      if (!newProductInstance) {
         logger.info(`Unable to find Modifiers or Categories to create Product`);
         return res.status(404).send("Unable to find Modifiers or Categories to create Product");
       }
-      if (req.body.create_product_instance) {
-        const productInstance: Omit<IProductInstance, "id" | 'displayFlags' | 'externalIDs' | 'modifiers' | 'isBase'> = {
-          productId: newproduct.id,
-          description: req.body.description,
-          displayName: req.body.displayName,
-          shortcode: req.body.shortcode,
-          ordinal: req.body.ordinal
-        };
-        const pi = await CatalogProviderInstance.CreateProductInstance({
-          ...productInstance,
-          externalIDs: [],
-          displayFlags: {
-            menu: { 
-              ordinal: productInstance.ordinal,
-              hide: false,
-              price_display: PriceDisplay.ALWAYS,
-              adornment: "",
-              suppress_exhaustive_modifier_list: false,
-              show_modifier_options: false            
-            },
-            order: { 
-              ordinal: productInstance.ordinal,
-              hide: false,
-              skip_customization: false,
-              price_display: PriceDisplay.ALWAYS,
-              adornment: "",
-              suppress_exhaustive_modifier_list: false
-            }
-          },
-          modifiers: [],
-          isBase: true
-        });
-        if (!pi) {
-          logger.info(`Error while creating product instance for ${newproduct.id}.`);
-          return res.status(500).send(`Error while creating product instance for  ${newproduct.id}.`);
-        }
-        const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/${newproduct.id}/${pi.id}`;
-        res.setHeader('Location', location);
-        return res.status(201).send({ product_instance: pi, product: newproduct });
-      }
-      const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/${newproduct.id}`;
+
+      const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/${newProductInstance.productId}/${newProductInstance.id}`;
       res.setHeader('Location', location);
-      return res.status(201).send(newproduct);
+      return res.status(201).send({ newProductInstance });
     } catch (error) {
       next(error)
     }
@@ -177,7 +147,7 @@ export class ProductController implements IExpressController {
       const productId = req.params.pid;
       const doc = await CatalogProviderInstance.UpdateProduct(productId, {
         price: req.body.price,
-        disabled: req.body.disabled ? req.body.disabled : null, 
+        disabled: req.body.disabled ? req.body.disabled : null,
         serviceDisable: req.body.serviceDisable || [],
         externalIDs: req.body.externalIDs,
         modifiers: req.body.modifiers,
@@ -213,14 +183,13 @@ export class ProductController implements IExpressController {
   private postProductInstance = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const doc = await CatalogProviderInstance.CreateProductInstance({
-        productId: req.params.pid, 
+        productId: req.params.pid,
         description: req.body.description,
         displayName: req.body.displayName,
         shortcode: req.body.shortcode,
         ordinal: req.body.ordinal,
         externalIDs: req.body.externalIDs ?? [],
         modifiers: req.body.modifiers,
-        isBase: req.body.isBase,
         displayFlags: req.body.displayFlags
       });
       if (!doc) {
@@ -245,7 +214,6 @@ export class ProductController implements IExpressController {
         ordinal: req.body.ordinal,
         externalIDs: req.body.externalIDs,
         modifiers: req.body.modifiers,
-        isBase: req.body.isBase,
         displayFlags: req.body.displayFlags
       });
       if (!doc) {

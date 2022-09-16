@@ -14,7 +14,8 @@ import {
   ReduceArrayToMapByKey,
   RecordOrderInstanceFunctions,
   RecordProductInstanceFunctions,
-  CatalogGenerator
+  CatalogGenerator,
+  ICatalogSelectorWrapper
 } from "@wcp/wcpshared";
 import DBVersionModel from '../models/DBVersionSchema';
 import { WCategoryModel } from '../models/catalog/category/WCategorySchema';
@@ -80,6 +81,10 @@ export class CatalogProvider implements WProvider {
 
   get Catalog() {
     return this.#catalog;
+  }
+
+  get CatalogSelectors() {
+    return ICatalogSelectorWrapper(this.#catalog);
   }
 
   SyncCategories = async () => {
@@ -165,7 +170,13 @@ export class CatalogProvider implements WProvider {
   }
 
   RecomputeCatalog = () => {
+    logger.debug('Recomputing catalog');
     this.#catalog = CatalogGenerator(Object.values(this.#categories), this.#modifier_types, this.#options, this.#products, this.#product_instances, this.#product_instance_functions, this.#orderInstanceFunctions, this.#apiver);
+  }
+
+  RecomputeCatalogAndEmit = () => {
+    this.RecomputeCatalog();
+    SocketIoProviderInstance.EmitCatalog(this.#catalog);
   }
 
   Bootstrap = async () => {
@@ -221,8 +232,7 @@ export class CatalogProvider implements WProvider {
       await cycle_update_promise;
     }
     await this.SyncCategories();
-    this.RecomputeCatalog();
-    SocketIoProviderInstance.EmitCatalog(this.#catalog);
+    this.RecomputeCatalogAndEmit();
     // is this going to still be valid after the Sync above?
     return response.toObject();
   };
@@ -257,8 +267,7 @@ export class CatalogProvider implements WProvider {
       await this.SyncProducts();
     }
     await this.SyncCategories();
-    this.RecomputeCatalog();
-    SocketIoProviderInstance.EmitCatalog(this.#catalog);
+    this.RecomputeCatalogAndEmit();
     return doc;
   }
 
@@ -266,8 +275,7 @@ export class CatalogProvider implements WProvider {
     const doc = new WOptionTypeModel(modifierType);
     await doc.save();
     await this.SyncModifierTypes();
-    this.RecomputeCatalog();
-    SocketIoProviderInstance.EmitCatalog(this.#catalog);
+    this.RecomputeCatalogAndEmit();
     return doc;
   };
 
@@ -279,8 +287,7 @@ export class CatalogProvider implements WProvider {
       return null;
     }
     await this.SyncModifierTypes();
-    this.RecomputeCatalog();
-    SocketIoProviderInstance.EmitCatalog(this.#catalog);
+    this.RecomputeCatalogAndEmit();
     return updated;
   };
 
@@ -321,8 +328,7 @@ export class CatalogProvider implements WProvider {
     }));
     await this.SyncOptions();
     await this.SyncModifierTypes();
-    this.RecomputeCatalog();
-    SocketIoProviderInstance.EmitCatalog(this.#catalog);
+    this.RecomputeCatalogAndEmit();
     return doc;
   }
 
@@ -335,8 +341,7 @@ export class CatalogProvider implements WProvider {
     const doc = new WOptionModel(modifierOption);
     await doc.save();
     await this.SyncOptions();
-    this.RecomputeCatalog();
-    SocketIoProviderInstance.EmitCatalog(this.#catalog);
+    this.RecomputeCatalogAndEmit();
     return doc;
   };
 
@@ -350,8 +355,7 @@ export class CatalogProvider implements WProvider {
       return null;
     }
     await this.SyncOptions();
-    this.RecomputeCatalog();
-    SocketIoProviderInstance.EmitCatalog(this.#catalog);
+    this.RecomputeCatalogAndEmit();
     return updated;
   };
 
@@ -379,23 +383,27 @@ export class CatalogProvider implements WProvider {
         await this.DeleteProductInstanceFunction(pif.id, true);
       }
     }));
-    this.RecomputeCatalog();
-    SocketIoProviderInstance.EmitCatalog(this.#catalog);
+    this.RecomputeCatalogAndEmit();
     return doc;
   }
 
-  CreateProduct = async (product: Omit<IProduct, 'id'>, suppress_catalog_recomputation = false) => {
+  CreateProduct = async (product: Omit<IProduct, 'id' | 'baseProductId'>, instance: Omit<IProductInstance, 'id' | 'productId'>) => {
     if (!ValidateProductModifiersFunctionsCategories(product.modifiers, product.category_ids, this)) {
       return null;
     }
     const doc = new WProductModel(product);
-    await doc.save();
-    await this.SyncProducts();
-    if (!suppress_catalog_recomputation) {
-      this.RecomputeCatalog();
-      SocketIoProviderInstance.EmitCatalog(this.#catalog);
-    }
-    return doc;
+    const savedProduct = await doc.save();
+    logger.debug(`Saved new WProductModel: ${JSON.stringify(savedProduct.toObject())}`);
+    const pi = new WProductInstanceModel({...instance, productId: savedProduct.id});
+    const piDoc = await pi.save(); 
+    logger.debug(`Saved new product instance: ${JSON.stringify(piDoc.toObject())}`);
+    savedProduct.baseProductId = piDoc.id;
+    await savedProduct.save();
+    //const updatedProduct = await WProductModel.findByIdAndUpdate(savedProduct.id, { '$set': { baseProductId: piDoc.id } }).exec();
+    await Promise.all([this.SyncProducts(), this.SyncProductInstances()]);
+    
+    this.RecomputeCatalogAndEmit();
+    return piDoc;
   };
 
   UpdateProduct = async (pid: string, product: Partial<Omit<IProduct, 'id'>>) => {
@@ -424,8 +432,7 @@ export class CatalogProvider implements WProvider {
     }
 
     await this.SyncProducts();
-    this.RecomputeCatalog();
-    SocketIoProviderInstance.EmitCatalog(this.#catalog);
+    this.RecomputeCatalogAndEmit();
     return updated;
   };
 
@@ -441,8 +448,7 @@ export class CatalogProvider implements WProvider {
       await this.SyncProductInstances();
     }
     await this.SyncProducts();
-    this.RecomputeCatalog();
-    SocketIoProviderInstance.EmitCatalog(this.#catalog);
+    this.RecomputeCatalogAndEmit();
     return doc;
   }
 
@@ -450,8 +456,7 @@ export class CatalogProvider implements WProvider {
     const doc = new WProductInstanceModel(productInstance);
     await doc.save();
     await this.SyncProductInstances();
-    this.RecomputeCatalog();
-    SocketIoProviderInstance.EmitCatalog(this.#catalog);
+    this.RecomputeCatalogAndEmit();
     return doc;
   };
 
@@ -464,29 +469,34 @@ export class CatalogProvider implements WProvider {
     }
 
     await this.SyncProductInstances();
-    this.RecomputeCatalog();
-    SocketIoProviderInstance.EmitCatalog(this.#catalog);
+    this.RecomputeCatalogAndEmit();
     return updated;
   };
 
   DeleteProductInstance = async (pi_id: string) => {
-    logger.debug(`Removing Product Instance: ${pi_id}`);
-    const doc = await WProductInstanceModel.findByIdAndDelete(pi_id).exec();
-    if (!doc) {
-      return null;
+    const instance = this.Catalog.productInstances[pi_id];
+    if (instance) {
+      const productEntry = this.Catalog.products[instance.productId];
+      if (productEntry.product.baseProductId === pi_id) {
+        logger.warn(`Attempted to delete base product instance for product ${productEntry.product.id}`);
+        return null;
+      }
+      logger.debug(`Removing Product Instance: ${pi_id}`);
+      const doc = await WProductInstanceModel.findByIdAndDelete(pi_id).exec();
+      if (!doc) {
+        return null;
+      }
+      await this.SyncProductInstances();
+      this.RecomputeCatalogAndEmit();
+      return doc;  
     }
-    await this.SyncProductInstances();
-    this.RecomputeCatalog();
-    SocketIoProviderInstance.EmitCatalog(this.#catalog);
-    return doc;
   }
 
   CreateProductInstanceFunction = async (productInstanceFunction: Omit<IProductInstanceFunction, 'id'>) => {
     const doc = new WProductInstanceFunctionModel(productInstanceFunction);
     await doc.save();
     await this.SyncProductInstanceFunctions();
-    this.RecomputeCatalog();
-    SocketIoProviderInstance.EmitCatalog(this.#catalog);
+    this.RecomputeCatalogAndEmit();
     return doc;
   };
 
@@ -497,8 +507,7 @@ export class CatalogProvider implements WProvider {
       return null;
     }
     await this.SyncProductInstanceFunctions();
-    this.RecomputeCatalog();
-    SocketIoProviderInstance.EmitCatalog(this.#catalog);
+    this.RecomputeCatalogAndEmit();
     return updated;
   };
 
@@ -525,8 +534,7 @@ export class CatalogProvider implements WProvider {
 
     await this.SyncProductInstanceFunctions();
     if (!suppress_catalog_recomputation) {
-      this.RecomputeCatalog();
-      SocketIoProviderInstance.EmitCatalog(this.#catalog);
+      this.RecomputeCatalogAndEmit();
     }
     return doc;
   }
@@ -535,8 +543,7 @@ export class CatalogProvider implements WProvider {
     const doc = new WOrderInstanceFunctionModel(orderInstanceFunction);
     await doc.save();
     await this.SyncOrderInstanceFunctions();
-    this.RecomputeCatalog();
-    SocketIoProviderInstance.EmitCatalog(this.#catalog);
+    this.RecomputeCatalogAndEmit();
     return doc;
   };
 
@@ -546,8 +553,7 @@ export class CatalogProvider implements WProvider {
       return null;
     }
     await this.SyncOrderInstanceFunctions();
-    this.RecomputeCatalog();
-    SocketIoProviderInstance.EmitCatalog(this.#catalog);
+    this.RecomputeCatalogAndEmit();
     return updated;
   };
 
@@ -559,8 +565,7 @@ export class CatalogProvider implements WProvider {
     }
     await this.SyncOrderInstanceFunctions();
     if (!suppress_catalog_recomputation) {
-      this.RecomputeCatalog();
-      SocketIoProviderInstance.EmitCatalog(this.#catalog);
+      this.RecomputeCatalogAndEmit();
     }
     return doc;
   }
