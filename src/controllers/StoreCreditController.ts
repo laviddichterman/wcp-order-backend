@@ -73,7 +73,7 @@ export class StoreCreditController implements IExpressController {
     try {
       const credit_code = req.query.code as string;
       const validate_response = await StoreCreditProviderInstance.ValidateAndLockCode(credit_code);
-      if (validate_response.valid) {
+      if (validate_response.valid && validate_response.amount.amount > 0) {
         logger.info(`Found and locked ${credit_code} with value ${validate_response.amount}.`);
         return res.status(200).json(validate_response);
       }

@@ -173,7 +173,7 @@ export class StoreCreditProvider {
     const expiration = entry[8] ? startOfDay(parseISO(entry[8])) : null;
     await update_promise;
     const balance = Math.round(Number(entry[3]) * 100);
-    const valid = (expiration === null || !isValid(expiration) || !isBefore(expiration, startOfDay(Date.now()))) && balance > 0;
+    const valid = (expiration === null || !isValid(expiration) || !isBefore(expiration, startOfDay(Date.now())));
     return valid ? {
       valid: true,
       credit_type: StoreCreditType[entry[2] as keyof typeof StoreCreditType],
@@ -236,6 +236,36 @@ export class StoreCreditProvider {
     return true;
   };
 
+  /**
+   * Adds amount to the store credit code
+   * @param code - the credit code to modify
+   * @param amount - the money to add back to the credit
+   * @param updatedBy - the updater, program or person approving the action
+   * @returns Promise<{ success: false } | ValidateLockAndSpendSuccess>
+   */
+  RefundStoreCredit = async (code: string, amount: IMoney, updatedBy: string): Promise<{ success: false } | ValidateLockAndSpendSuccess> => {
+    const beginningOfToday = startOfDay(Date.now());
+    const values = await GoogleProviderInstance.GetValuesFromSheet(DataProviderInstance.KeyValueConfig.STORE_CREDIT_SHEET, ACTIVE_RANGE);
+    const creditCodeIndex = values.values.findIndex(x => x[7] == code);
+    if (creditCodeIndex !== -1) {
+      const entry = values.values[creditCodeIndex];
+      const credit_balance = Math.round(Number(entry[3]) * 100);
+      const newBalance = ((credit_balance + amount.amount) / 100).toFixed(2);
+      const lock = aes256gcm.encrypt(code);
+      const newLockAsString = { enc: lock.enc, auth: lock.auth.toString('hex'), iv: lock.iv.toString('hex') };
+      const date_modified = WDateUtils.formatISODate(beginningOfToday);
+      const new_entry = [entry[0], entry[1], entry[2], newBalance, entry[4], updatedBy, date_modified, entry[7], entry[8], entry[9], newLockAsString.enc, newLockAsString.iv, newLockAsString.auth];
+      const new_range = `${ACTIVE_SHEET}!${2 + creditCodeIndex}:${2 + creditCodeIndex}`;
+      // TODO switch to volatile-esq update API call
+      await GoogleProviderInstance.UpdateValuesInSheet(DataProviderInstance.KeyValueConfig.STORE_CREDIT_SHEET, new_range, new_entry);
+      logger.info(`Refunded ${MoneyToDisplayString(amount, true)} to code ${code} yielding balance of ${newBalance}.`);
+      return { success: true, entry: new_entry, index: creditCodeIndex };
+    } else {
+      logger.error(`Not sure how, but the store credit key wasn't found: ${code}`);
+      return { success: false };
+    }
+  };
+
   PurchaseStoreCredit = async (request: PurchaseStoreCreditRequest, nonce: string): Promise<PurchaseStoreCreditResponse & { status: number }> => {
     const referenceId = Date.now().toString(36).toUpperCase();
 
@@ -253,8 +283,8 @@ export class StoreCreditProvider {
       logger.info(`For internal id ${referenceId} created Square Order ID: ${squareOrder.id} for ${amountString}`)
       const payment_response = await SquareProviderInstance.ProcessPayment({ sourceId: nonce, amount: request.amount, referenceId, squareOrderId: squareOrder.id });
       orderUpdateCount = orderUpdateCount + 1;
-      if (payment_response.success === true && payment_response.result.payment.t === PaymentMethod.CreditCard) {
-        const orderPayment = payment_response.result.payment;
+      if (payment_response.success === true && payment_response.result.t === PaymentMethod.CreditCard) {
+        const orderPayment = payment_response.result;
         await CreateExternalEmailSender(request, creditCode, qr_code_fs_a);
         if (request.sendEmailToRecipient) {
           await CreateExternalEmailRecipient(request, creditCode, qr_code_fs_b);
@@ -267,19 +297,19 @@ export class StoreCreditProvider {
           creditCode,
           expiration: null
         })
-        .then(async (_) => {
-          logger.info(`Store credit code: ${creditCode} and Square Order ID: ${squareOrder.id} payment for ${amountString} successful, credit logged to spreadsheet.`)
-          return {
-            status: 200, error: [], result: {
-              referenceId,
-              code: creditCode,
-              squareOrderId: squareOrder.id,
-              amount: orderPayment.amount,
-              last4: orderPayment.payment.last4,
-              receiptUrl: orderPayment.payment.receiptUrl
-            }, success: true
-          };
-        })
+          .then(async (_) => {
+            logger.info(`Store credit code: ${creditCode} and Square Order ID: ${squareOrder.id} payment for ${amountString} successful, credit logged to spreadsheet.`)
+            return {
+              status: 200, error: [], result: {
+                referenceId,
+                code: creditCode,
+                squareOrderId: squareOrder.id,
+                amount: orderPayment.amount,
+                last4: orderPayment.payment.last4,
+                receiptUrl: orderPayment.payment.receiptUrl
+              }, success: true
+            };
+          })
         // TODO: figure out why this has a type error
         // .catch(async (err: any) => {
         //   const errorDetail = `Failed to create credit code, got error: ${JSON.stringify(err)}`;

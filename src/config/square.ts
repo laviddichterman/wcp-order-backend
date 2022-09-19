@@ -1,4 +1,4 @@
-import { Error as SquareError, Client, CreateOrderRequest, CreateOrderResponse, CreatePaymentRequest, Environment, UpdateOrderRequest, OrderLineItem, Money, ApiError, UpdateOrderResponse, PaymentRefund, RefundPaymentRequest, PayOrderRequest, PayOrderResponse, Payment, OrderLineItemModifier } from 'square';
+import { Error as SquareError, Client, CreateOrderRequest, CreateOrderResponse, CreatePaymentRequest, Environment, UpdateOrderRequest, OrderLineItem, Money, ApiError, UpdateOrderResponse, PaymentRefund, RefundPaymentRequest, PayOrderRequest, PayOrderResponse, Payment, OrderLineItemModifier, RetrieveOrderResponse, Order } from 'square';
 import { WProvider } from '../types/WProvider';
 import crypto from 'crypto';
 import logger from '../logging';
@@ -15,7 +15,20 @@ export const BigIntMoneyToIntMoney = (bigIntMoney: Money): IMoney => ({ amount: 
 
 export const IMoneyToBigIntMoney = (money: IMoney): Money => ({ amount: BigInt(money.amount), currency: money.currency });
 
-export interface SquarePayment { payment: OrderPayment; squarePaymentId: string; };
+function MapPaymentStatus(sqStatus: string) {
+  switch (sqStatus) {
+    case 'APPROVED':
+    case 'PENDING':
+      return TenderBaseStatus.AUTHORIZED;
+    case 'COMPLETED':
+      return TenderBaseStatus.COMPLETED;
+    case 'CANCELED':
+    case 'FAILED':
+      return TenderBaseStatus.CANCELED;
+  }
+  return TenderBaseStatus.CANCELED;
+}
+
 type SquareProviderApiCallReturnSuccess<T> = { success: true; result: T; error: SquareError[]; };
 
 type SquareProviderApiCallReturnValue<T> = SquareProviderApiCallReturnSuccess<T> |
@@ -50,16 +63,6 @@ const SquareRequestHandler = async <T>(apiRequestMaker: () => Promise<SquareProv
     }
   }
   return await call_fxn();
-  // return await ExponentialBackoff(call_fxn, (err) => {
-  //   if (err instanceof ApiError) {
-  //     const errors = err.errors ?? [];
-  //     if (errors.length === 1 && ( errors[0].category === 'API_ERROR' )) {
-  //       return true;
-  //     }
-  //     return false;
-  //   }
-  //   return true;
-  // }, retry, maxRetry);
 }
 
 export class SquareProvider implements WProvider {
@@ -86,10 +89,6 @@ export class SquareProvider implements WProvider {
     logger.info(`Finished Bootstrap of SquareProvider`);
   }
 
-
-
-
-
   CreateOrderCart = async (reference_id: string,
     orderBeforeCharging: Omit<WOrderInstance, 'id' | 'metadata' | 'status' | 'refunds' | 'locked'>,
     promisedTime: Date | number,
@@ -113,7 +112,7 @@ export class SquareProvider implements WProvider {
           } else { // left and right catalog product instance aren't the same. this isn't really supported by square, so we'll do our best
             // TODO: grab a special square variation item ID or use the base product's ID
           }
-          return { 
+          return {
             quantity: x.quantity.toString(10),
             //catalogObjectId: VARIABLE_PRICE_STORE_CREDIT_CATALOG_ID,
             basePriceMoney: IMoneyToBigIntMoney(x.product.p.PRODUCT_CLASS.price),
@@ -163,18 +162,18 @@ export class SquareProvider implements WProvider {
         })),
         locationId: DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
         state: "OPEN",
-        fulfillments: [{
-          type: "PICKUP",
-          pickupDetails: {
-            scheduleType: 'SCHEDULED',
-            recipient: {
-              displayName: `${orderBeforeCharging.customerInfo.givenName} ${orderBeforeCharging.customerInfo.familyName}`,
-              emailAddress: orderBeforeCharging.customerInfo.email,
-              phoneNumber: orderBeforeCharging.customerInfo.mobileNum
-            },
-            pickupAt: formatRFC3339(promisedTime),
-          },
-        }],
+        // fulfillments: [{
+        //   type: "PICKUP",
+        //   pickupDetails: {
+        //     scheduleType: 'SCHEDULED',
+        //     recipient: {
+        //       displayName: `${orderBeforeCharging.customerInfo.givenName} ${orderBeforeCharging.customerInfo.familyName}`,
+        //       emailAddress: orderBeforeCharging.customerInfo.email,
+        //       phoneNumber: orderBeforeCharging.customerInfo.mobileNum
+        //     },
+        //     pickupAt: formatRFC3339(promisedTime),
+        //   },
+        // }],
       },
     };
     const call_fxn = async (): Promise<SquareProviderApiCallReturnSuccess<CreateOrderResponse>> => {
@@ -210,41 +209,56 @@ export class SquareProvider implements WProvider {
       }
     };
 
-    const callFxn = async (): Promise<{ success: true; result: CreateOrderResponse; error: null; }> => {
+    const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<CreateOrderResponse>> => {
       logger.info(`sending order request: ${JSON.stringify(request_body)}`);
       const { result, ...httpResponse } = await orders_api.createOrder(request_body);
-      return { success: true, result: result, error: null };
+      return { success: true, result: result, error: [] };
     }
     return await SquareRequestHandler(callFxn);
   }
 
-  OrderStateChange = async (square_order_id: string, version: number, new_state: string) => {
+  OrderUpdate = async (orderId: string, version: number, updatedOrder: Omit<Partial<Order>, 'locationId' | 'version' | 'id'>, fieldsToClear: string[]) => {
     const idempotency_key = crypto.randomBytes(22).toString('hex');
     const orders_api = this.#client.ordersApi;
     const request_body: UpdateOrderRequest = {
       idempotencyKey: idempotency_key,
+      fieldsToClear,
       order: {
+        ...updatedOrder,
         locationId: DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
         version,
-        state: new_state,
       }
     };
 
-    const callFxn = async (): Promise<{ success: true; result: UpdateOrderResponse; error: []; }> => {
-      logger.info(`sending order status change request for order ${square_order_id}: ${JSON.stringify(request_body)}`);
-      const { result, ...httpResponse } = await orders_api.updateOrder(square_order_id, request_body);
-      return { success: true, result: result, error: null };
+    const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<UpdateOrderResponse>> => {
+      logger.info(`sending order status change request for order ${orderId}: ${JSON.stringify(request_body)}`);
+      const { result, ...httpResponse } = await orders_api.updateOrder(orderId, request_body);
+      return { success: true, result: result, error: [] };
+    }
+    return await SquareRequestHandler(callFxn);
+  }
+
+  OrderStateChange = async (orderId: string, version: number, new_state: string) => {
+    return this.OrderUpdate(orderId, version, { state: new_state }, []);
+  }
+
+  RetrieveOrder = async (squareOrderId: string) => {
+    const orders_api = this.#client.ordersApi;
+    const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<RetrieveOrderResponse>> => {
+      logger.info(`Getting Square Order with ID: ${squareOrderId}`);
+      const { result, ...httpResponse } = await orders_api.retrieveOrder(squareOrderId);
+      return { success: true, result: result, error: [] };
     }
     return await SquareRequestHandler(callFxn);
   }
 
   CreatePayment = async (
-    { sourceId, storeCreditPayment, amount, referenceId, squareOrderId, tipAmount, verificationToken, autocomplete }: SquareProviderCreatePaymentRequest): Promise<SquareProviderApiCallReturnValue<SquarePayment>> => {
+    { sourceId, storeCreditPayment, amount, referenceId, squareOrderId, tipAmount, verificationToken, autocomplete }: SquareProviderCreatePaymentRequest): Promise<SquareProviderApiCallReturnValue<OrderPayment>> => {
     const idempotency_key = crypto.randomBytes(22).toString('hex');
     const payments_api = this.#client.paymentsApi;
     const request_body: CreatePaymentRequest = {
       sourceId: storeCreditPayment ? "EXTERNAL" : sourceId,
-      externalDetails: storeCreditPayment ? { type: 'STORED_BALANCE', source: "WARIO" } : undefined,
+      externalDetails: storeCreditPayment ? { type: 'STORED_BALANCE', source: "WARIO", sourceId: storeCreditPayment.payment.code } : undefined,
       amountMoney: IMoneyToBigIntMoney({ currency: amount.currency, amount: amount.amount - (tipAmount?.amount ?? 0) }),
       tipMoney: tipAmount ? IMoneyToBigIntMoney(tipAmount) : undefined,
       referenceId: storeCreditPayment ? storeCreditPayment.payment.code : referenceId,
@@ -257,44 +271,49 @@ export class SquareProvider implements WProvider {
       idempotencyKey: idempotency_key
     };
 
-    const callFxn = async (): Promise<SquareProviderApiCallReturnValue<SquarePayment>> => {
+    const callFxn = async (): Promise<SquareProviderApiCallReturnValue<OrderPayment>> => {
       logger.info(`sending payment request: ${JSON.stringify(request_body)}`);
       const { result, ..._ } = await payments_api.createPayment(request_body);
       if (result.payment) {
+        const paymentStatus = MapPaymentStatus(result.payment.status);
         return {
           success: true,
-          result: {
-            squarePaymentId: result.payment.id,
-            payment: storeCreditPayment ?
-              storeCreditPayment :
-              (result.payment.sourceType === 'CASH' ? {
-                t: PaymentMethod.Cash,
-                createdAt: parseISO(result.payment.createdAt).valueOf(),
-                amount: BigIntMoneyToIntMoney(result.payment.totalMoney),
-                tipAmount,
-                status: result.payment.status === 'COMPLETED' ? TenderBaseStatus.COMPLETED : TenderBaseStatus.AUTHORIZED,
-                payment: {
-                  amountTendered: BigIntMoneyToIntMoney(result.payment.cashDetails!.buyerSuppliedMoney),
-                  change: result.payment.cashDetails!.changeBackMoney ? BigIntMoneyToIntMoney(result.payment.cashDetails!.changeBackMoney) : { currency: amount.currency, amount: 0 },
-                },
-              } : {
-                t: PaymentMethod.CreditCard,
-                createdAt: parseISO(result.payment.createdAt).valueOf(),
-                amount: BigIntMoneyToIntMoney(result.payment.amountMoney),
-                tipAmount,
-                status: TenderBaseStatus.AUTHORIZED,
-                payment: {
-                  processor: 'SQUARE',
-                  billingZip: result.payment.billingAddress?.postalCode ?? undefined,
-                  cardBrand: result.payment.cardDetails.card.cardBrand ?? undefined,
-                  expYear: result.payment.cardDetails.card.expYear.toString(),
-                  last4: result.payment.cardDetails.card.last4,
-                  receiptUrl: result.payment.receiptUrl ?? `https://squareup.com/receipt/preview/${result.payment.id}`,
-                  processorId: result.payment.id,
-                  cardholderName: result.payment.cardDetails.card.cardholderName ?? undefined,
-                }
-              }),
-          },
+          result: storeCreditPayment ? {
+              ...storeCreditPayment,
+              status: paymentStatus,
+              payment: {
+                ...storeCreditPayment.payment,
+                processorId: result.payment.id
+              }
+            } :
+            (result.payment.sourceType === 'CASH' ? {
+              t: PaymentMethod.Cash,
+              createdAt: parseISO(result.payment.createdAt).valueOf(),
+              amount: BigIntMoneyToIntMoney(result.payment.totalMoney),
+              tipAmount,
+              status: paymentStatus,
+              payment: {
+                processorId: result.payment.id,
+                amountTendered: BigIntMoneyToIntMoney(result.payment.cashDetails!.buyerSuppliedMoney),
+                change: result.payment.cashDetails!.changeBackMoney ? BigIntMoneyToIntMoney(result.payment.cashDetails!.changeBackMoney) : { currency: amount.currency, amount: 0 },
+              },
+            } : {
+              t: PaymentMethod.CreditCard,
+              createdAt: parseISO(result.payment.createdAt).valueOf(),
+              amount: BigIntMoneyToIntMoney(result.payment.amountMoney),
+              tipAmount,
+              status: paymentStatus,
+              payment: {
+                processor: 'SQUARE',
+                billingZip: result.payment.billingAddress?.postalCode ?? undefined,
+                cardBrand: result.payment.cardDetails.card.cardBrand ?? undefined,
+                expYear: result.payment.cardDetails.card.expYear.toString(),
+                last4: result.payment.cardDetails.card.last4,
+                receiptUrl: result.payment.receiptUrl ?? `https://squareup.com/receipt/preview/${result.payment.id}`,
+                processorId: result.payment.id,
+                cardholderName: result.payment.cardDetails.card.cardholderName ?? undefined,
+              }
+            }),
           error: []
         };
       }
@@ -319,7 +338,7 @@ export class SquareProvider implements WProvider {
       paymentIds
     };
 
-    const callFxn = async (): Promise<{ success: true; result: PayOrderResponse; error: []; }> => {
+    const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<PayOrderResponse>> => {
       logger.info(`sending order payment request ${square_order_id}: ${JSON.stringify(request_body)}`);
       const { result, ...httpResponse } = await orders_api.payOrder(square_order_id, request_body);
       return { success: true, result: result, error: null };

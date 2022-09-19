@@ -6,7 +6,7 @@ import { DataProviderInstance } from './dataprovider';
 import WApp from '../App';
 import { format, intervalToDuration, formatDuration } from 'date-fns';
 import { zonedTimeToUtc } from 'date-fns-tz';
-import type { FulfillmentConfig, ICatalog, IWSettings, WOrderInstance } from '@wcp/wcpshared';
+import { FulfillmentConfig, ICatalog, IWSettings, WDateUtils, WOrderInstance } from '@wcp/wcpshared';
 
 
 export class SocketIoProvider implements WProvider {
@@ -50,7 +50,7 @@ export class SocketIoProvider implements WProvider {
         logger.info(`CONNECTION: Client at IP: ${socket.client.request.headers["x-real-ip"]}, UA: ${socket.client.request.headers['user-agent']}.`) : 
         logger.info(`CONNECTION: Client info: ${JSON.stringify(socket.client.request.headers)}.`);
       logger.info(`Num Connected: ${app.getSocketIoServer().engine.clientsCount}`);
-      socket.emit('WCP_SERVER_TIME', { time: format(connect_time, "yyyy-MM-dd'T'HH:mm:ss"), tz: process.env.TZ });
+      socket.emit('WCP_SERVER_TIME', { time: format(connect_time, WDateUtils.ISODateTimeNoOffset), tz: process.env.TZ });
       this.EmitFulfillmentsTo(socket, DataProviderInstance.Fulfillments);
       this.EmitSettingsTo(socket, DataProviderInstance.Settings);
       this.EmitCatalogTo(socket, CatalogProviderInstance.Catalog);

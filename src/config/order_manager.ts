@@ -43,14 +43,15 @@ import {
   StoreCreditType,
   StoreCreditPayment,
   WOrderStatus,
-  FulfillmentTime
+  FulfillmentTime,
+  FulfillmentType
 } from "@wcp/wcpshared";
 
 import { WProvider } from '../types/WProvider';
 
 import { formatRFC3339, format, Interval, isSameMinute, isSameDay, formatISO, intervalToDuration, formatDuration } from 'date-fns';
 import { GoogleProviderInstance } from "./google";
-import { SquarePayment, SquareProviderInstance } from "./square";
+import { SquareProviderInstance } from "./square";
 import { StoreCreditProviderInstance } from "./store_credit_provider";
 import { CatalogProviderInstance } from './catalog_provider';
 import { DataProviderInstance } from './dataprovider';
@@ -113,24 +114,35 @@ const DateTimeIntervalToDisplayServiceInterval = (interval: Interval) => {
   return isSameMinute(interval.start, interval.end) ? format(interval.start, WDateUtils.DisplayTimeFormat) : `${format(interval.start, WDateUtils.DisplayTimeFormat)} - ${format(interval.end, WDateUtils.DisplayTimeFormat)}`;
 }
 
-const GenerateAutoResponseBodyEscaped = function (
+const CreateExternalConfirmationEmail = async function (
   order: WOrderInstance,
-  fulfillmentConfig: FulfillmentConfig,
-  date_time_interval: Interval,
   isPaid: boolean
 ) {
   const NOTE_PREPAID = "You've already paid, so unless there's an issue with the order, there's no need to handle payment from this point forward.";
   const NOTE_PAYMENT = "We happily accept any major credit card or cash for payment.";
   const STORE_NAME = DataProviderInstance.KeyValueConfig.STORE_NAME;
   const STORE_ADDRESS = DataProviderInstance.KeyValueConfig.STORE_ADDRESS;
+  const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
 
+  const fulfillmentConfig = DataProviderInstance.Fulfillments[order.fulfillment.selectedService];
+  const dateTimeInterval = DateTimeIntervalBuilder(order.fulfillment, fulfillmentConfig);
+  const display_time = DateTimeIntervalToDisplayServiceInterval(dateTimeInterval);
+  const customer_name = [order.customerInfo.givenName, order.customerInfo.familyName].join(" ");
+  const service_title = ServiceTitleBuilder(fulfillmentConfig.displayName, order.fulfillment, customer_name, dateTimeInterval);
   const nice_area_code = IsNativeAreaCode(order.customerInfo.mobileNum, STORE_NAME === WCP ? WCP_AREA_CODES : BTP_AREA_CODES);
-  const payment_section = isPaid ? NOTE_PREPAID : NOTE_PAYMENT;
-  const display_time = DateTimeIntervalToDisplayServiceInterval(date_time_interval);
+  const payment_section = isPaid ? (fulfillmentConfig.service === FulfillmentType.DineIn ? NOTE_PREPAID : NOTE_PREPAID) : NOTE_PAYMENT;
   const confirm = fulfillmentConfig.messages.CONFIRMATION; // [`We're happy to confirm your ${display_time} pickup at`, `We're happy to confirm your ${display_time} at`, `We're happy to confirm your delivery around ${display_time} at`];
   const where = order.fulfillment.deliveryInfo?.validation.validated_address ?? STORE_ADDRESS;
 
-  return encodeURIComponent(`${nice_area_code ? "Hey, nice area code!" : "Thanks!"} ${confirm} ${display_time} order at ${where}.\n\n${fulfillmentConfig.messages.INSTRUCTIONS} ${payment_section}`);
+  return await GoogleProviderInstance.SendEmail(
+    {
+      name: STORE_NAME,
+      address: EMAIL_ADDRESS
+    },
+    order.customerInfo.email,
+    service_title,
+    EMAIL_ADDRESS,
+    `${nice_area_code ? "Hey, nice area code!" : "Thanks!"} ${confirm} ${display_time} order at ${where}.\n\n${fulfillmentConfig.messages.INSTRUCTIONS} ${payment_section}`);
 }
 
 function GenerateOrderPaymentDisplay(payment: OrderPayment, isHtml: boolean) {
@@ -301,7 +313,6 @@ const RecomputeTotals = function ({ cart, creditValidations, fulfillment, order 
 }
 const CreateInternalEmail = async (
   order: WOrderInstance,
-  fulfillmentConfig: FulfillmentConfig,
   service_title: string,
   requestTime: Date | number,
   dateTimeInterval: Interval,
@@ -312,8 +323,6 @@ const CreateInternalEmail = async (
 
   const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
   const sameDayOrder = isSameDay(requestTime, dateTimeInterval.start);
-  const confirmation_body_escaped = GenerateAutoResponseBodyEscaped(order, fulfillmentConfig, dateTimeInterval, isPaid)
-  const confirmation_subject_escaped = encodeURIComponent(service_title);
   const payment_section = isPaid ? GeneratePaymentSection(totals, order.discounts, order.payments, true) : "";
   const delivery_section = GenerateDeliverySection(order.fulfillment.deliveryInfo, true);
   const dineInSection = GenerateDineInSection(order.fulfillment.dineInInfo, true);
@@ -324,7 +333,7 @@ const CreateInternalEmail = async (
 ${special_instructions_section}<br />
 Phone: ${order.customerInfo.mobileNum}</p>
 ${sameDayOrder ? "" : '<strong style="color: red;">DOUBLE CHECK THIS IS FOR TODAY BEFORE SENDING THE TICKET</strong> <br />'}
-Auto-respond: <a href="mailto:${order.customerInfo.email}?subject=${confirmation_subject_escaped}&body=${confirmation_body_escaped}">Confirmation link</a><br />
+
     
 <p>Referral Information: ${order.customerInfo.referral}</p>
 
@@ -429,39 +438,295 @@ async function RefundStoreCreditDebits(spends: ValidateLockAndSpendSuccess[]) {
   }))
 }
 
-async function RefundSquarePayments(payments: SquarePayment[]) {
+async function RefundSquarePayments(payments: OrderPayment[], reason: string) {
   return Promise.all(payments
-    .filter(x => x.payment.status === TenderBaseStatus.COMPLETED)
-    .map(x => SquareProviderInstance.RefundPayment(x.squarePaymentId, x.payment.amount, 'Refunding failed order')));
+    .filter(x => x.status === TenderBaseStatus.COMPLETED)
+    .map(x => SquareProviderInstance.RefundPayment(x.payment.processorId, x.amount, reason)));
 }
 
-async function CancelSquarePayments(payments: SquarePayment[]) {
+async function CancelSquarePayments(payments: OrderPayment[]) {
   return Promise.all(payments
-    .filter(x => x.payment.status === TenderBaseStatus.AUTHORIZED)
-    .map(x => SquareProviderInstance.CancelPayment(x.squarePaymentId)));
+    .filter(x => x.status === TenderBaseStatus.AUTHORIZED)
+    .map(x => SquareProviderInstance.CancelPayment(x.payment.processorId)));
 }
 
 export class OrderManager implements WProvider {
   constructor() {
   }
 
-  public CancelOrder = async (orderId: string, reason: string) => {
-    // refund square payments
-    // refund store credits
-    // cancel order
-    // free up order slot and unblock time as appropriate
-    // return message
-  };
-
-  public AdjustOrderTime = async (orderId: string, newTime: FulfillmentTime, emailCustomer: boolean) => {
-    // adjust calendar event
-    // adjust DB event
-    // send email to customer
-    // return success/failure
+  public DiscountOrder = async (idempotencyKey: string, orderId: string, reason: string) => {
+    // TODO
   }
 
-  public ConfirmOrder = async (orderId: string) => {
-    // add fulfillment to order
+  public CancelOrder = async (idempotencyKey: string, orderId: string, reason: string, emailCustomer: boolean): Promise<CreateOrderResponse & { status: number }> => {
+    logger.info(`Received request (nonce: ${idempotencyKey}) to cancel order ${orderId} for reason: ${reason}`);
+    return await WOrderInstanceModel.findOneAndUpdate(
+      { locked: null, id: orderId, status: { $in: [WOrderStatus.OPEN, WOrderStatus.CONFIRMED] } },
+      { locked: idempotencyKey },
+      { new: true })
+      .then(async (lockedOrder) => {
+        logger.debug(`Found order ${JSON.stringify(lockedOrder, null, 2)}, lock applied.`);
+
+        // TODO: SPLIT LOGIC IF lockedOrder.status === CONFIRMED vs OPEN
+        // if (lockedOrder.status === WOrderStatus.CONFIRMED) {
+        //   const errorDetail = "Logic to support cancelation of confirmed orders not yet implemented";
+        //   logger.error(errorDetail)
+        //   return { status: 405, success: false, errors: [], result: null };
+        // }
+
+        try {
+          const squareOrderId = lockedOrder.metadata.find(x => x.key === 'SQORDER')!.value;
+
+          // lookup Square Order for payments and version number
+          const retrieveSquareOrderResponse = await SquareProviderInstance.RetrieveOrder(squareOrderId);
+          if (!retrieveSquareOrderResponse.success) {
+            // unable to find the order
+            return { status: 404, success: false, errors: [], result: null };
+          }
+          const squareOrder = retrieveSquareOrderResponse.result.order!;
+          let version = squareOrder.version;
+
+          // refund store credits
+          const discountCreditRefunds = lockedOrder.discounts.map(async (discount) => {
+            return StoreCreditProviderInstance.RefundStoreCredit(discount.discount.code, discount.discount.amount, 'WARIO');
+          });
+
+          // refund square payments
+          const paymentRefunds = lockedOrder.payments.map(async (payment) => {
+            if (payment.t === PaymentMethod.StoreCredit) {
+              // refund the credit in the store credit DB
+              StoreCreditProviderInstance.RefundStoreCredit(payment.payment.code, payment.amount, 'WARIO');
+            }
+            const undoPaymentResponse = await (squareOrder.state === 'COMPLETED' || squareOrder.fulfillments.length > 0 && squareOrder.fulfillments[0].state ?
+              SquareProviderInstance.RefundPayment(payment.payment.processorId, payment.amount, reason) :
+              SquareProviderInstance.CancelPayment(payment.payment.processorId));
+            version += 1;
+            return undoPaymentResponse;
+          });
+          // TODO: check refund statuses
+
+          // cancel square order
+          if (squareOrder.state === 'OPEN') {
+            const updateSquareOrderResponse = lockedOrder.status === WOrderStatus.CONFIRMED ?
+              await SquareProviderInstance.OrderUpdate(squareOrderId, squareOrder.version, {
+                state: 'CANCELED',
+                fulfillments: [{
+                  state: 'CANCELED'
+                }]
+              }, []) :
+              await SquareProviderInstance.OrderStateChange(squareOrderId, version, 'CANCELED');
+            if (!updateSquareOrderResponse.success) {
+              return { status: 500, success: false, result: null, errors: updateSquareOrderResponse.error };
+            }
+          } else {
+            // is this an error condition?
+          }
+
+
+          // send emails?
+          if (emailCustomer) {
+
+          }
+
+          // delete calendar entry
+          const gCalEventId = lockedOrder.metadata.find(x => x.key === 'GCALEVENT')?.value;
+          if (gCalEventId) {
+            await GoogleProviderInstance.DeleteCalendarEvent(gCalEventId);
+          }
+
+          // update order in DB, release lock
+          return await WOrderInstanceModel.findOneAndUpdate(
+            { locked: idempotencyKey, id: orderId },
+            {
+              locked: null, status: WOrderStatus.CANCELED
+              // TODO: need to add refunds to the order too?
+            },
+            { new: true })
+            .then(async (updatedOrder) => {
+              // TODO: free up order slot and unblock time as appropriate
+
+              // send notice to subscribers
+
+              // return to caller
+              SocketIoProviderInstance.EmitOrder(updatedOrder.toObject());
+              return { status: 200, success: true, errors: [], result: updatedOrder };
+            })
+            .catch((err: any) => {
+              const errorDetail = `Unable to commit update to order to release lock and cancel. Got error: ${JSON.stringify(err, null, 2)}`;
+              return { status: 500, success: false, result: null, errors: [{ category: 'API_ERROR', code: 'INTERNAL_SERVER_ERROR', detail: errorDetail }] };
+            })
+        } catch (error: any) {
+          const errorDetail = `Caught error when attempting to cancel order: ${JSON.stringify(error, null, 2)}`;
+          logger.error(errorDetail);
+          return { status: 500, success: false, result: null, errors: [{ category: 'API_ERROR', code: 'INTERNAL_SERVER_ERROR', detail: errorDetail }] };
+        }
+      })
+      .catch((err: any) => {
+        const errorDetail = `Unable to find ${orderId} that can be canceled. Got error: ${JSON.stringify(err, null, 2)}`;
+        logger.error(errorDetail);
+        return { status: 404, success: false, errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'NOT_FOUND', detail: errorDetail }], result: null };
+      });
+  };
+
+  public AdjustOrderTime = async (idempotencyKey: string, orderId: string, newTime: FulfillmentTime, emailCustomer: boolean): Promise<CreateOrderResponse & { status: number }> => {
+    const promisedTime = WDateUtils.ComputeServiceDateTime(newTime);
+    logger.info(`Received request (nonce: ${idempotencyKey}) to adjust order ${orderId} time to: ${format(promisedTime, WDateUtils.ISODateTimeNoOffset)}`);
+    // find order and acquire lock
+    return await WOrderInstanceModel.findOneAndUpdate(
+      { locked: null, id: orderId, status: { $in: [WOrderStatus.OPEN, WOrderStatus.CONFIRMED] } },
+      { locked: idempotencyKey },
+      { new: true })
+      .then(async (lockedOrder) => {
+
+        // lookup Square Order
+        const squareOrderId = lockedOrder.metadata.find(x => x.key === 'SQORDER')!.value;
+        const retrieveSquareOrderResponse = await SquareProviderInstance.RetrieveOrder(squareOrderId);
+        if (!retrieveSquareOrderResponse.success) {
+          // unable to find the order
+          return { status: 405, success: false, errors: retrieveSquareOrderResponse.error, result: null };
+        }
+        const squareOrder = retrieveSquareOrderResponse.result.order!;
+        if (squareOrder.state !== 'OPEN') {
+          // unable to edit the order at this point, error out
+          return { status: 405, success: false, errors: [], result: null };
+        }
+
+        if (lockedOrder.status === WOrderStatus.CONFIRMED) {
+          //adjust square fulfillment
+          const updateSquareOrderResponse = await SquareProviderInstance.OrderUpdate(squareOrderId, squareOrder.version, {
+            fulfillments: [{
+              pickupDetails: {
+                pickupAt: formatRFC3339(promisedTime),
+              },
+            }],
+          }, []);
+          if (!updateSquareOrderResponse.success) {
+            // failed to update square order fulfillment
+
+          }
+        }
+
+        // adjust calendar event
+        const gCalEventId = lockedOrder.metadata.find(x => x.key === 'GCALEVENT')?.value;
+        const fulfillmentConfig = DataProviderInstance.Fulfillments[lockedOrder.fulfillment.selectedService];
+        const dateTimeInterval = DateTimeIntervalBuilder(newTime, fulfillmentConfig);
+        await GoogleProviderInstance.ModifyCalendarEvent(gCalEventId, {
+          start: {
+            dateTime: formatRFC3339(dateTimeInterval.start),
+            timeZone: process.env.TZ
+          },
+          end: {
+            dateTime: formatRFC3339(dateTimeInterval.end),
+            timeZone: process.env.TZ
+          }
+        })
+
+        // send email to customer
+        if (emailCustomer) {
+
+        }
+
+        // adjust DB event
+        return await WOrderInstanceModel.findOneAndUpdate(
+          { locked: idempotencyKey, id: orderId, status: { $in: [WOrderStatus.OPEN, WOrderStatus.CONFIRMED] } },
+          { locked: null, 'fulfillment.selectedDate': newTime.selectedDate, 'fulfillment.selectedTime': newTime.selectedTime },
+          { new: true })
+          .then(async (updatedOrder) => {
+
+            // return success/failure
+            SocketIoProviderInstance.EmitOrder(updatedOrder.toObject());
+            return { status: 200, success: true, errors: [], result: updatedOrder };
+          })
+          .catch((err: any) => {
+            const errorDetail = `Unable to commit update to order to release lock and update fulfillment time. Got error: ${JSON.stringify(err, null, 2)}`;
+            logger.error(errorDetail);
+            return { status: 500, success: false, result: null, errors: [{ category: 'API_ERROR', code: 'INTERNAL_SERVER_ERROR', detail: errorDetail }] };
+          })
+      })
+      .catch((err: any) => {
+        const errorDetail = `Unable to find ${orderId} that can be updated. Got error: ${JSON.stringify(err, null, 2)}`;
+        logger.error(errorDetail);
+        return { status: 404, success: false, errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'NOT_FOUND', detail: errorDetail }], result: null };
+      });
+
+  }
+
+  public ConfirmOrder = async (idempotencyKey: string, orderId: string, messageToCustomer: string): Promise<CreateOrderResponse & { status: number }> => {
+    logger.info(`Received request (nonce: ${idempotencyKey}) to confirm order ${orderId}`);
+    // find order and acquire lock
+    return await WOrderInstanceModel.findOneAndUpdate(
+      { locked: null, id: orderId, status: { $in: [WOrderStatus.OPEN] } },
+      { locked: idempotencyKey },
+      { new: true })
+      .then(async (lockedOrder) => {
+
+        // lookup Square Order
+        const squareOrderId = lockedOrder.metadata.find(x => x.key === 'SQORDER')!.value;
+        const retrieveSquareOrderResponse = await SquareProviderInstance.RetrieveOrder(squareOrderId);
+        if (!retrieveSquareOrderResponse.success) {
+          // unable to find the order
+          return { status: 405, success: false, errors: retrieveSquareOrderResponse.error, result: null };
+        }
+        const squareOrder = retrieveSquareOrderResponse.result.order!;
+        if (squareOrder.state !== 'OPEN') {
+          // unable to edit the order at this point, error out
+          return { status: 405, success: false, errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'UNEXPECTED_VALUE', detail: 'Square order found, but not in a state where we can confirm it' }], result: null };
+        }
+
+        // add fulfillment to order
+        const promisedTime = WDateUtils.ComputeServiceDateTime(lockedOrder.fulfillment);
+        const updateSquareOrderResponse = await SquareProviderInstance.OrderUpdate(squareOrderId, squareOrder.version, {
+          fulfillments: [{
+            type: "PICKUP",
+            pickupDetails: {
+              scheduleType: 'SCHEDULED',
+              recipient: {
+                displayName: `${lockedOrder.customerInfo.givenName} ${lockedOrder.customerInfo.familyName}`,
+                emailAddress: lockedOrder.customerInfo.email,
+                phoneNumber: lockedOrder.customerInfo.mobileNum
+              },
+              pickupAt: formatRFC3339(promisedTime),
+            },
+          }],
+        }, []);
+        if (!updateSquareOrderResponse.success) {
+          // failed to update square order fulfillment
+
+        }
+
+        // mark the order paid via PayOrder endpoint
+        const payOrderResponse = await SquareProviderInstance.PayOrder(squareOrder.id, lockedOrder.payments.map(x => x.payment.processorId));
+        if (payOrderResponse.success) {
+          logger.info(`Square order successfully marked paid.`);
+          // send email to customer
+          await CreateExternalConfirmationEmail(lockedOrder, true);
+          // adjust DB event
+          return await WOrderInstanceModel.findOneAndUpdate(
+            { locked: idempotencyKey, id: orderId, status: { $in: [WOrderStatus.OPEN] } },
+            { locked: null, status: WOrderStatus.CONFIRMED }, // TODO: payments status need to be changed as committed to the DB
+            { new: true })
+            .then(async (updatedOrder) => {
+
+              // return success/failure
+              SocketIoProviderInstance.EmitOrder(updatedOrder.toObject());
+              return { status: 200, success: true, errors: [], result: updatedOrder };
+            })
+            .catch((err: any) => {
+              const errorDetail = `Unable to commit update to order to release lock and update fulfillment time. Got error: ${JSON.stringify(err, null, 2)}`;
+              logger.error(errorDetail);
+              return { status: 500, success: false, result: null, errors: [{ category: 'API_ERROR', code: 'INTERNAL_SERVER_ERROR', detail: errorDetail }] };
+            })
+        } else {
+          const errorDetail = `Failed to pay the order: ${JSON.stringify(payOrderResponse)}`;
+          logger.error(errorDetail);
+          return { status: 422, success: false, errors: payOrderResponse.error, result: null };
+        }
+      })
+      .catch((err: any) => {
+        const errorDetail = `Unable to find ${orderId} that can be updated. Got error: ${JSON.stringify(err, null, 2)}`;
+        logger.error(errorDetail);
+        return { status: 404, success: false, errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'NOT_FOUND', detail: errorDetail }], result: null };
+      });
   };
 
   public CreateOrder = async (createOrderRequest: CreateOrderRequestV2, ipAddress: string): Promise<CreateOrderResponse & { status: number }> => {
@@ -591,6 +856,7 @@ export class OrderManager implements WProvider {
                   createdAt: Date.now(),
                   amount: creditUse.amount_used,
                   payment: {
+                    processorId: "", // empty until we run it past square
                     code: creditUse.code,
                     lock: creditUse.validation.lock
                   }
@@ -630,118 +896,101 @@ export class OrderManager implements WProvider {
     let hasChargingSucceeded = false;
     let squareOrder: SquareOrder | null = null;
     let orderUpdateCount = 0;
-    const squarePayments: SquarePayment[] = [];
+    const squarePayments: OrderPayment[] = [];
     const payments: OrderPayment[] = moneyCreditPayments.slice();
-    if (USE_SQUARE_ITEMIZED_ORDERING || recomputedTotals.balanceAfterCredits.amount > 0) {
-      try {
-        const squareOrderResponse = await (USE_SQUARE_ITEMIZED_ORDERING ?
-          SquareProviderInstance.CreateOrderCart(
-            reference_id,
-            orderInstanceBeforeCharging,
-            dateTimeInterval.start,
-            rebuiltCart,
-            "") :
-          SquareProviderInstance.CreateOrderStoreCredit(
-            reference_id,
-            recomputedTotals.balanceAfterCredits,
-            `This credit is applied to your order for: ${service_title}`));
-        if (squareOrderResponse.success === true) {
-          squareOrder = squareOrderResponse.result.order;
-          logger.info(`For internal id ${reference_id} created Square Order ID: ${squareOrder.id}`);
-          // Payment Part C: create payments
-          //  substep i: close out the order via credit card payment or if no money credit payments either, a 0 cash money payment, 
-          if (recomputedTotals.balanceAfterCredits.amount > 0 || moneyCreditPayments.length === 0) {
-            const squarePaymentResponse = await SquareProviderInstance.CreatePayment({
-              sourceId: recomputedTotals.balanceAfterCredits.amount > 0 ? createOrderRequest.nonce : 'CASH',
-              amount: recomputedTotals.balanceAfterCredits,
-              tipAmount: { currency: recomputedTotals.tipAmount.currency, amount: tipAmountRemaining },
-              referenceId: reference_id,
+    try {
+      const squareOrderResponse = await (SquareProviderInstance.CreateOrderCart(
+        reference_id,
+        orderInstanceBeforeCharging,
+        dateTimeInterval.start,
+        rebuiltCart,
+        ""));
+      if (squareOrderResponse.success === true) {
+        squareOrder = squareOrderResponse.result.order;
+        logger.info(`For internal id ${reference_id} created Square Order ID: ${squareOrder.id}`);
+        // Payment Part C: create payments
+        //  substep i: close out the order via credit card payment or if no money credit payments either, a 0 cash money payment, 
+        if (recomputedTotals.balanceAfterCredits.amount > 0 || moneyCreditPayments.length === 0) {
+          const squarePaymentResponse = await SquareProviderInstance.CreatePayment({
+            sourceId: recomputedTotals.balanceAfterCredits.amount > 0 ? createOrderRequest.nonce : 'CASH',
+            amount: recomputedTotals.balanceAfterCredits,
+            tipAmount: { currency: recomputedTotals.tipAmount.currency, amount: tipAmountRemaining },
+            referenceId: reference_id,
+            squareOrderId: squareOrder.id,
+            autocomplete: false
+          });
+          orderUpdateCount += 1;
+          if (squarePaymentResponse.success === true) {
+            logger.info(`For internal id ${reference_id} and Square Order ID: ${squareOrder.id} payment for ${MoneyToDisplayString(squarePaymentResponse.result.amount, true)} successful.`)
+            payments.push(squarePaymentResponse.result);
+            squarePayments.push(squarePaymentResponse.result);
+          } else {
+            const errorDetail = `Failed to process payment: ${JSON.stringify(squarePaymentResponse)}`;
+            logger.error(errorDetail);
+            squarePaymentResponse.error.forEach(e => errors.push({ category: e.category, code: e.code, detail: e.detail }))
+            // throw for flow control
+            throw errorDetail;
+          }
+        }
+        // Payment Part C, substep ii: process money store credit payments
+        await Promise.all(moneyCreditPayments.map(async (payment) => {
+          try {
+            const squareMoneyCreditPaymentResponse = await SquareProviderInstance.CreatePayment({
+              sourceId: "EXTERNAL",
+              storeCreditPayment: payment,
+              amount: payment.amount,
+              tipAmount: payment.tipAmount,
+              referenceId: payment.payment.code,
               squareOrderId: squareOrder.id,
               autocomplete: false
             });
             orderUpdateCount += 1;
-            if (squarePaymentResponse.success === true) {
-              logger.info(`For internal id ${reference_id} and Square Order ID: ${squareOrder.id} payment for ${MoneyToDisplayString(squarePaymentResponse.result.payment.amount, true)} successful.`)
-              payments.push(squarePaymentResponse.result.payment);
-              squarePayments.push(squarePaymentResponse.result);
+            if (squareMoneyCreditPaymentResponse.success === true) {
+              logger.info(`For internal id ${reference_id} and Square Order ID: ${squareOrder.id} payment for ${MoneyToDisplayString(squareMoneyCreditPaymentResponse.result.amount, true)} successful.`)
+              //this next line duplicates the store credit payments, since we already have them independently processed
+              //payments.push(squareMoneyCreditPaymentResponse.result.payment);
+              squarePayments.push(squareMoneyCreditPaymentResponse.result);
             } else {
-              const errorDetail = `Failed to process payment: ${JSON.stringify(squarePaymentResponse)}`;
+              const errorDetail = `Failed to process payment: ${JSON.stringify(squareMoneyCreditPaymentResponse)}`;
               logger.error(errorDetail);
-              squarePaymentResponse.error.forEach(e => errors.push({ category: e.category, code: e.code, detail: e.detail }))
-              // throw for flow control
-              throw errorDetail;
+              squareMoneyCreditPaymentResponse.error.forEach(e => (errors.push({ category: e.category, code: e.code, detail: e.detail })));
             }
           }
-          if (USE_SQUARE_ITEMIZED_ORDERING) {
-            // Payment Part C, substep ii: process money store credit payments
-            await Promise.all(moneyCreditPayments.map(async (payment) => {
-              try {
-                const squareMoneyCreditPaymentResponse = await SquareProviderInstance.CreatePayment({
-                  sourceId: "EXTERNAL",
-                  storeCreditPayment: payment,
-                  amount: payment.amount,
-                  tipAmount: payment.tipAmount,
-                  referenceId: payment.payment.code,
-                  squareOrderId: squareOrder.id,
-                  autocomplete: false
-                });
-                orderUpdateCount += 1;
-                if (squareMoneyCreditPaymentResponse.success === true) {
-                  logger.info(`For internal id ${reference_id} and Square Order ID: ${squareOrder.id} payment for ${MoneyToDisplayString(squareMoneyCreditPaymentResponse.result.payment.amount, true)} successful.`)
-                  //this next line duplicates the store credit payments, since we already have them independently processed
-                  //payments.push(squareMoneyCreditPaymentResponse.result.payment);
-                  squarePayments.push(squareMoneyCreditPaymentResponse.result);
-                } else {
-                  const errorDetail = `Failed to process payment: ${JSON.stringify(squareMoneyCreditPaymentResponse)}`;
-                  logger.error(errorDetail);
-                  squareMoneyCreditPaymentResponse.error.forEach(e => (errors.push({ category: e.category, code: e.code, detail: e.detail })));
-                }
-              }
-              catch (err: any) {
-                logger.error(`got error in processing money store credit of ${JSON.stringify(payment)} and error: ${JSON.stringify(err)}`);
-                throw err;
-              }
-            }));
+          catch (err: any) {
+            logger.error(`got error in processing money store credit of ${JSON.stringify(payment)} and error: ${JSON.stringify(err)}`);
+            throw err;
           }
-          // Payment Part D: mark the order paid via PayOrder endpoint
-          const payOrderResponse = await SquareProviderInstance.PayOrder(squareOrder.id, squarePayments.map(x => x.squarePaymentId));
-          orderUpdateCount = orderUpdateCount + 1;
-          if (payOrderResponse.success) {
-            logger.info(`Square order successfully marked paid.`);
-            // THE GOAL YALL
-            hasChargingSucceeded = true;
-          } else {
-            const errorDetail = `Failed to pay the order: ${JSON.stringify(payOrderResponse)}`;
-            logger.error(errorDetail);
-            payOrderResponse.error.forEach(e => (errors.push({ category: e.category, code: e.code, detail: e.detail })));
-          }
-        } else {
-          logger.error(`Failed to create order: ${JSON.stringify(squareOrderResponse.error)}`);
-          squareOrderResponse.error.map(e => errors.push({ category: e.category, code: e.code, detail: e.detail }))
-        }
-      } catch (err: any) {
-        logger.error(JSON.stringify(err));
-        // pass
+        }));
+
+        // THE GOAL YALL
+        hasChargingSucceeded = true;
+
+      } else {
+        logger.error(`Failed to create order: ${JSON.stringify(squareOrderResponse.error)}`);
+        squareOrderResponse.error.map(e => errors.push({ category: e.category, code: e.code, detail: e.detail }))
       }
-      // Payment part E: make sure it worked and if not, undo the payments
-      if (!hasChargingSucceeded) {
-        try {
-          if (squareOrder !== null) {
-            SquareProviderInstance.OrderStateChange(squareOrder.id, squareOrder.version + orderUpdateCount, "CANCELED");
-          }
-          RefundSquarePayments(squarePayments);
-          CancelSquarePayments(squarePayments);
-          RefundStoreCreditDebits(storeCreditResponses);
+    } catch (err: any) {
+      logger.error(JSON.stringify(err));
+      // pass
+    }
+    // Payment part E: make sure it worked and if not, undo the payments
+    if (!hasChargingSucceeded) {
+      try {
+        if (squareOrder !== null) {
+          SquareProviderInstance.OrderStateChange(squareOrder.id, squareOrder.version + orderUpdateCount, "CANCELED");
         }
-        catch (err: any) {
-          logger.error(`Got error when unwinding the order after failure: ${JSON.stringify(err)}`);
-          return { status: 500, success: false, result: null, errors };
-        }
-        return { status: 400, success: false, result: null, errors };
+        RefundSquarePayments(squarePayments, 'Refunding failed order');
+        CancelSquarePayments(squarePayments);
+        RefundStoreCreditDebits(storeCreditResponses);
       }
-      else {
-        isPaid = true;
+      catch (err: any) {
+        logger.error(`Got error when unwinding the order after failure: ${JSON.stringify(err)}`);
+        return { status: 500, success: false, result: null, errors };
       }
+      return { status: 400, success: false, result: null, errors };
+    }
+    else {
+      isPaid = true;
     }
 
     const completedOrderInstance: Omit<WOrderInstance, 'id' | 'metadata'> = {
@@ -784,7 +1033,6 @@ export class OrderManager implements WProvider {
               // send email to eat(pie)
               const createInternalEmailInfo = CreateInternalEmail(
                 dbOrderInstance,
-                fulfillmentConfig,
                 service_title,
                 requestTime,
                 dateTimeInterval,
@@ -808,7 +1056,7 @@ export class OrderManager implements WProvider {
           throw error;
         });
     } catch (err) {
-      await RefundSquarePayments(squarePayments);
+      await RefundSquarePayments(squarePayments, 'Refunding failed order');
       await RefundStoreCreditDebits(storeCreditResponses);
       return { status: 500, success: false, result: null, errors };
     }

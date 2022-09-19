@@ -651,6 +651,8 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
       logger.info(`Removed isBase from ${removeIsBaseUpdateResponse.modifiedCount} ProductInstances`);
     }
   }],
+  "0.5.10": [{ major: 0, minor: 5, patch: 11 }, async () => {
+  }],
 }
 
 export class DatabaseManager implements WProvider {

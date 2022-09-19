@@ -41,7 +41,11 @@ export const WCashPaymentSchema = WOrderPaymentSchema.discriminator(PaymentMetho
         change: {
           type: WMoney,
           required: true
-        }
+        },
+        processorId: {
+          type: String,
+          required: true
+        },
       },
       _id: false,
       required: true
@@ -58,6 +62,10 @@ export const WStoreCreditPaymentSchema = WOrderPaymentSchema.discriminator(Payme
         },
         lock: {
           type: WEncryptStringLockSchema,
+          required: true
+        },
+        processorId: {
+          type: String,
           required: true
         },
       },

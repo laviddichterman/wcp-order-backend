@@ -17,7 +17,7 @@ export class GoogleProvider implements WProvider {
   #sheetsAPI;
   #oauth2Client: OAuth2Client;
   constructor() {
-    this.#calendarAPI = google.calendar('v3');
+    this.#calendarAPI = google.calendar("v3");
     this.#sheetsAPI = google.sheets('v4');
   }
 
@@ -126,6 +126,49 @@ export class GoogleProvider implements WProvider {
       catch (err) {
         logger.error("event not created: %o", event);
         logger.error(err);
+        throw (err);
+      }  
+    }
+    return await ExponentialBackoff(call_fxn, () => true, retry, max_retry);
+  };
+
+  DeleteCalendarEvent = async ( eventId: string,
+    retry=0, 
+    max_retry=5) => {
+    const call_fxn = async () => {
+      try { 
+        await this.#calendarAPI.events.delete({
+          auth: this.#oauth2Client,
+          calendarId: 'primary',
+          eventId: eventId
+        });
+        logger.debug(`Deleted event: ${eventId}`);
+        return true;
+      }
+      catch (err) {
+        logger.error(`Event not deleted, got error: ${err}`);
+        throw (err);
+      }  
+    }
+    return await ExponentialBackoff(call_fxn, () => true, retry, max_retry);
+  };
+
+  ModifyCalendarEvent = async ( eventId: string, sparseEvent: Partial<Omit<calendar_v3.Schema$Event, 'id'>>,
+    retry=0, 
+    max_retry=5) => {
+    const call_fxn = async () => {
+      try { 
+        const response = await this.#calendarAPI.events.patch({
+          auth: this.#oauth2Client,
+          calendarId: 'primary',
+          eventId: eventId,
+          requestBody: sparseEvent
+        });
+        logger.debug(`Patched event: ${eventId}, updated fields: ${JSON.stringify(sparseEvent, null, 2)}`);
+        return response;
+      }
+      catch (err) {
+        logger.error(`Event not updated, got error: ${err}`);
         throw (err);
       }  
     }
