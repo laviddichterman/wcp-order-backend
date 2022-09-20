@@ -454,6 +454,19 @@ export class OrderManager implements WProvider {
   constructor() {
   }
 
+  public GetOrder = async (orderId: string): Promise<WOrderInstance | null> => {
+    // find order and return
+    return await WOrderInstanceModel.findById(orderId);
+  };
+
+  public GetOrders = async (queryDate: string | null, queryStatus: WOrderStatus | null): Promise<WOrderInstance[]> => {
+    // find orders and return
+    return await WOrderInstanceModel.find({ 
+      ...(queryDate ? { 'fulfillment.selectedDate': queryDate } : {}),
+      ...(queryStatus ? { 'status': queryStatus } : {} )
+     }).exec();
+  };
+
   public DiscountOrder = async (idempotencyKey: string, orderId: string, reason: string) => {
     // TODO
   }
@@ -466,13 +479,6 @@ export class OrderManager implements WProvider {
       { new: true })
       .then(async (lockedOrder) => {
         logger.debug(`Found order ${JSON.stringify(lockedOrder, null, 2)}, lock applied.`);
-
-        // TODO: SPLIT LOGIC IF lockedOrder.status === CONFIRMED vs OPEN
-        // if (lockedOrder.status === WOrderStatus.CONFIRMED) {
-        //   const errorDetail = "Logic to support cancelation of confirmed orders not yet implemented";
-        //   logger.error(errorDetail)
-        //   return { status: 405, success: false, errors: [], result: null };
-        // }
 
         try {
           const squareOrderId = lockedOrder.metadata.find(x => x.key === 'SQORDER')!.value;
@@ -497,7 +503,7 @@ export class OrderManager implements WProvider {
               // refund the credit in the store credit DB
               StoreCreditProviderInstance.RefundStoreCredit(payment.payment.code, payment.amount, 'WARIO');
             }
-            const undoPaymentResponse = await (squareOrder.state === 'COMPLETED' || squareOrder.fulfillments.length > 0 && squareOrder.fulfillments[0].state ?
+            const undoPaymentResponse = await (lockedOrder.status === WOrderStatus.CONFIRMED ?
               SquareProviderInstance.RefundPayment(payment.payment.processorId, payment.amount, reason) :
               SquareProviderInstance.CancelPayment(payment.payment.processorId));
             version += 1;
@@ -505,16 +511,15 @@ export class OrderManager implements WProvider {
           });
           // TODO: check refund statuses
 
-          // cancel square order
+          // cancel square fulfillment(s) and the order if it's not paid
           if (squareOrder.state === 'OPEN') {
-            const updateSquareOrderResponse = lockedOrder.status === WOrderStatus.CONFIRMED ?
-              await SquareProviderInstance.OrderUpdate(squareOrderId, squareOrder.version, {
-                state: 'CANCELED',
-                fulfillments: [{
-                  state: 'CANCELED'
-                }]
-              }, []) :
-              await SquareProviderInstance.OrderStateChange(squareOrderId, version, 'CANCELED');
+            const updateSquareOrderResponse = await SquareProviderInstance.OrderUpdate(squareOrderId, version, {
+              ...(lockedOrder.status === WOrderStatus.OPEN ? { state: 'CANCELED' } : {} ),
+              fulfillments: squareOrder.fulfillments.map(x => ({
+                uid: x.uid,
+                state: 'CANCELED'
+              }))
+            }, []);
             if (!updateSquareOrderResponse.success) {
               return { status: 500, success: false, result: null, errors: updateSquareOrderResponse.error };
             }
@@ -673,29 +678,8 @@ export class OrderManager implements WProvider {
           return { status: 405, success: false, errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'UNEXPECTED_VALUE', detail: 'Square order found, but not in a state where we can confirm it' }], result: null };
         }
 
-        // add fulfillment to order
-        const promisedTime = WDateUtils.ComputeServiceDateTime(lockedOrder.fulfillment);
-        const updateSquareOrderResponse = await SquareProviderInstance.OrderUpdate(squareOrderId, squareOrder.version, {
-          fulfillments: [{
-            type: "PICKUP",
-            pickupDetails: {
-              scheduleType: 'SCHEDULED',
-              recipient: {
-                displayName: `${lockedOrder.customerInfo.givenName} ${lockedOrder.customerInfo.familyName}`,
-                emailAddress: lockedOrder.customerInfo.email,
-                phoneNumber: lockedOrder.customerInfo.mobileNum
-              },
-              pickupAt: formatRFC3339(promisedTime),
-            },
-          }],
-        }, []);
-        if (!updateSquareOrderResponse.success) {
-          // failed to update square order fulfillment
-
-        }
-
         // mark the order paid via PayOrder endpoint
-        const payOrderResponse = await SquareProviderInstance.PayOrder(squareOrder.id, lockedOrder.payments.map(x => x.payment.processorId));
+        const payOrderResponse = await SquareProviderInstance.PayOrder(squareOrder.id, squareOrder.tenders.map(x=>x.id));
         if (payOrderResponse.success) {
           logger.info(`Square order successfully marked paid.`);
           // send email to customer
@@ -738,13 +722,10 @@ export class OrderManager implements WProvider {
     }
     const fulfillmentConfig = DataProviderInstance.Fulfillments[createOrderRequest.fulfillment.selectedService];
     const STORE_NAME = DataProviderInstance.KeyValueConfig.STORE_NAME;
-    const USE_SQUARE_ITEMIZED_ORDERING = DataProviderInstance.KeyValueConfig.USE_SQUARE_ITEMIZED_ORDERING === '1';
     const reference_id = requestTime.toString(36).toUpperCase();
     const dateTimeInterval = DateTimeIntervalBuilder(createOrderRequest.fulfillment, fulfillmentConfig);
     const customer_name = [createOrderRequest.customerInfo.givenName, createOrderRequest.customerInfo.familyName].join(" ");
     const service_title = ServiceTitleBuilder(fulfillmentConfig.displayName, createOrderRequest.fulfillment, customer_name, dateTimeInterval);
-
-
     // 2. Rebuild the order from the menu/catalog
     const menu = GenerateMenu(CatalogProviderInstance.CatalogSelectors, CatalogProviderInstance.Catalog.version, dateTimeInterval.start, createOrderRequest.fulfillment.selectedService);
     const { noLongerAvailable, rebuiltCart } = RebuildOrderState(menu, createOrderRequest.cart, dateTimeInterval.start, fulfillmentConfig);
@@ -789,8 +770,8 @@ export class OrderManager implements WProvider {
         errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'INSUFFICIENT_FUNDS', detail: errorDetail }]
       };
     }
-    // we've only set the tip if we've proceeded to checkout with CC, so no need to check tip fudging if not closing out here
-    if (createOrderRequest.nonce && recomputedTotals.tipAmount.amount < recomputedTotals.tipMinimum.amount) {
+    
+    if (recomputedTotals.tipAmount.amount < recomputedTotals.tipMinimum.amount) {
       const errorDetail = `Computed tip below minimum of ${MoneyToDisplayString(recomputedTotals.tipMinimum, true)} vs sent: ${MoneyToDisplayString(recomputedTotals.tipAmount, true)}`;
       logger.error(errorDetail)
       return {
@@ -819,7 +800,7 @@ export class OrderManager implements WProvider {
 
     // 5. enter payment subsection
     let isPaid = false;
-    let tipAmountRemaining = USE_SQUARE_ITEMIZED_ORDERING ? recomputedTotals.tipAmount.amount : 0;
+    let tipAmountRemaining = recomputedTotals.tipAmount.amount;
     const discounts: OrderLineDiscount[] = [];
     const moneyCreditPayments: StoreCreditPayment[] = [];
 
@@ -897,7 +878,6 @@ export class OrderManager implements WProvider {
     let squareOrder: SquareOrder | null = null;
     let orderUpdateCount = 0;
     const squarePayments: OrderPayment[] = [];
-    const payments: OrderPayment[] = moneyCreditPayments.slice();
     try {
       const squareOrderResponse = await (SquareProviderInstance.CreateOrderCart(
         reference_id,
@@ -922,7 +902,6 @@ export class OrderManager implements WProvider {
           orderUpdateCount += 1;
           if (squarePaymentResponse.success === true) {
             logger.info(`For internal id ${reference_id} and Square Order ID: ${squareOrder.id} payment for ${MoneyToDisplayString(squarePaymentResponse.result.amount, true)} successful.`)
-            payments.push(squarePaymentResponse.result);
             squarePayments.push(squarePaymentResponse.result);
           } else {
             const errorDetail = `Failed to process payment: ${JSON.stringify(squarePaymentResponse)}`;
@@ -948,7 +927,6 @@ export class OrderManager implements WProvider {
             if (squareMoneyCreditPaymentResponse.success === true) {
               logger.info(`For internal id ${reference_id} and Square Order ID: ${squareOrder.id} payment for ${MoneyToDisplayString(squareMoneyCreditPaymentResponse.result.amount, true)} successful.`)
               //this next line duplicates the store credit payments, since we already have them independently processed
-              //payments.push(squareMoneyCreditPaymentResponse.result.payment);
               squarePayments.push(squareMoneyCreditPaymentResponse.result);
             } else {
               const errorDetail = `Failed to process payment: ${JSON.stringify(squareMoneyCreditPaymentResponse)}`;
@@ -995,7 +973,7 @@ export class OrderManager implements WProvider {
 
     const completedOrderInstance: Omit<WOrderInstance, 'id' | 'metadata'> = {
       ...orderInstanceBeforeCharging,
-      payments: payments.slice(),
+      payments: squarePayments.slice(),
       discounts: discounts.slice(),
       status: WOrderStatus.OPEN,
       locked: null

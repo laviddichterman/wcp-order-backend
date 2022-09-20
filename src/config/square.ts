@@ -162,18 +162,18 @@ export class SquareProvider implements WProvider {
         })),
         locationId: DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
         state: "OPEN",
-        // fulfillments: [{
-        //   type: "PICKUP",
-        //   pickupDetails: {
-        //     scheduleType: 'SCHEDULED',
-        //     recipient: {
-        //       displayName: `${orderBeforeCharging.customerInfo.givenName} ${orderBeforeCharging.customerInfo.familyName}`,
-        //       emailAddress: orderBeforeCharging.customerInfo.email,
-        //       phoneNumber: orderBeforeCharging.customerInfo.mobileNum
-        //     },
-        //     pickupAt: formatRFC3339(promisedTime),
-        //   },
-        // }],
+        fulfillments: [{
+          type: "PICKUP",
+          pickupDetails: {
+            scheduleType: 'SCHEDULED',
+            recipient: {
+              displayName: `${orderBeforeCharging.customerInfo.givenName} ${orderBeforeCharging.customerInfo.familyName}`,
+              emailAddress: orderBeforeCharging.customerInfo.email,
+              phoneNumber: orderBeforeCharging.customerInfo.mobileNum
+            },
+            pickupAt: formatRFC3339(promisedTime),
+          },
+        }],
       },
     };
     const call_fxn = async (): Promise<SquareProviderApiCallReturnSuccess<CreateOrderResponse>> => {

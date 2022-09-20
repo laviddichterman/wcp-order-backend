@@ -3,7 +3,7 @@ import { WMoney } from "../WMoney";
 import { Schema } from "mongoose";
 import { WEncryptStringLockSchema } from "./WEncryptStringLock";
 
-export const WOrderLineDiscountSchema = new Schema({
+export const WOrderLineDiscountSchema = new Schema<OrderLineDiscount>({
   t: {
     type: String,
     enum: DiscountMethod,

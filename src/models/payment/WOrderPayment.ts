@@ -3,7 +3,7 @@ import { OrderPayment, PaymentMethod, TenderBaseStatus, StoreCreditPayment, Cred
 import { WMoney } from "../WMoney";
 import { WEncryptStringLockSchema } from "./WEncryptStringLock";
 
-export const WOrderPaymentSchema = new Schema({
+export const WOrderPaymentSchema = new Schema<OrderPayment>({
   t: {
     type: String,
     enum: PaymentMethod,
@@ -19,6 +19,10 @@ export const WOrderPaymentSchema = new Schema({
     requred: true
   },
   amount: {
+    type: WMoney,
+    required: true
+  },
+  tipAmount: {
     type: WMoney,
     required: true
   },
