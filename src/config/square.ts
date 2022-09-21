@@ -137,19 +137,7 @@ export class SquareProvider implements WProvider {
             auth: discount.discount.lock.auth,
             code: discount.discount.code
           }
-        })),
-          // // we apply these non-square payments of store credit that were purchased with square
-          // // accounting will need to address this later
-          // ...orderBeforeCharging.payments.map(nonSquarePayment => ({
-          //   type: "FIXED_AMOUNT",
-          //   name: nonSquarePayment.t === PaymentMethod.StoreCredit ? `Gift Code: ${nonSquarePayment.payment.code}` : 'Cash',
-          //   amountMoney: IMoneyToBigIntMoney(nonSquarePayment.amount),
-          //   appliedMoney: IMoneyToBigIntMoney(nonSquarePayment.amount),
-          //   metadata: (nonSquarePayment.t === PaymentMethod.StoreCredit ? {
-          //     code: nonSquarePayment.payment.code,
-          //     ...nonSquarePayment.payment.lock
-          //   } : {})
-          // })),
+        }))
         ],
         pricingOptions: {
           autoApplyDiscounts: true,
@@ -231,7 +219,7 @@ export class SquareProvider implements WProvider {
     };
 
     const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<UpdateOrderResponse>> => {
-      logger.info(`sending order status change request for order ${orderId}: ${JSON.stringify(request_body)}`);
+      logger.info(`sending order update request for order ${orderId}: ${JSON.stringify(request_body)}`);
       const { result, ...httpResponse } = await orders_api.updateOrder(orderId, request_body);
       return { success: true, result: result, error: [] };
     }
