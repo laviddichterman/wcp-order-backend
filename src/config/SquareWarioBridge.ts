@@ -28,7 +28,7 @@ const OptionInstanceToSquareIdSpecifier = (optionInstance: IOptionInstance) => {
   switch (optionInstance.placement) {
     case OptionPlacement.LEFT: return "MODIFIER_LEFT";
     case OptionPlacement.RIGHT: return "MODIFIER_RIGHT";
-    case OptionPlacement.WHOLE: 
+    case OptionPlacement.WHOLE:
       switch (optionInstance.qualifier) {
         case OptionQualifier.REGULAR: return "MODIFIER_WHOLE";
         case OptionQualifier.HEAVY: return "MODIFIER_HEAVY";
@@ -47,7 +47,7 @@ const OptionInstanceToSquareIdSpecifier = (optionInstance: IOptionInstance) => {
  * @returns 
  */
 export const IdMappingsToExternalIds = (mappings: CatalogIdMapping[] | undefined, batch: string): KeyValue[] =>
-  mappings?.filter(x=>x.clientObjectId!.startsWith(`#${batch}`)).map(x => ({ key: `${WARIO_SQUARE_ID_METADATA_KEY}${x.clientObjectId!.substring(1+batch.length)}`, value: x.objectId! })) ?? [];
+  mappings?.filter(x => x.clientObjectId!.startsWith(`#${batch}`)).map(x => ({ key: `${WARIO_SQUARE_ID_METADATA_KEY}${x.clientObjectId!.substring(1 + batch.length)}`, value: x.objectId! })) ?? [];
 
 export const MapPaymentStatus = (sqStatus: string) => {
   switch (sqStatus) {
@@ -72,27 +72,40 @@ export const CreateOrderFromCart = (reference_id: string,
   return {
     referenceId: reference_id,
     lineItems: Object.values(cart).flatMap(e => e.map(x => {
-      // left and right catalog product instance are the same, 
-      if (x.product.m.pi[PRODUCT_LOCATION.LEFT] === x.product.m.pi[PRODUCT_LOCATION.RIGHT]) {
-        const catalogProductInstance = CatalogProviderInstance.Catalog.productInstances[x.product.m.pi[PRODUCT_LOCATION.LEFT]];
-        const wholeModifiers: OrderLineItemModifier[] = x.product.m.exhaustive_modifiers.whole.map(mtid_moid => {
-          const catalogOption = CatalogProviderInstance.Catalog.options[mtid_moid[1]];
-          return { basePriceMoney: IMoneyToBigIntMoney(catalogOption.price), name: catalogOption.displayName }
-        })
-      } else {
-        // left and right catalog product instance aren't the same. this isn't really supported by square, so we'll do our best
-        // TODO: need to create a split product item that just bypasses square's lack of support here
+      const catalogProductInstance = CatalogProviderInstance.Catalog.productInstances[x.product.m.pi[PRODUCT_LOCATION.LEFT]];
+      const squareItemVariationId = GetSquareIdFromExternalIds(catalogProductInstance.externalIDs, "ITEM_VARIATION");
+      // // left and right catalog product instance are the same, 
+      // if (x.product.m.pi[PRODUCT_LOCATION.LEFT] === x.product.m.pi[PRODUCT_LOCATION.RIGHT]) {
 
-      }
+      //   const wholeModifiers: OrderLineItemModifier[] = x.product.m.exhaustive_modifiers.whole.map(mtid_moid => {
+      //     const catalogOption = CatalogProviderInstance.Catalog.options[mtid_moid[1]];
+      //     return { basePriceMoney: IMoneyToBigIntMoney(catalogOption.price), name: catalogOption.displayName }
+      //   })
+      // } else {
+      //   // left and right catalog product instance aren't the same. this isn't really supported by square, so we'll do our best
+      //   // TODO: need to create a split product item that just bypasses square's lack of support here
+
+      // }
       return {
         quantity: x.quantity.toString(10),
-        //catalogObjectId: VARIABLE_PRICE_STORE_CREDIT_CATALOG_ID,
-        basePriceMoney: IMoneyToBigIntMoney(x.product.p.PRODUCT_CLASS.price),
+        ...(squareItemVariationId === null ? {
+          name: x.product.m.name,
+          variationName: x.product.m.name,
+          basePriceMoney: IMoneyToBigIntMoney(x.product.p.PRODUCT_CLASS.price)
+        } : {
+          catalogObjectId: squareItemVariationId,
+        } ),
         itemType: "ITEM",
-        name: x.product.m.name, // its either catalogObjectId or name
         modifiers: x.product.p.modifiers.flatMap(mod => mod.options.map(option => {
           const catalogOption = CatalogProviderInstance.Catalog.options[option.optionId];
-          return { basePriceMoney: IMoneyToBigIntMoney(catalogOption.price), name: catalogOption.displayName } as OrderLineItemModifier
+          const squareModifierId = GetSquareIdFromExternalIds(catalogOption.externalIDs, OptionInstanceToSquareIdSpecifier(option));
+          return (squareModifierId === null ? {
+            basePriceMoney: IMoneyToBigIntMoney(catalogOption.price),
+            name: catalogOption.displayName
+          } : {
+            catalogObjectId: squareModifierId,
+            quantity: "1"
+          }) as OrderLineItemModifier;
         }))
       } as OrderLineItem;
     })),
@@ -169,22 +182,24 @@ export const ProductInstanceToSquareCatalogObject = (locationIds: string[], prod
       skipModifierScreen: productInstance.displayFlags.order.skip_customization,
       modifierListInfo: product.modifiers.map(mtspec => {
         const modifierEntry = catalogSelectors.modifierEntry(mtspec.mtid);
-        const selectedOptionsForModifierType = productInstance.modifiers.find(x=>x.modifierTypeId === mtspec.mtid)?.options ?? [];
+        const selectedOptionsForModifierType = productInstance.modifiers.find(x => x.modifierTypeId === mtspec.mtid)?.options ?? [];
         return modifierEntry!.options.map(oId => {
           const option = catalogSelectors.option(oId)!;
-          const optionInstance = selectedOptionsForModifierType.find(x=>x.optionId === option.id) ?? null;
+          const optionInstance = selectedOptionsForModifierType.find(x => x.optionId === option.id) ?? null;
           const squareModifierListId = GetSquareIdFromExternalIds(option.externalIDs, 'MODIFIER_LIST')!;
-          if (squareModifierListId === null) { 
+          if (squareModifierListId === null) {
             logger.error(`Missing MODIFIER_LIST in ${option.externalIDs}`);
           }
           return {
             modifierListId: squareModifierListId!,
             minSelectedModifiers: 0,
             maxSelectedModifiers: 1,
-            ...(optionInstance ? { modifierOverrides: [{
-              modifierId: GetSquareIdFromExternalIds(option.externalIDs, OptionInstanceToSquareIdSpecifier(optionInstance))!,
-              onByDefault: true
-            }]} : {})
+            ...(optionInstance ? {
+              modifierOverrides: [{
+                modifierId: GetSquareIdFromExternalIds(option.externalIDs, OptionInstanceToSquareIdSpecifier(optionInstance))!,
+                onByDefault: true
+              }]
+            } : {})
           }
         })
       }).flat(),
