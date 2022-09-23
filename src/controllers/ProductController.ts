@@ -215,7 +215,9 @@ export class ProductController implements IExpressController {
       const doc = await CatalogProviderInstance.UpdateProductInstance({
         piid: productInstanceId,
         product: {
-          modifiers: product.modifiers, price: product.price
+          modifiers: product.modifiers, 
+          price: product.price,
+          printerGroup: product.printerGroup
         },
         productInstance: {
           description: req.body.description,

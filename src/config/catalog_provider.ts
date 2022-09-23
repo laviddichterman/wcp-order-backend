@@ -16,7 +16,8 @@ import {
   RecordProductInstanceFunctions,
   CatalogGenerator,
   ICatalogSelectorWrapper,
-  KeyValue
+  KeyValue,
+  PrinterGroup
 } from "@wcp/wcpshared";
 import DBVersionModel from '../models/DBVersionSchema';
 import { WCategoryModel } from '../models/catalog/category/WCategorySchema';
@@ -26,12 +27,13 @@ import { WOptionModel } from '../models/catalog/options/WOptionSchema';
 import { WOptionTypeModel } from '../models/catalog/options/WOptionTypeSchema';
 import { WProductInstanceFunctionModel } from '../models/query/product/WProductInstanceFunction';
 import { WOrderInstanceFunctionModel } from "../models/query/order/WOrderInstanceFunction";
+import { PrinterGroupModel } from "../models/catalog/WPrinterGroupSchema";
 import { DataProviderInstance } from "./dataprovider";
 import { SocketIoProviderInstance } from "./socketio_provider";
 import logger from '../logging';
 import { WProvider } from "../types/WProvider";
 import { SquareProviderInstance } from "./square";
-import { GetSquareExternalIds, GetSquareIdIndexFromExternalIds, IdMappingsToExternalIds, ModifierOptionToSquareCatalogObject, ProductInstanceToSquareCatalogObject, WARIO_SQUARE_ID_METADATA_KEY } from "./SquareWarioBridge";
+import { GetSquareExternalIds, GetSquareIdIndexFromExternalIds, IdMappingsToExternalIds, ModifierOptionToSquareCatalogObject, PrinterGroupToSquareCatalogObjectPlusDummyProduct, ProductInstanceToSquareCatalogObject, WARIO_SQUARE_ID_METADATA_KEY } from "./SquareWarioBridge";
 import { CatalogObject } from "square";
 
 const ValidateProductModifiersFunctionsCategories = function (modifiers: { mtid: string; enable: string | null; }[], category_ids: string[], catalog: CatalogProvider) {
@@ -52,9 +54,15 @@ const BatchDeleteCatalogObjectsFromExternalIds = async (externalIds: KeyValue[])
 
 type UpdateProductInstanceProps = {
   piid: string;
-  product: Pick<IProduct, 'price' | 'modifiers'>;
+  product: Pick<IProduct, 'price' | 'modifiers' | 'printerGroup'>;
   productInstance: Partial<Omit<IProductInstance, 'id' | 'productId'>>;
 };
+
+type UpdatePrinterGroupProps = { 
+  id: string;
+  printerGroup: Partial<Omit<PrinterGroup, 'id'>>;
+};
+
 type UpdateModifierOptionProps = {
   id: string;
   modifierOption: Partial<Omit<IOption, 'id' | 'modifierTypeId'>>;
@@ -63,6 +71,7 @@ const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
 export class CatalogProvider implements WProvider {
   #categories: Record<string, ICategory>;
+  #printerGroups: Record<string, PrinterGroup>;
   #modifier_types: IOptionType[];
   #options: IOption[];
   #products: IProduct[];
@@ -73,6 +82,10 @@ export class CatalogProvider implements WProvider {
   #apiver: SEMVER;
   constructor() {
     this.#apiver = { major: 0, minor: 0, patch: 0 };
+  }
+
+  get PrinterGroups() {
+    return this.#printerGroups;
   }
 
   get Categories() {
@@ -118,6 +131,17 @@ export class CatalogProvider implements WProvider {
       this.#categories = ReduceArrayToMapByKey((await WCategoryModel.find().exec()).map(x => x.toObject()), 'id');
     } catch (err) {
       logger.error(`Failed fetching categories with error: ${JSON.stringify(err)}`);
+      return false;
+    }
+    return true;
+  }
+
+  SyncPrinterGroups = async () => {
+    logger.debug(`Syncing Printer Groups.`);
+    try {
+      this.#printerGroups = ReduceArrayToMapByKey((await PrinterGroupModel.find().exec()).map(x => x.toObject()), 'id');
+    } catch (err) {
+      logger.error(`Failed fetching printer groups with error: ${JSON.stringify(err)}`);
       return false;
     }
     return true;
@@ -203,6 +227,13 @@ export class CatalogProvider implements WProvider {
     SocketIoProviderInstance.EmitCatalog(this.#catalog);
   }
 
+  CheckAllPrinterGroupsSquareIdsAndFixIfNeeded = async () => {
+    const batches = Object.values(this.#printerGroups)
+      .filter(pg => GetSquareIdIndexFromExternalIds(pg.externalIDs, 'CATEGORY') === -1)
+      .map(pg => ({ id: pg.id, printerGroup: {} } as UpdatePrinterGroupProps));
+    return batches.length > 0 ? await this.BatchUpdatePrinterGroup(batches) : null;
+  }
+
   CheckAllModifierOptionsHaveSquareIdsAndFixIfNeeded = async () => {
     const batches = this.#options
       .filter(opt => GetSquareIdIndexFromExternalIds(opt.externalIDs, 'MODIFIER_LIST') === -1)
@@ -226,6 +257,7 @@ export class CatalogProvider implements WProvider {
     this.#apiver = newVer!;
 
     await Promise.all([
+      this.SyncPrinterGroups(),
       this.SyncCategories(),
       this.SyncModifierTypes(),
       this.SyncOptions(),
@@ -235,6 +267,7 @@ export class CatalogProvider implements WProvider {
       this.SyncOrderInstanceFunctions()]);
 
     this.RecomputeCatalog();
+    await this.CheckAllPrinterGroupsSquareIdsAndFixIfNeeded();
     await this.CheckAllModifierOptionsHaveSquareIdsAndFixIfNeeded();
     await this.CheckAllProductsHaveSquareIdsAndFixIfNeeded();
 
@@ -244,6 +277,101 @@ export class CatalogProvider implements WProvider {
 
     logger.info(`Finished Bootstrap of CatalogProvider`);
   };
+
+  CreatePrinterGroup = async (printerGroup: Omit<PrinterGroup, "id">) => {
+    logger.info(`Creating Printer Group: ${JSON.stringify(printerGroup)}`);
+    const upsertResponse = 
+      await SquareProviderInstance.BatchUpsertCatalogObjects([{ 
+        objects: PrinterGroupToSquareCatalogObjectPlusDummyProduct(
+          [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION, DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE], printerGroup, [], "")}]);
+    if (!upsertResponse.success) {
+      logger.error(`failed to add square category, got errors: ${JSON.stringify(upsertResponse.error)}`);
+      return null;
+    }
+
+    const doc = new PrinterGroupModel({ 
+      ...printerGroup,
+      externalIDs: [...printerGroup.externalIDs, ...IdMappingsToExternalIds(upsertResponse.result.idMappings, "")]
+    });
+    await doc.save();
+    await this.SyncPrinterGroups();
+    return doc;
+  };
+
+  BatchUpdatePrinterGroup = async (batches: UpdatePrinterGroupProps[]): Promise<(PrinterGroup | null)[]> => {
+    logger.info(`Updating printer group(s) ${batches.map(x => `ID: ${x.id}, changes: ${JSON.stringify(x.printerGroup)}`).join(", ")}`);
+
+    const oldPGs = batches.map(b => this.#printerGroups[b.id]!);
+    const newExternalIdses = batches.map((b, i) => b.printerGroup.externalIDs ?? oldPGs[i].externalIDs);
+    const existingSquareExternalIds = newExternalIdses.map((ids) => GetSquareExternalIds(ids)).flat();
+    let existingSquareObjects: CatalogObject[] = [];
+    if (existingSquareExternalIds.length > 0) {
+      const batchRetrieveCatalogObjectsResponse = await SquareProviderInstance.BatchRetrieveCatalogObjects(existingSquareExternalIds.map(x => x.value), false);
+      if (!batchRetrieveCatalogObjectsResponse.success) {
+        logger.error(`Getting current square CatalogObjects failed with ${JSON.stringify(batchRetrieveCatalogObjectsResponse.error)}`);
+        return batches.map(_ => null);
+      }
+      existingSquareObjects = batchRetrieveCatalogObjectsResponse.result.objects ?? [];
+    }
+
+    const catalogObjects = batches.map((b, i) =>
+      PrinterGroupToSquareCatalogObjectPlusDummyProduct(
+        [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION, DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE],
+        { ...oldPGs[i], ...b.printerGroup },
+        existingSquareObjects, 
+        ('000' + i).slice(-3)));
+    const upsertResponse = await SquareProviderInstance.BatchUpsertCatalogObjects(catalogObjects.map(x => ({ objects: x })));
+    if (!upsertResponse.success) {
+      logger.error(`Failed to update square categories, got errors: ${JSON.stringify(upsertResponse.error)}`);
+      return batches.map(_ => null);
+    }
+
+    const mappings = upsertResponse.result.idMappings;
+
+    const updated = await Promise.all(batches.map(async (b, i) => {
+      const doc = await PrinterGroupModel
+        .findByIdAndUpdate(b.id,
+          {
+            ...b.printerGroup,
+            externalIDs: [...newExternalIdses[i], ...IdMappingsToExternalIds(mappings, ('000' + i).slice(-3))]
+          }, { new: true })
+        .exec();
+      if (!doc) {
+        return null;
+      }
+      return doc;
+    }));
+
+    this.SyncPrinterGroups();
+    return updated;
+  }
+
+  UpdatePrinterGroup = async (props: UpdatePrinterGroupProps) => {
+    return (await this.BatchUpdatePrinterGroup([props]))[0];
+  };
+
+  DeletePrinterGroup = async (id: string) => {
+    logger.debug(`Removing Printer Group ${id}`);
+    const doc = await PrinterGroupModel.findByIdAndDelete(id).exec();
+    if (!doc) {
+      return null;
+    }
+
+    // NOTE: this removes the category from the Square ITEMs as well
+    await BatchDeleteCatalogObjectsFromExternalIds(doc.externalIDs);
+
+    await this.SyncPrinterGroups();
+
+    const product_printer_group_delete = await WProductModel.updateMany(
+      { "printerGroup": doc.id },
+      { "printerGroup": null }).exec();
+    if (product_printer_group_delete.modifiedCount > 0) {
+      logger.debug(`Removed printer group from ${product_printer_group_delete.modifiedCount} Products.`);
+      await this.SyncProducts();
+      this.RecomputeCatalogAndEmit();
+    }
+    return doc;
+  }
 
   CreateCategory = async (category: Omit<ICategory, "id">) => {
     const doc = new WCategoryModel(category);
@@ -384,14 +512,24 @@ export class CatalogProvider implements WProvider {
     }
     // First create the square modifier
     const modifierEntry = this.Catalog.modifiers[modifierOption.modifierTypeId];
-    const upsertResponse = await SquareProviderInstance.UpsertCatalogObject(ModifierOptionToSquareCatalogObject([DataProviderInstance.KeyValueConfig.SQUARE_LOCATION], modifierEntry.modifierType.ordinal, modifierOption, [], ""));
+    const upsertResponse = await SquareProviderInstance.UpsertCatalogObject(
+      ModifierOptionToSquareCatalogObject(
+        [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION, DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE],
+        modifierEntry.modifierType.ordinal, 
+        modifierOption, 
+        [], 
+        ""));
     if (!upsertResponse.success) {
+      logger.error(`failed to add square modifiers, got errors: ${JSON.stringify(upsertResponse.error)}`);
       return null;
     }
     // add the modifier to all items that reference this modifier option's modifierTypeId
     const productUpdates = Object.values(this.#catalog.products)
       .filter(p => p.product.modifiers.findIndex(x => x.mtid === modifierOption.modifierTypeId) !== -1)
-      .map((p) => p.instances.map(piid => ({ piid, product: { modifiers: p.product.modifiers, price: p.product.price }, productInstance: {} }))).flat();
+      .map((p) => p.instances.map(piid => ({ 
+        piid, 
+        product: { modifiers: p.product.modifiers, price: p.product.price, printerGroup: p.product.printerGroup }, 
+        productInstance: {} }))).flat();
     if (productUpdates.length > 0) {
       await this.BatchUpdateProductInstance(productUpdates, true);
       // explicitly don't need to sync the product instances here since we're just making this batch call for square product updates
@@ -458,7 +596,7 @@ export class CatalogProvider implements WProvider {
     const catalogObjects = batches.map((b, i) => {
       const modifierTypeOrdinal = this.CatalogSelectors.modifierEntry(oldOptions[i].modifierTypeId)!.modifierType.ordinal;
       return ModifierOptionToSquareCatalogObject(
-        [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION],
+        [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION, DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE],
         modifierTypeOrdinal,
         {
           ...oldOptions[i],
@@ -472,10 +610,11 @@ export class CatalogProvider implements WProvider {
 
     const upsertResponse = await SquareProviderInstance.BatchUpsertCatalogObjects(catalogObjects.map(x => ({ objects: [x] })));
     if (!upsertResponse.success) {
-      logger.error(`Failed to update square product`);
+      logger.error(`Failed to update square product, got errors: ${JSON.stringify(upsertResponse.error)}`);
       return batches.map(_ => null);
     }
 
+    
     const mappings = upsertResponse.result.idMappings;
 
     const updated = await Promise.all(batches.map(async (b, i) => {
@@ -538,10 +677,18 @@ export class CatalogProvider implements WProvider {
     if (!ValidateProductModifiersFunctionsCategories(product.modifiers, product.category_ids, this)) {
       return null;
     }
-
     // add the product instance to the square catalog here
-    const upsertResponse = await SquareProviderInstance.UpsertCatalogObject(ProductInstanceToSquareCatalogObject([DataProviderInstance.KeyValueConfig.SQUARE_LOCATION], product, instance, this.CatalogSelectors, [], ""));
+    const upsertResponse = await SquareProviderInstance.UpsertCatalogObject(
+      ProductInstanceToSquareCatalogObject(
+        [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION, DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE],
+        product, 
+        instance,
+        product.printerGroup ? this.#printerGroups[product.printerGroup] : null,
+        this.CatalogSelectors, 
+        [], 
+        ""));
     if (!upsertResponse.success) {
+      logger.error(`failed to add product, got errors: ${JSON.stringify(upsertResponse.error)}`);
       return null;
     }
 
@@ -578,6 +725,7 @@ export class CatalogProvider implements WProvider {
     let removedModifierTypes: string[] = [];
     let addedModifierTypes = false;
     const adjustedPrice = product.price && product.price !== oldProductEntry.product.price ? product.price : null;
+    const adjustedPrinterGroup = product.printerGroup !== oldProductEntry.product.printerGroup;
     if (product.modifiers) {
       const oldModifierTypes = oldProductEntry.product.modifiers.map(x => x.mtid);
       const newModifierTypes = product.modifiers.map(x => x.mtid);
@@ -592,7 +740,7 @@ export class CatalogProvider implements WProvider {
         pi.modifiers.filter(mod => removedModifierTypes.includes(mod.modifierTypeId)).length > 0)
       .map((pi) => ({
         piid: pi.id,
-        product: { modifiers: updated.modifiers, price: updated.price },
+        product: { modifiers: updated.modifiers, price: updated.price, printerGroup: updated.printerGroup },
         productInstance: {
           modifiers: pi.modifiers.filter(x => !removedModifierTypes.includes(x.modifierTypeId))
         }
@@ -632,8 +780,16 @@ export class CatalogProvider implements WProvider {
   CreateProductInstance = async (productInstance: Omit<IProductInstance, 'id'>) => {
     // add the product instance to the square catalog here
     const product = this.#catalog.products[productInstance.productId]!.product;
-    const upsertResponse = await SquareProviderInstance.UpsertCatalogObject(ProductInstanceToSquareCatalogObject([DataProviderInstance.KeyValueConfig.SQUARE_LOCATION], product, productInstance, this.CatalogSelectors, [], ""));
+    const upsertResponse = await SquareProviderInstance.UpsertCatalogObject(ProductInstanceToSquareCatalogObject(
+      [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION, DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE],
+      product, 
+      productInstance,
+      product.printerGroup ? this.#printerGroups[product.printerGroup] : null,
+      this.CatalogSelectors, 
+      [], 
+      ""));
     if (!upsertResponse.success) {
+      logger.error(`failed to add square product, got errors: ${JSON.stringify(upsertResponse.error)}`);
       return null;
     }
     const doc = new WProductInstanceModel({
@@ -664,13 +820,14 @@ export class CatalogProvider implements WProvider {
 
     const catalogObjects = batches.map((b, i) =>
       ProductInstanceToSquareCatalogObject(
-        [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION],
+        [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION, DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE],
         b.product,
         { ...oldProductInstances[i], ...b.productInstance },
+        b.product.printerGroup ? this.#printerGroups[b.product.printerGroup] : null,
         this.CatalogSelectors, existingSquareObjects, ('000' + i).slice(-3)));
     const upsertResponse = await SquareProviderInstance.BatchUpsertCatalogObjects(catalogObjects.map(x => ({ objects: [x] })));
     if (!upsertResponse.success) {
-      logger.error(`Failed to update square product`);
+      logger.error(`Failed to update square product, got errors: ${JSON.stringify(upsertResponse.error)}`);
       return batches.map(_ => null);
     }
 

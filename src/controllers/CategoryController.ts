@@ -47,7 +47,7 @@ export class CategoryController implements IExpressController {
   };
   private postCategory = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const newcategory = await CatalogProviderInstance.CreateCategory({
+      const doc = await CatalogProviderInstance.CreateCategory({
         name: req.body.name,
         ordinal: req.body.ordinal,
         description: req.body.description,
@@ -57,9 +57,13 @@ export class CategoryController implements IExpressController {
         display_flags: req.body.display_flags,
         serviceDisable: req.body.serviceDisable
       });
-      const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/${newcategory.id}`;
+      if (!doc) {
+        logger.error(`Unable to create category`);
+        return res.status(500).send(`Unable to create category`);
+      }
+      const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/${doc.id}`;
       res.setHeader('Location', location);
-      return res.status(201).send(newcategory);
+      return res.status(201).send(doc);
     } catch (error) {
       return next(error)
     }

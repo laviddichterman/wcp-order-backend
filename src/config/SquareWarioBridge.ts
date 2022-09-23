@@ -1,8 +1,7 @@
 import { OrderLineItem, Money, OrderLineItemModifier, Order, CatalogObject, CatalogIdMapping } from 'square';
 import logger from '../logging';
-import { DataProviderInstance } from './dataprovider';
 import { CatalogProviderInstance } from './catalog_provider';
-import { CategorizedRebuiltCart, IMoney, TenderBaseStatus, WOrderInstance, PRODUCT_LOCATION, IProduct, IProductInstance, KeyValue, ICatalogSelectors, OptionPlacement, OptionQualifier, IOption, IOptionInstance } from '@wcp/wcpshared';
+import { CategorizedRebuiltCart, IMoney, TenderBaseStatus, WOrderInstance, PRODUCT_LOCATION, IProduct, IProductInstance, KeyValue, ICatalogSelectors, OptionPlacement, OptionQualifier, IOption, IOptionInstance, PrinterGroup, CURRENCY } from '@wcp/wcpshared';
 import { formatRFC3339 } from 'date-fns';
 import { IS_PRODUCTION } from '../utils';
 
@@ -17,9 +16,9 @@ export const IMoneyToBigIntMoney = (money: IMoney): Money => ({ amount: BigInt(m
 
 export const GetSquareExternalIds = (externalIds: KeyValue[]) => externalIds.filter(x => x.key.startsWith(WARIO_SQUARE_ID_METADATA_KEY));
 
-export const GetSquareIdIndexFromExternalIds = (externalIds: KeyValue[], specifier: string = '') =>
+export const GetSquareIdIndexFromExternalIds = (externalIds: KeyValue[], specifier: string) =>
   externalIds.findIndex(x => x.key === `${WARIO_SQUARE_ID_METADATA_KEY}${specifier}`);
-export const GetSquareIdFromExternalIds = (externalIds: KeyValue[], specifier: string = ''): string | null => {
+export const GetSquareIdFromExternalIds = (externalIds: KeyValue[], specifier: string): string | null => {
   const kvIdx = GetSquareIdIndexFromExternalIds(externalIds, specifier);
   return kvIdx === -1 ? null : externalIds[kvIdx].value;
 }
@@ -64,10 +63,13 @@ export const MapPaymentStatus = (sqStatus: string) => {
 }
 
 
-export const CreateOrderFromCart = (reference_id: string,
+export const CreateOrderFromCart = (
+  locationId: string,
+  reference_id: string,
   orderBeforeCharging: Omit<WOrderInstance, 'id' | 'metadata' | 'status' | 'refunds' | 'locked'>,
   promisedTime: Date | number,
-  cart: CategorizedRebuiltCart): Order => {
+  cart: CategorizedRebuiltCart,
+  withFulfillment: boolean): Order => {
 
   return {
     referenceId: reference_id,
@@ -94,7 +96,7 @@ export const CreateOrderFromCart = (reference_id: string,
           basePriceMoney: IMoneyToBigIntMoney(x.product.p.PRODUCT_CLASS.price)
         } : {
           catalogObjectId: squareItemVariationId,
-        } ),
+        }),
         itemType: "ITEM",
         modifiers: x.product.p.modifiers.flatMap(mod => mod.options.map(option => {
           const catalogOption = CatalogProviderInstance.Catalog.options[option.optionId];
@@ -133,9 +135,9 @@ export const CreateOrderFromCart = (reference_id: string,
       appliedMoney: IMoneyToBigIntMoney(tax.amount),
       scope: 'ORDER'
     })),
-    locationId: DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
+    locationId,
     state: "OPEN",
-    fulfillments: [{
+    fulfillments: withFulfillment ? [{
       type: "PICKUP",
       pickupDetails: {
         scheduleType: 'SCHEDULED',
@@ -146,7 +148,7 @@ export const CreateOrderFromCart = (reference_id: string,
         },
         pickupAt: formatRFC3339(promisedTime),
       },
-    }],
+    }] : [],
 
   };
 }
@@ -154,7 +156,68 @@ export const CreateOrderFromCart = (reference_id: string,
 /**
  * BEGIN CATALOG SECTION
  */
-export const ProductInstanceToSquareCatalogObject = (locationIds: string[], product: Pick<IProduct, 'modifiers' | 'price'>, productInstance: Omit<IProductInstance, 'id' | 'productId'>, catalogSelectors: ICatalogSelectors, currentObjects: Pick<CatalogObject, 'id' | 'version'>[], batch: string): CatalogObject => {
+
+export const PrinterGroupToSquareCatalogObjectPlusDummyProduct = (locationIds: string[], printerGroup: Omit<PrinterGroup, 'id'>, currentObjects: Pick<CatalogObject, 'id' | 'version'>[], batch: string): CatalogObject[] => {
+  const squareCategoryId = GetSquareIdFromExternalIds(printerGroup.externalIDs, 'CATEGORY') ?? `#${batch}CATEGORY`;
+  const versionCategoryId = currentObjects.find(x => x.id === squareCategoryId)?.version ?? null;
+  const squareItemId = GetSquareIdFromExternalIds(printerGroup.externalIDs, 'ITEM') ?? `#${batch}ITEM`;
+  const versionItem = currentObjects.find(x => x.id === squareItemId)?.version ?? null;
+  const squareItemVariationId = GetSquareIdFromExternalIds(printerGroup.externalIDs, 'ITEM_VARIATION') ?? `#${batch}ITEM_VARIATION`;
+  const versionItemVariation = currentObjects.find(x => x.id === squareItemVariationId)?.version ?? null;
+
+  return [{
+    id: squareCategoryId,
+    ...(versionCategoryId !== null ? { version: versionCategoryId } : {}),
+    type: 'CATEGORY',
+    // categories have to go to all locations
+    // presentAtAllLocations: false,
+    // presentAtLocationIds: locationIds,
+    categoryData: {
+      name: printerGroup.name,
+    }
+  },
+  {
+    id: squareItemId,
+    type: 'ITEM',
+    presentAtAllLocations: false,
+    presentAtLocationIds: locationIds,
+    ...(versionItem !== null ? { version: versionItem } : {}),
+    itemData: {
+      categoryId: squareCategoryId,
+      availableElectronically: true,
+      availableForPickup: true,
+      availableOnline: true,
+      descriptionHtml: "MESSAGE",
+      name: "MESSAGE",
+      productType: "REGULAR",
+      skipModifierScreen: true,
+      variations: [{
+        id: squareItemVariationId,
+        type: 'ITEM_VARIATION',
+        presentAtAllLocations: false,
+        presentAtLocationIds: locationIds,
+        ...(versionItemVariation !== null ? { version: versionItemVariation } : {}),
+        itemVariationData: {
+          itemId: squareItemId,
+          name: "MESSAGE",
+          pricingType: 'FIXED_PRICING',
+          priceMoney: IMoneyToBigIntMoney({ currency: CURRENCY.USD, amount: 0 }),
+          sellable: true,
+          stockable: false,
+          availableForBooking: false
+        }
+      }]
+    }
+  }];
+}
+
+export const ProductInstanceToSquareCatalogObject = (locationIds: string[],
+  product: Pick<IProduct, 'modifiers' | 'price'>,
+  productInstance: Omit<IProductInstance, 'id' | 'productId'>,
+  printerGroup: PrinterGroup | null,
+  catalogSelectors: ICatalogSelectors,
+  currentObjects: Pick<CatalogObject, 'id' | 'version'>[],
+  batch: string): CatalogObject => {
   // todo: we need a way to handle naming of split/super custom product instances
   // do we need to add an additional variation on the square item corresponding to the base product instance for split and otherwise unruly product instances likely with pricingType: VARIABLE?
   // maybe we add variations for each half and half combo?
@@ -171,6 +234,7 @@ export const ProductInstanceToSquareCatalogObject = (locationIds: string[], prod
     presentAtLocationIds: locationIds,
     ...(versionItem !== null ? { version: versionItem } : {}),
     itemData: {
+      ...(printerGroup ? { categoryId: GetSquareIdFromExternalIds(printerGroup.externalIDs, 'CATEGORY')! } : {}),
       abbreviation: productInstance.shortcode.slice(0, 24),
       availableElectronically: true,
       availableForPickup: true,

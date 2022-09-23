@@ -1,9 +1,9 @@
 import logger from '../logging';
 import { WProvider } from '../types/WProvider';
 import PACKAGE_JSON from '../../package.json';
-import { ConstLiteralDiscriminator, IAbstractExpression, IConstLiteralExpression, IHasAnyOfModifierExpression, IIfElseExpression, ILogicalExpression, IModifierPlacementExpression, OptionPlacement, OptionQualifier, ProductInstanceFunctionType, SEMVER, WFunctional } from '@wcp/wcpshared';
+import { OptionPlacement, OptionQualifier, ReduceArrayToMapByKey, SEMVER } from '@wcp/wcpshared';
 import DBVersionModel from '../models/DBVersionSchema';
-import { WProductInstanceFunctionModel as WProductInstanceFunctionModelACTUAL } from '../models/query/product/WProductInstanceFunction';
+import { KeyValueModel } from '../models/settings/KeyValueSchema';
 import { WMoney } from '../models/WMoney';
 import { IntervalSchema } from '../models/IntervalSchema';
 import { WCategoryModel } from '../models/catalog/category/WCategorySchema';
@@ -11,7 +11,9 @@ import { WOptionModel as WOptionModelActual } from '../models/catalog/options/WO
 import { WOptionTypeModel as WOptionTypeModelActual } from '../models/catalog/options/WOptionTypeSchema';
 import { WProductModel as WProductModelActual } from '../models/catalog/products/WProductSchema';
 import { WProductInstanceModel as WProductInstanceModelActual } from '../models/catalog/products/WProductInstanceSchema';
+import { PrinterGroupModel } from '../models/catalog/WPrinterGroupSchema';
 import mongoose, { Schema } from "mongoose";
+import { exit } from 'process';
 
 const SetVersion = async (new_version: SEMVER) => {
   return await DBVersionModel.findOneAndUpdate({}, new_version, { new: true, upsert: true });
@@ -391,25 +393,57 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
   "0.5.10": [{ major: 0, minor: 5, patch: 11 }, async () => {
   }],
   "0.5.11": [{ major: 0, minor: 5, patch: 12 }, async () => {
-    // mass set allowHeavy, allowLite, allowOTS to false for all IOption
-    const WOptionModel = mongoose.model('woPTioNscHema', new Schema({
-      metadata: {
-        flavor_factor: Number,
-        bake_factor: Number,
-        can_split: Boolean,
-        allowHeavy: Boolean,
-        allowLite: Boolean,
-        allowOTS: Boolean,
-      },
-    }));
-    const updateResponse = await WOptionModel.updateMany({}, {
-      $set: { 'metadata.allowHeavy': false, 'metadata.allowLite': false, 'metadata.allowOTS': false }
-    }).exec();
-    if (updateResponse.modifiedCount > 0) {
-      logger.debug(`Updated ${updateResponse.modifiedCount} IOption with disabled allowallowHeavyExtra, allowLite, and allowOTS.`);
+    {
+      // mass set allowHeavy, allowLite, allowOTS to false for all IOption
+      const WOptionModel = mongoose.model('woPTioNscHema', new Schema({
+        metadata: {
+          flavor_factor: Number,
+          bake_factor: Number,
+          can_split: Boolean,
+          allowHeavy: Boolean,
+          allowLite: Boolean,
+          allowOTS: Boolean,
+        },
+      }));
+      const updateResponse = await WOptionModel.updateMany({}, {
+        $set: { 'metadata.allowHeavy': false, 'metadata.allowLite': false, 'metadata.allowOTS': false }
+      }).exec();
+      if (updateResponse.modifiedCount > 0) {
+        logger.debug(`Updated ${updateResponse.modifiedCount} IOption with disabled allowallowHeavyExtra, allowLite, and allowOTS.`);
+      }
+      else {
+        logger.warn("No options had allowallowHeavyExtra, allowLite, and allowOTS disabled");
+      }
     }
-    else {
-      logger.warn("No options had allowallowHeavyExtra, allowLite, and allowOTS disabled");
+  }],
+  "0.5.12": [{ major: 0, minor: 5, patch: 13 }, async () => {
+    {
+      // make a printer group for every category
+      const found_key_value_store = await KeyValueModel.findOne().exec();
+      if (!found_key_value_store) {
+        exit(-1);
+      }
+      const categories = await WCategoryModel.find().exec();
+      const printerGroups = await PrinterGroupModel.insertMany(categories.map(c=>({
+        name: c.name,
+        externalIDs: [],
+        singleItemPerTicket: false
+      })));
+      const catIdToPGMapping = ReduceArrayToMapByKey(categories.map((c, i) => ({cId: c.id, pg: printerGroups[i]})), 'cId');
+      const products = await WProductModelActual.find().exec();
+      await Promise.all(products
+        .filter(p=>p.category_ids.length > 0)
+        .map(async(p) => {
+          const pg = catIdToPGMapping[p.category_ids[0]].pg;
+          return await WProductModelActual
+            .findByIdAndUpdate(p.id, { printerGroup: pg.id }, { new: true }).exec()
+            .then(doc => {
+              logger.info(`Assigned printer group ${pg.name} to ProductId: ${p.id}`);
+            })
+            .catch((err: any) => {
+              logger.error(`Failed updating product ID: ${p.id} with printer group. Got error: ${JSON.stringify(err)}`);
+            });
+      }));
     }
   }],
 }

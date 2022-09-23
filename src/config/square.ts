@@ -15,7 +15,12 @@ type SquareProviderApiCallReturnSuccess<T> = { success: true; result: T; error: 
 type SquareProviderApiCallReturnValue<T> = SquareProviderApiCallReturnSuccess<T> |
 { success: false; result: null; error: SquareError[]; };
 
+// LAST WE WERE DOING, USING SQUARE_LOCATION_ALTERNATE to create dummy orders with pickup name `${customer name} ${num} of ${total}` 
+// we also want dummy orders sent to indicate cancellations since our cancelations aren't working for the square for restaurants UI
+// some of this should go in the SquareWarioBridge
+
 export interface SquareProviderProcessPaymentRequest {
+  locationId: string;
   sourceId: string;
   amount: IMoney;
   referenceId: string;
@@ -71,17 +76,19 @@ export class SquareProvider implements WProvider {
     logger.info(`Finished Bootstrap of SquareProvider`);
   }
 
-  CreateOrderCart = async (reference_id: string,
+  CreateOrderCart = async (
+    locationId: string,
+    reference_id: string,
     orderBeforeCharging: Omit<WOrderInstance, 'id' | 'metadata' | 'status' | 'refunds' | 'locked'>,
     promisedTime: Date | number,
     cart: CategorizedRebuiltCart,
-    note: string): Promise<SquareProviderApiCallReturnValue<CreateOrderResponse>> => {
+    withFulfillment: boolean): Promise<SquareProviderApiCallReturnValue<CreateOrderResponse>> => {
     // TODO: use idempotency key from order instead
     const idempotency_key = crypto.randomBytes(22).toString('hex');
     const orders_api = this.#client.ordersApi;
     const request_body: CreateOrderRequest = {
       idempotencyKey: idempotency_key,
-      order: CreateOrderFromCart(reference_id, orderBeforeCharging, promisedTime, cart)
+      order: CreateOrderFromCart(locationId, reference_id, orderBeforeCharging, promisedTime, cart, withFulfillment)
     };
     const call_fxn = async (): Promise<SquareProviderApiCallReturnSuccess<CreateOrderResponse>> => {
       try {
@@ -97,7 +104,7 @@ export class SquareProvider implements WProvider {
     return await SquareRequestHandler(call_fxn);
   }
 
-  CreateOrderStoreCredit = async (reference_id: string, amount: IMoney, note: string): Promise<SquareProviderApiCallReturnValue<CreateOrderResponse>> => {
+  CreateOrderStoreCredit = async (locationId: string, reference_id: string, amount: IMoney, note: string): Promise<SquareProviderApiCallReturnValue<CreateOrderResponse>> => {
     // TODO: use idempotency key from order instead
     const idempotency_key = crypto.randomBytes(22).toString('hex');
     const orders_api = this.#client.ordersApi;
@@ -111,7 +118,7 @@ export class SquareProvider implements WProvider {
           basePriceMoney: IMoneyToBigIntMoney(amount),
           note: note
         }],
-        locationId: DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
+        locationId,
         state: "OPEN",
       }
     };
@@ -124,7 +131,7 @@ export class SquareProvider implements WProvider {
     return await SquareRequestHandler(callFxn);
   }
 
-  OrderUpdate = async (orderId: string, version: number, updatedOrder: Omit<Partial<Order>, 'locationId' | 'version' | 'id'>, fieldsToClear: string[]) => {
+  OrderUpdate = async (locationId: string, orderId: string, version: number, updatedOrder: Omit<Partial<Order>, 'locationId' | 'version' | 'id'>, fieldsToClear: string[]) => {
     const idempotency_key = crypto.randomBytes(22).toString('hex');
     const orders_api = this.#client.ordersApi;
     const request_body: UpdateOrderRequest = {
@@ -132,7 +139,7 @@ export class SquareProvider implements WProvider {
       fieldsToClear,
       order: {
         ...updatedOrder,
-        locationId: DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
+        locationId,
         version,
       }
     };
@@ -145,8 +152,8 @@ export class SquareProvider implements WProvider {
     return await SquareRequestHandler(callFxn);
   }
 
-  OrderStateChange = async (orderId: string, version: number, new_state: string) => {
-    return this.OrderUpdate(orderId, version, { state: new_state }, []);
+  OrderStateChange = async (locationId: string, orderId: string, version: number, new_state: string) => {
+    return this.OrderUpdate(locationId, orderId, version, { state: new_state }, []);
   }
 
   RetrieveOrder = async (squareOrderId: string) => {
@@ -159,8 +166,17 @@ export class SquareProvider implements WProvider {
     return await SquareRequestHandler(callFxn);
   }
 
-  CreatePayment = async (
-    { sourceId, storeCreditPayment, amount, referenceId, squareOrderId, tipAmount, verificationToken, autocomplete }: SquareProviderCreatePaymentRequest): Promise<SquareProviderApiCallReturnValue<OrderPayment>> => {
+  CreatePayment = async ({
+    locationId,
+    sourceId,
+    storeCreditPayment,
+    amount,
+    referenceId,
+    squareOrderId,
+    tipAmount,
+    verificationToken,
+    autocomplete
+  }: SquareProviderCreatePaymentRequest): Promise<SquareProviderApiCallReturnValue<OrderPayment>> => {
     const idempotency_key = crypto.randomBytes(22).toString('hex');
     const payments_api = this.#client.paymentsApi;
     const tipMoney = tipAmount ?? { currency: CURRENCY.USD, amount: 0 };
@@ -171,7 +187,7 @@ export class SquareProvider implements WProvider {
       tipMoney: IMoneyToBigIntMoney(tipMoney),
       referenceId: storeCreditPayment ? storeCreditPayment.payment.code : referenceId,
       orderId: squareOrderId,
-      locationId: DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
+      locationId,
       autocomplete,
       acceptPartialAuthorization: false,
       statementDescriptionIdentifier: `${DataProviderInstance.KeyValueConfig.STORE_NAME}`.slice(0, 19),
@@ -189,13 +205,13 @@ export class SquareProvider implements WProvider {
         return {
           success: true,
           result: storeCreditPayment ? {
-              ...storeCreditPayment,
-              status: paymentStatus,
-              payment: {
-                ...storeCreditPayment.payment,
-                processorId
-              }
-            } :
+            ...storeCreditPayment,
+            status: paymentStatus,
+            payment: {
+              ...storeCreditPayment.payment,
+              processorId
+            }
+          } :
             (result.payment.sourceType === 'CASH' ? {
               t: PaymentMethod.Cash,
               createdAt,
@@ -236,8 +252,8 @@ export class SquareProvider implements WProvider {
     return await SquareRequestHandler(callFxn);
   }
 
-  ProcessPayment = async ({ sourceId, amount, referenceId, squareOrderId, verificationToken }: SquareProviderProcessPaymentRequest) => {
-    return await this.CreatePayment({ sourceId, amount, referenceId, squareOrderId, verificationToken, autocomplete: true });
+  ProcessPayment = async ({ locationId, sourceId, amount, referenceId, squareOrderId, verificationToken }: SquareProviderProcessPaymentRequest) => {
+    return await this.CreatePayment({ locationId, sourceId, amount, referenceId, squareOrderId, verificationToken, autocomplete: true });
   }
 
   PayOrder = async (square_order_id: string, paymentIds: string[]) => {

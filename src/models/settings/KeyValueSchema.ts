@@ -19,7 +19,10 @@ export interface IKeyValueStore {
 
 // generic bucket for authentication credentials
 export const SettingsKeyValueSchema = new Schema<IKeyValueStore>({ 
-  settings: [KeyValueEntrySchema]
+  settings: {
+    type: [KeyValueEntrySchema],
+    required: true
+  }
  }, { _id: false });
 
-export default mongoose.model<IKeyValueStore>(path.basename(__filename).replace(path.extname(__filename), ''), SettingsKeyValueSchema);
+export const KeyValueModel = mongoose.model<IKeyValueStore>(path.basename(__filename).replace(path.extname(__filename), ''), SettingsKeyValueSchema);

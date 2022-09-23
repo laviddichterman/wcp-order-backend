@@ -2,7 +2,7 @@ import { WProvider } from '../types/WProvider';
 import { FulfillmentConfig, ReduceArrayToMapByKey, IWSettings, PostBlockedOffToFulfillmentsRequest, SetLeadTimesRequest, WDateUtils } from '@wcp/wcpshared';
 import { HydratedDocument } from 'mongoose';
 import logger from '../logging';
-import KeyValueModel, { IKeyValueStore } from '../models/settings/KeyValueSchema';
+import { KeyValueModel, IKeyValueStore } from '../models/settings/KeyValueSchema';
 import { SettingsModel } from '../models/settings/SettingsSchema';
 import { FulfillmentModel } from '../models/settings/FulfillmentSchema';
 import { Promise } from 'bluebird';

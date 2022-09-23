@@ -545,7 +545,10 @@ export class OrderManager implements WProvider {
           const squareOrder = retrieveSquareOrderResponse.result.order!;
           // cancel square fulfillment(s) and the order if it's not paid
           if (squareOrder.state === 'OPEN') {
-            const updateSquareOrderResponse = await SquareProviderInstance.OrderUpdate(squareOrderId, squareOrder.version!, {
+            const updateSquareOrderResponse = await SquareProviderInstance.OrderUpdate(
+              DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
+              squareOrderId, 
+              squareOrder.version!, {
               ...(lockedOrder.status === WOrderStatus.OPEN ? { state: 'CANCELED' } : {}),
               fulfillments: squareOrder.fulfillments?.map(x => ({
                 uid: x.uid,
@@ -631,9 +634,11 @@ export class OrderManager implements WProvider {
           return { status: 405, success: false, errors: [], result: null };
         }
 
-
         //adjust square fulfillment
-        const updateSquareOrderResponse = await SquareProviderInstance.OrderUpdate(squareOrderId, squareOrder.version!, {
+        const updateSquareOrderResponse = await SquareProviderInstance.OrderUpdate(
+          DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
+          squareOrderId, 
+          squareOrder.version!, {
           fulfillments: squareOrder.fulfillments?.map(x => ({ uid: x.uid, pickupDetails: { pickupAt: formatRFC3339(promisedTime) } })) ?? [],
         }, []);
         if (!updateSquareOrderResponse.success) {
@@ -911,11 +916,12 @@ export class OrderManager implements WProvider {
     const squarePayments: OrderPayment[] = [];
     try {
       const squareOrderResponse = await (SquareProviderInstance.CreateOrderCart(
+        DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
         reference_id,
         orderInstanceBeforeCharging,
         dateTimeInterval.start,
         rebuiltCart,
-        ""));
+        true));
       if (squareOrderResponse.success === true) {
         squareOrder = squareOrderResponse.result.order!;
         const squareOrderId = squareOrder.id!;
@@ -925,6 +931,7 @@ export class OrderManager implements WProvider {
         //  substep i: close out the order via credit card payment or if no money credit payments either, a 0 cash money payment, 
         if (recomputedTotals.balanceAfterCredits.amount > 0 || moneyCreditPayments.length === 0) {
           const squarePaymentResponse = await SquareProviderInstance.CreatePayment({
+            locationId: DataProviderInstance.KeyValueConfig.SQUARE_LOCATION, // TODO: is this the right location?
             sourceId: recomputedTotals.balanceAfterCredits.amount > 0 ? createOrderRequest.nonce! : 'CASH',
             amount: recomputedTotals.balanceAfterCredits,
             tipAmount: { currency: recomputedTotals.tipAmount.currency, amount: tipAmountRemaining },
@@ -948,6 +955,7 @@ export class OrderManager implements WProvider {
         await Promise.all(moneyCreditPayments.map(async (payment) => {
           try {
             const squareMoneyCreditPaymentResponse = await SquareProviderInstance.CreatePayment({
+              locationId: DataProviderInstance.KeyValueConfig.SQUARE_LOCATION, // IS THIS THE RIGHT LOCATION?
               sourceId: "EXTERNAL",
               storeCreditPayment: payment,
               amount: payment.amount,
@@ -1053,7 +1061,11 @@ export class OrderManager implements WProvider {
     // Payment Appendix: if we're here, then we didn't charge the order and we need to back it out.
     try {
       if (squareOrder !== null) {
-        SquareProviderInstance.OrderStateChange(squareOrder.id!, squareOrderVersion, "CANCELED");
+        SquareProviderInstance.OrderStateChange(
+          DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
+          squareOrder.id!,
+          squareOrderVersion, 
+          "CANCELED");
       }
       RefundSquarePayments(squarePayments, 'Refunding failed order');
       CancelSquarePayments(squarePayments);
@@ -1068,6 +1080,9 @@ export class OrderManager implements WProvider {
 
   Bootstrap = async () => {
     logger.info("Order Manager Bootstrap");
+
+    // TODO: create interval timer that runs every hour to send unsent orders for the following 5
+
     logger.info("Order Manager Bootstrap completed.");
   };
 
