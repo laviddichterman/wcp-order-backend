@@ -39,7 +39,6 @@ export class DeliveryAddressController implements IExpressController {
 
   private validateAddress = async (req: Request, response: Response, next: NextFunction) => {
     try {
-      
       const GOOGLE_GEOCODE_KEY = DataProviderInstance.KeyValueConfig.GOOGLE_GEOCODE_KEY;
       const reqBody: DeliveryAddressValidateRequest = {
         fulfillmentId: req.body.fulfillmentId,
@@ -48,11 +47,12 @@ export class DeliveryAddressController implements IExpressController {
         state: req.body.state,
         zipcode: req.body.zipcode
       };
-      if (!DataProviderInstance.Fulfillments[reqBody.fulfillmentId].serviceArea) {
+      const serviceArea = DataProviderInstance.Fulfillments[reqBody.fulfillmentId].serviceArea;
+      if (!serviceArea) {
         // error out, cannot find fulfllment's serviceArea
         return response.status(404).send(`Unable to find delivery area for fulfillment: ${reqBody.fulfillmentId}`);
       }
-      const DELIVERY_POLY = turf.polygon(DataProviderInstance.Fulfillments[reqBody.fulfillmentId].serviceArea.coordinates);
+      const DELIVERY_POLY = turf.polygon(serviceArea.coordinates);
       client.geocode( { 
         params: { 
           address: `${reqBody.address} ${reqBody.zipcode} ${reqBody.city}, ${reqBody.state}`,
@@ -78,10 +78,10 @@ export class DeliveryAddressController implements IExpressController {
       })
         .catch(e => {
           logger.error(e);
-          response.status(500).json(e);
+          return response.status(500).json(e);
         })
       } catch (error) {
-        next(error)
+        return next(error)
       }
   }
 

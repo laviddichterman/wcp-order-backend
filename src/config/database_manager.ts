@@ -21,271 +21,6 @@ interface IMigrationFunctionObject {
   [index: string]: [SEMVER, () => Promise<void>]
 }
 const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
-  "0.2.21": [{ major: 0, minor: 3, patch: 0 }, async () => {
-    {
-      // re-assign each option_type_id and enable_function in every ModifierOption
-      {
-        const promises: Promise<any>[] = [];
-        const WOptionModel = mongoose.model('woptioNschema', new Schema({ option_type_id: Schema.Types.Mixed, enable_function: Schema.Types.Mixed }));
-        const options = await WOptionModel.find();
-        options.forEach(
-          o => {
-            // @ts-ignore
-            o.option_type_id = String(o.option_type_id);
-            if (o.enable_function) {
-              // @ts-ignore
-              o.enable_function = String(o.enable_function);
-            }
-            promises.push(o.save().then(() => {
-              logger.debug(`Updated Option ${o.id} with type safe option type id ${o.option_type_id} ${typeof o.option_type_id}.`);
-            }).catch((err) => {
-              // @ts-ignore
-              logger.error(`Unable to update Option ${o.id}. Got error: ${JSON.stringify(err)}`);
-            }));
-          });
-        await Promise.all(promises);
-      }
-      {
-        var promises: Promise<any>[] = [];
-        const WProductModel = mongoose.model('wproductsChema', new Schema({
-          modifiers: [{ mtid: Schema.Types.Mixed, enable: Schema.Types.Mixed }],
-          category_ids: [Schema.Types.Mixed],
-        }));
-        const elts = await WProductModel.find();
-        elts.forEach(
-          o => {
-            //@ts-ignore
-            o.modifiers = o.modifiers.map(mod => ({ mtid: String(mod.mtid), enable: mod.enable ? String(mod.enable) : null }));
-            //@ts-ignore
-            o.category_ids = o.category_ids.map(c => String(c));
-            promises.push(o.save({}).then(() => {
-              logger.debug(`Updated WProductModel ${o.id} with type safe modifers ${o.modifiers}, categoryIds: ${o.category_ids}.`);
-            }).catch((err) => {
-              logger.error(`Unable to update WProductModel ${o.id}. Got error: ${JSON.stringify(err)}`);
-            }));
-          });
-        await Promise.all(promises);
-      }
-      {
-        var promises: Promise<any>[] = [];
-        const WProductInstanceModel = mongoose.model('wproductinstanceSchema', new Schema({ product_id: Schema.Types.Mixed }));
-        const elts = await WProductInstanceModel.find();
-        elts.forEach(
-          o => {
-            //@ts-ignore
-            o.product_id = String(o.product_id)
-            promises.push(o.save({}).then(() => {
-              logger.debug(`Updated WProductInstanceModel ${o.id} with type safe product ID ${o.product_id}.`);
-            }).catch((err) => {
-              logger.error(`Unable to update WProductInstanceModel ${o.id}. Got error: ${JSON.stringify(err)}`);
-            }));
-          });
-        await Promise.all(promises);
-      }
-      {
-        var promises: Promise<any>[] = [];
-        const WCategoryModel = mongoose.model('wcategoryschema', new Schema({ parent_id: Schema.Types.Mixed }));
-        const cats = await WCategoryModel.find();
-        cats.forEach(
-          c => {
-            if (c.parent_id === undefined || c.parent_id === null || String(c.parent_id) === "") {
-              c.parent_id = null;
-            }
-            else {
-              //@ts-ignore
-              c.parent_id = String(c.parent_id)
-            }
-            promises.push(c.save({}).then(() => {
-              logger.debug(`Updated WCategorySchema ${c.id} with type safe parent ID ${c.parent_id}.`);
-            }).catch((err) => {
-              logger.error(`Unable to update WCategorySchema ${c.id}. Got error: ${JSON.stringify(err)}`);
-            }));
-          });
-        await Promise.all(promises);
-      }
-      {
-        interface IAbstractExpressionOld {
-          const_literal?: IConstLiteralExpression;
-          if_else?: IIfElseExpression<IAbstractExpression>;
-          logical?: ILogicalExpression<IAbstractExpression>;
-          modifier_placement?: IModifierPlacementExpression;
-          has_any_of_modifier?: IHasAnyOfModifierExpression;
-          discriminator: keyof typeof ProductInstanceFunctionType;
-        };
-
-        var promises: Promise<any>[] = [];
-        const WProductInstanceFunctionModel = mongoose.model('WProductinStancefunction', new Schema({
-          name: { type: String, required: true },
-          expression: {
-            required: true,
-            type: {
-              expr: Schema.Types.Mixed,
-              discriminator: { type: String, enum: ProductInstanceFunctionType, required: true },
-              const_literal: Schema.Types.Mixed,
-              if_else: Schema.Types.Mixed,
-              logical: Schema.Types.Mixed,
-              modifier_placement: Schema.Types.Mixed,
-              has_any_of_modifier: Schema.Types.Mixed
-            }
-          }
-        }));
-        const res = await WProductInstanceFunctionModel.find();
-        const convertRecursive = function (e: IAbstractExpressionOld): IAbstractExpression {
-          switch (e.discriminator) {
-            case ProductInstanceFunctionType.ConstLiteral:
-              return { discriminator: ProductInstanceFunctionType.ConstLiteral, expr: e.const_literal };
-            case ProductInstanceFunctionType.HasAnyOfModifierType:
-              return { discriminator: ProductInstanceFunctionType.HasAnyOfModifierType, expr: e.has_any_of_modifier }
-            case ProductInstanceFunctionType.IfElse:
-              return {
-                discriminator: ProductInstanceFunctionType.IfElse,
-                expr: {
-                  test: convertRecursive(e.if_else.test),
-                  true_branch: convertRecursive(e.if_else.true_branch),
-                  false_branch: convertRecursive(e.if_else.false_branch)
-                }
-              };
-            case ProductInstanceFunctionType.Logical:
-              return {
-                discriminator: ProductInstanceFunctionType.Logical,
-                expr: {
-                  operandA: convertRecursive(e.logical.operandA),
-                  operandB: e.logical.operandB ? convertRecursive(e.logical.operandB) : undefined,
-                  operator: e.logical.operator
-                }
-              };
-            case ProductInstanceFunctionType.ModifierPlacement:
-              return {
-                discriminator: ProductInstanceFunctionType.ModifierPlacement,
-                expr: e.modifier_placement
-              };
-          }
-        }
-        res.forEach(
-          e => {
-            // @ts-ignore
-            e.expression = convertRecursive(e.expression);
-            promises.push(e.save({}).then(() => {
-              logger.debug(`Updated WProductInstanceFunction ${e.id} with discriminator based typed expression: ${JSON.stringify(e.expression)}`);
-            }).catch((err) => {
-              logger.error(`Unable to update WProductInstanceFunction ${e.id}. Got error: ${JSON.stringify(err)}`);
-            }));
-          }
-        );
-        await Promise.all(promises);
-      }
-    }
-  }],
-  "0.3.0": [{ major: 0, minor: 3, patch: 1 }, async () => {
-  }],
-  "0.3.1": [{ major: 0, minor: 3, patch: 2 }, async () => {
-  }],
-  "0.3.2": [{ major: 0, minor: 3, patch: 3 }, async () => {
-  }],
-  "0.3.3": [{ major: 0, minor: 3, patch: 4 }, async () => {
-  }],
-  "0.3.4": [{ major: 0, minor: 3, patch: 5 }, async () => {
-  }],
-  "0.3.5": [{ major: 0, minor: 3, patch: 6 }, async () => {
-    // convert all ConstLiteralExpressions to the discriminator versions
-    {
-      var promises: Promise<any>[] = [];
-      const WProductInstanceFunctionModel = mongoose.model('wproductinstancefunction', new Schema({
-        name: { type: String, required: true },
-        expression: {
-          required: true,
-          type: {
-            expr: { type: Schema.Types.Mixed, required: true },
-            discriminator: { type: String, enum: ProductInstanceFunctionType, required: true },
-          }
-        }
-      }));
-      const res = await WProductInstanceFunctionModel.find();
-      const convertRecursive = function (e: IAbstractExpression): IAbstractExpression {
-        switch (e.discriminator) {
-          case ProductInstanceFunctionType.ConstLiteral:
-            // @ts-ignore
-            return { discriminator: ProductInstanceFunctionType.ConstLiteral, expr: { discriminator: ConstLiteralDiscriminator.NUMBER, value: e.expr.value } };
-          case ProductInstanceFunctionType.HasAnyOfModifierType:
-            return { discriminator: ProductInstanceFunctionType.HasAnyOfModifierType, expr: { mtid: e.expr.mtid } };
-          case ProductInstanceFunctionType.IfElse:
-            return {
-              discriminator: ProductInstanceFunctionType.IfElse,
-              expr: {
-                test: convertRecursive(e.expr.test),
-                true_branch: convertRecursive(e.expr.true_branch),
-                false_branch: convertRecursive(e.expr.false_branch)
-              }
-            };
-          case ProductInstanceFunctionType.Logical:
-            return {
-              discriminator: ProductInstanceFunctionType.Logical,
-              expr: {
-                operandA: convertRecursive(e.expr.operandA),
-                operandB: e.expr.operandB ? convertRecursive(e.expr.operandB) : undefined,
-                operator: e.expr.operator
-              }
-            };
-          case ProductInstanceFunctionType.ModifierPlacement:
-            return { discriminator: ProductInstanceFunctionType.ModifierPlacement, expr: { mtid: e.expr.mtid, moid: e.expr.moid } };
-        }
-      }
-      res.forEach(
-        e => {
-          // @ts-ignore
-          const convertedExpression = convertRecursive(e.expression);
-          //const goosed = ExpressionToMongooseModel(convertedExpression);
-          //logger.debug(`Converted expression string: ${JSON.stringify(goosed)}`);
-          promises.push(WProductInstanceFunctionModelACTUAL.findByIdAndUpdate(
-            e.id,
-            {
-              name: e.name,
-              expression: convertedExpression
-            },
-            { new: true }
-          ).then((updated: any) => {
-            logger.debug(`Updated WProductInstanceFunction ${e.id} with discriminator based ConstLiteral expression: ${JSON.stringify(updated)}`);
-          }).catch((err: any) => {
-            logger.error(`Unable to update WProductInstanceFunction ${e.id}. Got error: ${JSON.stringify(err)}`);
-          }));
-        }
-      );
-      await Promise.all(promises);
-    }
-    {
-      // assign empty service_disable to all ProductModifierSchema in WProductSchema
-      // assign empty warnings and suggestions function lists to order_guide in WProductSchema
-      var promises: Promise<any>[] = [];
-      const WProductModel = mongoose.model('wproductschema', new Schema({
-        modifiers: [{ mtid: String, enable: String, service_disable: Schema.Types.Mixed }],
-        display_flags: {
-          flavor_max: Number,
-          bake_max: Number,
-          bake_differential: Number,
-          show_name_of_base_product: Boolean,
-          singular_noun: String,
-          order_guide: {
-            warnings: Schema.Types.Mixed,
-            suggestions: Schema.Types.Mixed
-          }
-        },
-      }));
-      const elts = await WProductModel.find();
-      elts.forEach(
-        o => {
-          //@ts-ignore
-          o.modifiers = o.modifiers.map(mod => ({ mtid: mod.mtid, enable: mod.enable ? String(mod.enable) : null, service_disable: [] }));
-          //@ts-ignore
-          o.display_flags.order_guide = { warnings: [], suggestions: [] };
-          promises.push(o.save({}).then(() => {
-            logger.debug(`Updated WProductModel ${o.id} with empty service_disable modifiers ${JSON.stringify(o.modifiers)} and empty order guide, categoryIds: ${JSON.stringify(o.display_flags.order_guide)}.`);
-          }).catch((err) => {
-            logger.error(`Unable to update WProductModel ${o.id}. Got error: ${JSON.stringify(err)}`);
-          }));
-        });
-      await Promise.all(promises);
-    }
-  }],
   "0.3.6": [{ major: 0, minor: 3, patch: 7 }, async () => {
   }],
   "0.3.7": [{ major: 0, minor: 3, patch: 8 }, async () => {
@@ -336,6 +71,7 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
         if (prod.service_disable.length > 0) {
           logger.warn(`About to remove product set service disable of ${JSON.stringify(prod.service_disable)} for ProductID: ${prod.id}`);
         }
+        // @ts-ignore
         prod.service_disable = undefined;
         prod.serviceDisable = [];
         prod.modifiers = prod.modifiers.map(mod => {
@@ -626,32 +362,55 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
       await Promise.all(baseInstances.map(async (basePi) => {
         try {
           const updatedProduct = await WProductModel.findByIdAndUpdate(basePi.productId!, { baseProductId: basePi.id }, { new: true }).exec();
-          logger.info(`Updated product Id: ${updatedProduct.id} with baseProductId of ${updatedProduct.baseProductId}`);
+          logger.info(`Updated product Id: ${updatedProduct!.id} with baseProductId of ${updatedProduct!.baseProductId}`);
           return updatedProduct;
-        } catch (err) { 
+        } catch (err) {
           const errMsg = `Failed updating Base ProductInstance ${basePi.displayName} (${basePi.id}), suggest deleting.`
           logger.error(errMsg);
+          return null;
         }
       }));
 
       // find any WProductSchema without a baseProductId and delete
       const orphanedProducts = await WProductModel.find({ baseProductId: undefined }).exec();
       if (orphanedProducts.length > 0) {
-        logger.warn(`Found products without baseProductId set, will delete: ${orphanedProducts.map(x=>x.id).join(", ")}`);
-        await WProductModel.deleteMany({ baseProductId: undefined }).exec();  
+        logger.warn(`Found products without baseProductId set, will delete: ${orphanedProducts.map(x => x.id).join(", ")}`);
+        await WProductModel.deleteMany({ baseProductId: undefined }).exec();
         await Promise.all(orphanedProducts.map(async (product) => {
-          const deleteProductInstanceResult = await WProductInstanceModel.deleteMany({productId: product.id});
+          const deleteProductInstanceResult = await WProductInstanceModel.deleteMany({ productId: product.id });
           logger.warn(`Deleted ${deleteProductInstanceResult.deletedCount} product instances for newly delete parent product id ${product.id}`);
           return deleteProductInstanceResult;
         }))
       }
-      
+
       // remove isBase from all product instances
       const removeIsBaseUpdateResponse = await WProductInstanceModel.updateMany({}, { $unset: { isBase: "" } }).exec();
       logger.info(`Removed isBase from ${removeIsBaseUpdateResponse.modifiedCount} ProductInstances`);
     }
   }],
   "0.5.10": [{ major: 0, minor: 5, patch: 11 }, async () => {
+  }],
+  "0.5.11": [{ major: 0, minor: 5, patch: 12 }, async () => {
+    // mass set allowHeavy, allowLite, allowOTS to false for all IOption
+    const WOptionModel = mongoose.model('woPTioNscHema', new Schema({
+      metadata: {
+        flavor_factor: Number,
+        bake_factor: Number,
+        can_split: Boolean,
+        allowHeavy: Boolean,
+        allowLite: Boolean,
+        allowOTS: Boolean,
+      },
+    }));
+    const updateResponse = await WOptionModel.updateMany({}, {
+      $set: { 'metadata.allowHeavy': false, 'metadata.allowLite': false, 'metadata.allowOTS': false }
+    }).exec();
+    if (updateResponse.modifiedCount > 0) {
+      logger.debug(`Updated ${updateResponse.modifiedCount} IOption with disabled allowallowHeavyExtra, allowLite, and allowOTS.`);
+    }
+    else {
+      logger.warn("No options had allowallowHeavyExtra, allowLite, and allowOTS disabled");
+    }
   }],
 }
 

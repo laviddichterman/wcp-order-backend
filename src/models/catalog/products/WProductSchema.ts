@@ -67,6 +67,9 @@ const WProductSchema = new Schema<MT>({
   
   // Corresponding to a WCategorySchema
   category_ids: [{ type: String, ref: 'WCategorySchema', _id: false }],
+
+  printerGroup: String
+  
 }, {id: true, toJSON: {virtuals: true}, toObject: { virtuals: true}});
 
 export const WProductModel = mongoose.model<IProduct>(path.basename(__filename).replace(path.extname(__filename), ''), WProductSchema);

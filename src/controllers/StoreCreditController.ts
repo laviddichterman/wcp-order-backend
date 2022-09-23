@@ -88,7 +88,7 @@ export class StoreCreditController implements IExpressController {
         "ERROR IN GIFT CARD PROCESSING. CONTACT DAVE IMMEDIATELY",
         "dave@windycitypie.com",
         `<p>Request: ${BigIntStringify(req.query)}</p><p>Error info:${BigIntStringify(error)}</p>`);
-      next(error)
+      return next(error)
     }
   }
 
@@ -108,7 +108,7 @@ export class StoreCreditController implements IExpressController {
         "ERROR IN GIFT CARD PROCESSING. CONTACT DAVE IMMEDIATELY",
         "dave@windycitypie.com",
         `<p>Request: ${BigIntStringify(req.body)}</p><p>Error info:${BigIntStringify(error)}</p>`);
-      next(error)
+      return next(error)
     }
   }
 
@@ -135,7 +135,7 @@ export class StoreCreditController implements IExpressController {
         "ERROR IN GIFT CARD PROCESSING. CONTACT DAVE IMMEDIATELY",
         "dave@windycitypie.com",
         `<p>Order request: ${BigIntStringify(req.body)}</p><p>Error info:${BigIntStringify(error)}</p>`);
-      next(error)
+      return next(error)
     }
   }
   private postIssueCredit = async (req: Request, res: Response, next: NextFunction) => {
@@ -159,7 +159,7 @@ export class StoreCreditController implements IExpressController {
         "ERROR IN GIFT CARD PROCESSING. CONTACT DAVE IMMEDIATELY",
         "dave@windycitypie.com",
         `<p>Order request: ${BigIntStringify(req.body)}</p><p>Error info:${BigIntStringify(error)}</p>`);
-      next(error)
+      return next(error)
     }
   }
 }

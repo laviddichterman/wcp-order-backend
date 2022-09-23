@@ -15,7 +15,7 @@ export class DataProvider implements WProvider {
 
   constructor() {
     this.#fulfillments = {};
-    this.#settings = null;
+    this.#settings = { additional_pizza_lead_time: 5, config: {} };
     this.#keyvalueconfig = {};
   }
 
@@ -54,7 +54,7 @@ export class DataProvider implements WProvider {
     // check for and populate settings, including operating hours
     const found_settings = await SettingsModel.findOne();
     logger.info("Found settings: %o", found_settings);
-    this.#settings = found_settings;
+    this.#settings = found_settings!;
 
 
     logger.debug("Done Bootstrapping DataProvider");
@@ -124,7 +124,7 @@ export class DataProvider implements WProvider {
       { new: true })
       .then(doc => {
         logger.debug(`Updated fulfillment[${id}]: ${JSON.stringify(doc)}`);
-        this.#fulfillments[id] = doc;
+        this.#fulfillments[id] = doc!;
         return doc;
       })
       .catch(err => {

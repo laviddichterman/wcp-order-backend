@@ -8,7 +8,7 @@ function validationMiddleware<T>(type: any, skipMissingProperties = false): Requ
     validate(plainToInstance(type, req.body), { skipMissingProperties })
       .then((errors: ValidationError[]) => {
         if (errors.length > 0) {
-          const message = errors.map((error: ValidationError) => Object.values(error.constraints)).join(', ');
+          const message = errors.map((error: ValidationError) => Object.values(error.constraints!)).join(', ');
           next(new HttpException(400, message));
         } else {
           next();

@@ -44,34 +44,39 @@ export class SocketIoProvider implements WProvider {
 
   Bootstrap = (app: WApp) => {
     logger.info(`Starting Bootstrap of SocketIoProvider`);
-    this.socketRO = app.getSocketIoNamespace('nsRO');
-
-    this.socketRO.on('connect', (socket) => {
-      const connect_time = zonedTimeToUtc(Date.now(), process.env.TZ);
-      socket.client.request.headers["x-real-ip"] ?
-        logger.info(`CONNECTION: Client at IP: ${socket.client.request.headers["x-real-ip"]}, UA: ${socket.client.request.headers['user-agent']}.`) :
-        logger.info(`CONNECTION: Client info: ${JSON.stringify(socket.client.request.headers)}.`);
-      logger.info(`Num Connected: ${app.getSocketIoServer().engine.clientsCount}`);
-      socket.emit('WCP_SERVER_TIME', { time: format(connect_time, WDateUtils.ISODateTimeNoOffset), tz: process.env.TZ });
-      this.EmitFulfillmentsTo(socket, DataProviderInstance.Fulfillments);
-      this.EmitSettingsTo(socket, DataProviderInstance.Settings);
-      this.EmitCatalogTo(socket, CatalogProviderInstance.Catalog);
-      socket.on('disconnect', (reason: string) => {
-        const formattedDuration = formatDuration(intervalToDuration({ start: connect_time, end: zonedTimeToUtc(Date.now(), process.env.TZ) }));
-
+    const socketRO = app.getSocketIoNamespace('nsRO');
+    if (socketRO) {
+      this.socketRO = socketRO;
+      this.socketRO.on('connect', (socket) => {
+        const connect_time = zonedTimeToUtc(Date.now(), process.env.TZ!);
         socket.client.request.headers["x-real-ip"] ?
-          logger.info(`DISCONNECT: ${reason} after ${formattedDuration}. IP: ${socket.client.request.headers["x-real-ip"]}`) :
-          logger.info(`DISCONNECT: ${reason} after ${formattedDuration}.\nClient: ${JSON.stringify(socket.client.request.headers)}`);
+          logger.info(`CONNECTION: Client at IP: ${socket.client.request.headers["x-real-ip"]}, UA: ${socket.client.request.headers['user-agent']}.`) :
+          logger.info(`CONNECTION: Client info: ${JSON.stringify(socket.client.request.headers)}.`);
         logger.info(`Num Connected: ${app.getSocketIoServer().engine.clientsCount}`);
-      });
-    });
+        socket.emit('WCP_SERVER_TIME', { time: format(connect_time, WDateUtils.ISODateTimeNoOffset), tz: process.env.TZ! });
+        this.EmitFulfillmentsTo(socket, DataProviderInstance.Fulfillments);
+        this.EmitSettingsTo(socket, DataProviderInstance.Settings);
+        this.EmitCatalogTo(socket, CatalogProviderInstance.Catalog);
+        socket.on('disconnect', (reason: string) => {
+          const formattedDuration = formatDuration(intervalToDuration({ start: connect_time, end: zonedTimeToUtc(Date.now(), process.env.TZ!) }));
 
-    this.socketAuth = app.getSocketIoNamespace('nsAUTH');
-    this.socketAuth
-    //.use(SocketIoJwtAuthenticateAndAuthorize(['read:order']))
-    .on('connect', (socket) => {
-      logger.debug(`New client authenticated with permissions: {socket.user.decodedToken.permissions}`);
-    });
+          socket.client.request.headers["x-real-ip"] ?
+            logger.info(`DISCONNECT: ${reason} after ${formattedDuration}. IP: ${socket.client.request.headers["x-real-ip"]}`) :
+            logger.info(`DISCONNECT: ${reason} after ${formattedDuration}.\nClient: ${JSON.stringify(socket.client.request.headers)}`);
+          logger.info(`Num Connected: ${app.getSocketIoServer().engine.clientsCount}`);
+        });
+      });
+    }
+
+    const socketAuth = app.getSocketIoNamespace('nsAUTH');
+    if (socketAuth) {
+      this.socketAuth = socketAuth;
+      this.socketAuth
+        //.use(SocketIoJwtAuthenticateAndAuthorize(['read:order']))
+        .on('connect', (socket) => {
+          logger.debug(`New client authenticated with permissions: {socket.user.decodedToken.permissions}`);
+        });
+    }
     logger.info(`Finished Bootstrap of SocketIoProvider`);
   }
 };

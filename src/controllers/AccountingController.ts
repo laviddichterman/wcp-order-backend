@@ -25,7 +25,7 @@ export class AccountingController implements IExpressController {
       const max_date = formatRFC3339(addDays(tips_date, 1));
       const events = await GoogleProviderInstance.GetEventsForDate(min_date, max_date, "America/Los_Angeles");
       var tips_array : (number | string)[] = [];
-      events.map((event, i) => {
+      events!.map((event, i) => {
         if (event && event.description) {
           const tips_match = event.description.match(tipsregex);
           if (tips_match) {

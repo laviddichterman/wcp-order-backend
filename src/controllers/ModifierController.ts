@@ -9,19 +9,19 @@ import { isValidDisabledValue } from '../types/Validations';
 import { CheckJWT, ScopeDeleteCatalog, ScopeWriteCatalog } from '../config/authorization';
 import { CatalogProviderInstance } from '../config/catalog_provider';
 const ModifierTypeByIdValidationChain = [
-  param('mtid').trim().escape().exists().isMongoId(), 
+  param('mtid').trim().escape().exists().isMongoId(),
 ];
 
 const ModifierOptionByIdValidationChain = [
-  param('moid').trim().escape().exists().isMongoId(), 
+  param('moid').trim().escape().exists().isMongoId(),
 ];
 
-const ModifierTypeValidationChain = [  
+const ModifierTypeValidationChain = [
   body('name').trim().exists(),
   body('displayName').trim(),
-  body('ordinal').isInt({min: 0, max:500}).exists(),
-  body('min_selected').isInt({min: 0}).exists(),
-  body('max_selected').optional({nullable: true}).isInt({min: 0}),
+  body('ordinal').isInt({ min: 0, max: 500 }).exists(),
+  body('min_selected').isInt({ min: 0 }).exists(),
+  body('max_selected').optional({ nullable: true }).isInt({ min: 0 }),
   body('externalIDs').isArray(),
   body('externalIDs.*.key').exists(),
   body('externalIDs.*.value').exists(),
@@ -41,7 +41,7 @@ const EditModifierTypeValidationChain = [
   ...ModifierTypeByIdValidationChain,
   ...ModifierTypeValidationChain
 ];
-const ModifierOptionValidationChain = [  
+const ModifierOptionValidationChain = [
   ...ModifierTypeByIdValidationChain,
   body('displayName').trim().exists(),
   body('description').trim(),
@@ -50,17 +50,17 @@ const ModifierOptionValidationChain = [
   body('externalIDs.*.key').exists(),
   body('externalIDs.*.value').exists(),
   body('disabled').custom(isValidDisabledValue),
-  body('price.amount').isInt({min: 0}).exists(),
+  body('price.amount').isInt({ min: 0 }).exists(),
   body('price.currency').exists().isIn(Object.values(CURRENCY)),
-  body('ordinal').isInt({min: 0}).exists(),
-  body('enable').optional({nullable: true}).isMongoId(),
+  body('ordinal').isInt({ min: 0 }).exists(),
+  body('enable').optional({ nullable: true }).isMongoId(),
   body('metadata.flavor_factor').isFloat({ min: 0 }),
   body('metadata.bake_factor').isFloat({ min: 0 }),
   body('metadata.can_split').toBoolean(true),
   body('displayFlags.omit_from_shortname').toBoolean(true),
   body('displayFlags.omit_from_name').toBoolean(true),
 ];
-const EditModifierOptionValidationChain = [  
+const EditModifierOptionValidationChain = [
   ...ModifierTypeByIdValidationChain,
   ...ModifierOptionValidationChain
 ];
@@ -98,7 +98,7 @@ export class ModifierController implements IExpressController {
       res.setHeader('Location', location);
       return res.status(201).send(doc);
     } catch (error) {
-      next(error)
+      return next(error)
     }
   }
 
@@ -123,7 +123,7 @@ export class ModifierController implements IExpressController {
       logger.info(`Successfully updated ${JSON.stringify(doc)}`);
       return response.status(200).send(doc);
     } catch (error) {
-      next(error)
+      return next(error)
     }
   }
 
@@ -137,7 +137,7 @@ export class ModifierController implements IExpressController {
       logger.info(`Successfully deleted ${doc}`);
       return res.status(200).send(doc);
     } catch (error) {
-      next(error)
+      return next(error)
     }
   }
 
@@ -148,7 +148,7 @@ export class ModifierController implements IExpressController {
         description: req.body.description,
         displayName: req.body.displayName,
         shortcode: req.body.shortcode,
-        disabled: req.body.disabled ? req.body.disabled : null, 
+        disabled: req.body.disabled ? req.body.disabled : null,
         externalIDs: req.body.externalIDs ?? [],
         modifierTypeId: req.params.mtid,
         ordinal: req.body.ordinal,
@@ -164,23 +164,26 @@ export class ModifierController implements IExpressController {
       res.setHeader('Location', location);
       return res.status(201).send(new_option);
     } catch (error) {
-      next(error)
+      return next(error)
     }
   }
 
   private patchModifierOption = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const doc = await CatalogProviderInstance.UpdateModifierOption(req.params.moid, {
-        displayName: req.body.displayName, 
-        description: req.body.description, 
-        price: req.body.price, 
-        shortcode: req.body.shortcode, 
-        disabled: req.body.disabled ? req.body.disabled : null, 
-        externalIDs: req.body.externalIDs ?? [],
-        ordinal: req.body.ordinal, 
-        metadata: req.body.metadata,
-        enable: req.body.enable,
-        displayFlags: req.body.displayFlags,
+      const doc = await CatalogProviderInstance.UpdateModifierOption({
+        id: req.params.moid,
+        modifierOption: {
+          displayName: req.body.displayName,
+          description: req.body.description,
+          price: req.body.price,
+          shortcode: req.body.shortcode,
+          disabled: req.body.disabled ? req.body.disabled : null,
+          externalIDs: req.body.externalIDs ?? [],
+          ordinal: req.body.ordinal,
+          metadata: req.body.metadata,
+          enable: req.body.enable,
+          displayFlags: req.body.displayFlags,
+        }
       });
       if (!doc) {
         logger.info(`Unable to update ModifierOption: ${req.params.moid}`);
@@ -189,7 +192,7 @@ export class ModifierController implements IExpressController {
       logger.info(`Successfully updated ${JSON.stringify(doc)}`);
       return res.status(200).send(doc);
     } catch (error) {
-      next(error)
+      return next(error)
     }
   }
 
@@ -203,7 +206,7 @@ export class ModifierController implements IExpressController {
       logger.info(`Successfully deleted ${doc}`);
       return res.status(200).send(doc);
     } catch (error) {
-      next(error)
+      return next(error)
     }
   }
 

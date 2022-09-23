@@ -56,7 +56,7 @@ export class SettingsController implements IExpressController {
       res.setHeader('Location', location);
       return res.status(201).send(DataProviderInstance.Fulfillments);
     } catch (error) {
-      next(error)
+      return next(error)
     }
   }
 
@@ -72,7 +72,7 @@ export class SettingsController implements IExpressController {
       await SocketIoProviderInstance.EmitFulfillments(DataProviderInstance.Fulfillments);
       return res.status(201).send(DataProviderInstance.Fulfillments);
     } catch (error) {
-      next(error)
+      return next(error)
     }
   }
 
@@ -86,7 +86,7 @@ export class SettingsController implements IExpressController {
       res.setHeader('Location', location);
       return res.status(201).send(DataProviderInstance.Fulfillments);
     } catch (error) {
-      next(error)
+      return next(error)
     }
   }
   private setSettings = async (req: Request, res: Response, next: NextFunction) => {
@@ -97,7 +97,7 @@ export class SettingsController implements IExpressController {
       res.setHeader('Location', location);
       return res.status(201).send(DataProviderInstance.Settings);
     } catch (error) {
-      next(error)
+      return next(error)
     }
   }
 }

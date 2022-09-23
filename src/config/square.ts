@@ -1,33 +1,14 @@
-import { Error as SquareError, Client, CreateOrderRequest, CreateOrderResponse, CreatePaymentRequest, Environment, UpdateOrderRequest, OrderLineItem, Money, ApiError, UpdateOrderResponse, PaymentRefund, RefundPaymentRequest, PayOrderRequest, PayOrderResponse, Payment, OrderLineItemModifier, RetrieveOrderResponse, Order } from 'square';
+import { Error as SquareError, Client, CreateOrderRequest, CreateOrderResponse, CreatePaymentRequest, Environment, UpdateOrderRequest, OrderLineItem, Money, ApiError, UpdateOrderResponse, PaymentRefund, RefundPaymentRequest, PayOrderRequest, PayOrderResponse, Payment, OrderLineItemModifier, RetrieveOrderResponse, Order, UpsertCatalogObjectRequest, BatchUpsertCatalogObjectsRequest, CatalogObjectBatch, CatalogObject, BatchUpsertCatalogObjectsResponse, UpsertCatalogObjectResponse, BatchDeleteCatalogObjectsRequest, BatchDeleteCatalogObjectsResponse, BatchRetrieveCatalogObjectsRequest, BatchRetrieveCatalogObjectsResponse } from 'square';
 import { WProvider } from '../types/WProvider';
 import crypto from 'crypto';
 import logger from '../logging';
 import { DataProviderInstance } from './dataprovider';
 import { CatalogProviderInstance } from './catalog_provider';
-import { CategorizedRebuiltCart, IMoney, PaymentMethod, TenderBaseStatus, WOrderInstance, OrderPayment, PRODUCT_LOCATION } from '@wcp/wcpshared';
+import { CategorizedRebuiltCart, IMoney, PaymentMethod, WOrderInstance, OrderPayment, PRODUCT_LOCATION, KeyValue, CURRENCY } from '@wcp/wcpshared';
 import { formatRFC3339, parseISO } from 'date-fns';
 import { StoreCreditPayment } from '@wcp/wcpshared';
-
-const SQUARE_TAX_RATE_CATALOG_ID = "TMG7E3E5E45OXHJTBOHG2PMS";
-const VARIABLE_PRICE_STORE_CREDIT_CATALOG_ID = "DNP5YT6QDIWTB53H46F3ECIN";
-
-export const BigIntMoneyToIntMoney = (bigIntMoney: Money): IMoney => ({ amount: Number(bigIntMoney.amount!), currency: bigIntMoney.currency! });
-
-export const IMoneyToBigIntMoney = (money: IMoney): Money => ({ amount: BigInt(money.amount), currency: money.currency });
-
-function MapPaymentStatus(sqStatus: string) {
-  switch (sqStatus) {
-    case 'APPROVED':
-    case 'PENDING':
-      return TenderBaseStatus.AUTHORIZED;
-    case 'COMPLETED':
-      return TenderBaseStatus.COMPLETED;
-    case 'CANCELED':
-    case 'FAILED':
-      return TenderBaseStatus.CANCELED;
-  }
-  return TenderBaseStatus.CANCELED;
-}
+import { BigIntMoneyToIntMoney, CreateOrderFromCart, IMoneyToBigIntMoney, MapPaymentStatus, VARIABLE_PRICE_STORE_CREDIT_CATALOG_ID } from './SquareWarioBridge';
+import { IS_PRODUCTION } from '../utils';
 
 type SquareProviderApiCallReturnSuccess<T> = { success: true; result: T; error: SquareError[]; };
 
@@ -74,7 +55,7 @@ export class SquareProvider implements WProvider {
     logger.info(`Starting Bootstrap of SquareProvider`);
     if (DataProviderInstance.KeyValueConfig.SQUARE_TOKEN) {
       this.#client = new Client({
-        environment: Environment.Production, // `Environment.Sandbox` to access sandbox resources // TODO: configure this
+        environment: IS_PRODUCTION ? Environment.Production : Environment.Sandbox,
         accessToken: DataProviderInstance.KeyValueConfig.SQUARE_TOKEN,
         httpClientOptions: {
           retryConfig: {
@@ -84,7 +65,8 @@ export class SquareProvider implements WProvider {
       });
     }
     else {
-      logger.warn("Can't Bootstrap SQUARE Provider");
+      logger.error("Can't Bootstrap SQUARE Provider");
+      return;
     }
     logger.info(`Finished Bootstrap of SquareProvider`);
   }
@@ -99,70 +81,7 @@ export class SquareProvider implements WProvider {
     const orders_api = this.#client.ordersApi;
     const request_body: CreateOrderRequest = {
       idempotencyKey: idempotency_key,
-      order: {
-        referenceId: reference_id,
-        lineItems: Object.values(cart).flatMap(e => e.map(x => {
-          // left and right catalog product instance are the same, 
-          if (x.product.m.pi[PRODUCT_LOCATION.LEFT] === x.product.m.pi[PRODUCT_LOCATION.RIGHT]) {
-            const catalogProductInstance = CatalogProviderInstance.Catalog.productInstances[x.product.m.pi[PRODUCT_LOCATION.LEFT]];
-            const wholeModifiers: OrderLineItemModifier[] = x.product.m.exhaustive_modifiers.whole.map(mtid_moid => {
-              const catalogOption = CatalogProviderInstance.Catalog.options[mtid_moid[1]];
-              return { basePriceMoney: IMoneyToBigIntMoney(catalogOption.price), name: catalogOption.displayName }
-            })
-          } else { // left and right catalog product instance aren't the same. this isn't really supported by square, so we'll do our best
-            // TODO: grab a special square variation item ID or use the base product's ID
-          }
-          return {
-            quantity: x.quantity.toString(10),
-            //catalogObjectId: VARIABLE_PRICE_STORE_CREDIT_CATALOG_ID,
-            basePriceMoney: IMoneyToBigIntMoney(x.product.p.PRODUCT_CLASS.price),
-            itemType: "ITEM",
-            name: x.product.m.name, // its either catalogObjectId or name
-            modifiers: x.product.p.modifiers.flatMap(mod => mod.options.map(option => {
-              const catalogOption = CatalogProviderInstance.Catalog.options[option.optionId];
-              return { basePriceMoney: IMoneyToBigIntMoney(catalogOption.price), name: catalogOption.displayName }
-            }))
-          } as OrderLineItem;
-        })),
-        discounts: [...orderBeforeCharging.discounts.map(discount => ({
-          type: 'VARIABLE_AMOUNT',
-          scope: 'ORDER',
-          catalogObjectId: 'AKIYDPB5WJD2HURCWWZSAIF5',
-          name: `Discount Code: ${discount.discount.code}`,
-          amountMoney: IMoneyToBigIntMoney(discount.discount.amount),
-          appliedMoney: IMoneyToBigIntMoney(discount.discount.amount),
-          metadata: {
-            enc: discount.discount.lock.enc,
-            iv: discount.discount.lock.iv,
-            auth: discount.discount.lock.auth,
-            code: discount.discount.code
-          }
-        }))
-        ],
-        pricingOptions: {
-          autoApplyDiscounts: true,
-          autoApplyTaxes: true
-        },
-        taxes: orderBeforeCharging.taxes.map(tax => ({
-          catalogObjectId: SQUARE_TAX_RATE_CATALOG_ID,
-          appliedMoney: IMoneyToBigIntMoney(tax.amount),
-          scope: 'ORDER'
-        })),
-        locationId: DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
-        state: "OPEN",
-        fulfillments: [{
-          type: "PICKUP",
-          pickupDetails: {
-            scheduleType: 'SCHEDULED',
-            recipient: {
-              displayName: `${orderBeforeCharging.customerInfo.givenName} ${orderBeforeCharging.customerInfo.familyName}`,
-              emailAddress: orderBeforeCharging.customerInfo.email,
-              phoneNumber: orderBeforeCharging.customerInfo.mobileNum
-            },
-            pickupAt: formatRFC3339(promisedTime),
-          },
-        }],
-      },
+      order: CreateOrderFromCart(reference_id, orderBeforeCharging, promisedTime, cart)
     };
     const call_fxn = async (): Promise<SquareProviderApiCallReturnSuccess<CreateOrderResponse>> => {
       try {
@@ -244,11 +163,12 @@ export class SquareProvider implements WProvider {
     { sourceId, storeCreditPayment, amount, referenceId, squareOrderId, tipAmount, verificationToken, autocomplete }: SquareProviderCreatePaymentRequest): Promise<SquareProviderApiCallReturnValue<OrderPayment>> => {
     const idempotency_key = crypto.randomBytes(22).toString('hex');
     const payments_api = this.#client.paymentsApi;
+    const tipMoney = tipAmount ?? { currency: CURRENCY.USD, amount: 0 };
     const request_body: CreatePaymentRequest = {
       sourceId: storeCreditPayment ? "EXTERNAL" : sourceId,
       externalDetails: storeCreditPayment ? { type: 'STORED_BALANCE', source: "WARIO", sourceId: storeCreditPayment.payment.code } : undefined,
-      amountMoney: IMoneyToBigIntMoney({ currency: amount.currency, amount: amount.amount - (tipAmount?.amount ?? 0) }),
-      tipMoney: tipAmount ? IMoneyToBigIntMoney(tipAmount) : undefined,
+      amountMoney: IMoneyToBigIntMoney({ currency: amount.currency, amount: amount.amount - tipMoney.amount }),
+      tipMoney: IMoneyToBigIntMoney(tipMoney),
       referenceId: storeCreditPayment ? storeCreditPayment.payment.code : referenceId,
       orderId: squareOrderId,
       locationId: DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
@@ -262,8 +182,10 @@ export class SquareProvider implements WProvider {
     const callFxn = async (): Promise<SquareProviderApiCallReturnValue<OrderPayment>> => {
       logger.info(`sending payment request: ${JSON.stringify(request_body)}`);
       const { result, ..._ } = await payments_api.createPayment(request_body);
-      if (result.payment) {
+      if (result.payment && result.payment.status) {
         const paymentStatus = MapPaymentStatus(result.payment.status);
+        const createdAt = parseISO(result.payment.createdAt!).valueOf();
+        const processorId = result.payment.id!;
         return {
           success: true,
           result: storeCreditPayment ? {
@@ -271,35 +193,35 @@ export class SquareProvider implements WProvider {
               status: paymentStatus,
               payment: {
                 ...storeCreditPayment.payment,
-                processorId: result.payment.id
+                processorId
               }
             } :
             (result.payment.sourceType === 'CASH' ? {
               t: PaymentMethod.Cash,
-              createdAt: parseISO(result.payment.createdAt).valueOf(),
-              amount: BigIntMoneyToIntMoney(result.payment.totalMoney),
-              tipAmount,
+              createdAt,
+              amount: BigIntMoneyToIntMoney(result.payment.totalMoney!),
+              tipAmount: tipMoney,
               status: paymentStatus,
               payment: {
-                processorId: result.payment.id,
+                processorId,
                 amountTendered: BigIntMoneyToIntMoney(result.payment.cashDetails!.buyerSuppliedMoney),
                 change: result.payment.cashDetails!.changeBackMoney ? BigIntMoneyToIntMoney(result.payment.cashDetails!.changeBackMoney) : { currency: amount.currency, amount: 0 },
               },
             } : {
               t: PaymentMethod.CreditCard,
-              createdAt: parseISO(result.payment.createdAt).valueOf(),
-              amount: BigIntMoneyToIntMoney(result.payment.amountMoney),
-              tipAmount,
+              createdAt,
+              amount: BigIntMoneyToIntMoney(result.payment.amountMoney!),
+              tipAmount: tipMoney,
               status: paymentStatus,
               payment: {
                 processor: 'SQUARE',
                 billingZip: result.payment.billingAddress?.postalCode ?? undefined,
-                cardBrand: result.payment.cardDetails.card.cardBrand ?? undefined,
-                expYear: result.payment.cardDetails.card.expYear.toString(),
-                last4: result.payment.cardDetails.card.last4,
+                cardBrand: result.payment.cardDetails?.card?.cardBrand ?? undefined,
+                expYear: result.payment.cardDetails?.card?.expYear?.toString(),
+                last4: result.payment.cardDetails?.card?.last4 ?? "",
                 receiptUrl: result.payment.receiptUrl ?? `https://squareup.com/receipt/preview/${result.payment.id}`,
-                processorId: result.payment.id,
-                cardholderName: result.payment.cardDetails.card.cardholderName ?? undefined,
+                processorId,
+                cardholderName: result.payment.cardDetails?.card?.cardholderName ?? undefined,
               }
             }),
           error: []
@@ -329,7 +251,7 @@ export class SquareProvider implements WProvider {
     const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<PayOrderResponse>> => {
       logger.info(`sending order payment request ${square_order_id}: ${JSON.stringify(request_body)}`);
       const { result, ...httpResponse } = await orders_api.payOrder(square_order_id, request_body);
-      return { success: true, result: result, error: null };
+      return { success: true, result: result, error: [] };
     }
     return await SquareRequestHandler(callFxn);
   }
@@ -380,6 +302,67 @@ export class SquareProvider implements WProvider {
         result: null,
         error: result.errors ?? []
       };
+    }
+    return await SquareRequestHandler(callFxn);
+  }
+
+  UpsertCatalogObject = async (object: CatalogObject) => {
+    const idempotency_key = crypto.randomBytes(22).toString('hex');
+    const catalogApi = this.#client.catalogApi;
+    const request_body: UpsertCatalogObjectRequest = {
+      idempotencyKey: idempotency_key,
+      object
+    };
+
+    const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<UpsertCatalogObjectResponse>> => {
+      logger.info(`sending catalog upsert: ${JSON.stringify(request_body)}`);
+      const { result, ...httpResponse } = await catalogApi.upsertCatalogObject(request_body);
+      return { success: true, result: result, error: [] };
+    }
+    return await SquareRequestHandler(callFxn);
+  }
+
+  BatchUpsertCatalogObjects = async (objectBatches: CatalogObjectBatch[]) => {
+    const idempotency_key = crypto.randomBytes(22).toString('hex');
+    const catalogApi = this.#client.catalogApi;
+    const request_body: BatchUpsertCatalogObjectsRequest = {
+      idempotencyKey: idempotency_key,
+      batches: objectBatches
+    };
+
+    const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<BatchUpsertCatalogObjectsResponse>> => {
+      logger.info(`sending catalog upsert batch: ${JSON.stringify(request_body)}`);
+      const { result, ...httpResponse } = await catalogApi.batchUpsertCatalogObjects(request_body);
+      return { success: true, result: result, error: [] };
+    }
+    return await SquareRequestHandler(callFxn);
+  }
+
+  BatchDeleteCatalogObjects = async (objectIds: string[]) => {
+    const catalogApi = this.#client.catalogApi;
+    const request_body: BatchDeleteCatalogObjectsRequest = {
+      objectIds
+    };
+
+    const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<BatchDeleteCatalogObjectsResponse>> => {
+      logger.info(`sending catalog delete batch: ${JSON.stringify(request_body)}`);
+      const { result, ...httpResponse } = await catalogApi.batchDeleteCatalogObjects(request_body);
+      return { success: true, result: result, error: [] };
+    }
+    return await SquareRequestHandler(callFxn);
+  }
+
+  BatchRetrieveCatalogObjects = async (objectIds: string[], includeRelated: boolean) => {
+    const catalogApi = this.#client.catalogApi;
+    const request_body: BatchRetrieveCatalogObjectsRequest = {
+      objectIds,
+      includeRelatedObjects: includeRelated
+    };
+
+    const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<BatchRetrieveCatalogObjectsResponse>> => {
+      logger.info(`sending catalog retrieve batch: ${JSON.stringify(request_body)}`);
+      const { result, ...httpResponse } = await catalogApi.batchRetrieveCatalogObjects(request_body);
+      return { success: true, result: result, error: [] };
     }
     return await SquareRequestHandler(callFxn);
   }

@@ -65,6 +65,8 @@ const ProductClassValidationChain = [
   body('displayFlags.singular_noun').trim(),
   body('displayFlags.order_guide.warnings.*').trim().escape().exists().isMongoId(),
   body('displayFlags.order_guide.suggestions.*').trim().escape().exists().isMongoId(),
+  body('printerGroup').optional({ nullable: true }).isMongoId(),
+
 
 ];
 
@@ -115,7 +117,8 @@ export class ProductController implements IExpressController {
         externalIDs: req.body.externalIDs,
         modifiers: req.body.modifiers,
         category_ids: req.body.category_ids,
-        displayFlags: req.body.displayFlags
+        displayFlags: req.body.displayFlags,
+        printerGroup: req.body.printerGroup ?? null
       };
       const newProductInstance = await CatalogProviderInstance.CreateProduct(
         productClass,
@@ -138,7 +141,7 @@ export class ProductController implements IExpressController {
       res.setHeader('Location', location);
       return res.status(201).send({ newProductInstance });
     } catch (error) {
-      next(error)
+      return next(error)
     }
   }
 
@@ -153,6 +156,7 @@ export class ProductController implements IExpressController {
         modifiers: req.body.modifiers,
         category_ids: req.body.category_ids,
         displayFlags: req.body.displayFlags,
+        printerGroup: req.body.printerGroup ?? null
       });
       if (!doc) {
         logger.info(`Unable to update Product: ${productId}`);
@@ -161,7 +165,7 @@ export class ProductController implements IExpressController {
       logger.info(`Successfully updated ${JSON.stringify(doc)}`);
       return res.status(200).send(doc);
     } catch (error) {
-      next(error)
+      return next(error)
     }
   }
 
@@ -176,7 +180,7 @@ export class ProductController implements IExpressController {
       logger.info(`Successfully deleted ${doc}`);
       return res.status(200).send(doc);
     } catch (error) {
-      next(error)
+      return next(error)
     }
   }
 
@@ -200,21 +204,28 @@ export class ProductController implements IExpressController {
       res.setHeader('Location', location);
       return res.status(201).send(doc);
     } catch (error) {
-      next(error)
+      return next(error)
     }
   }
 
   private patchProductInstance = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const productInstanceId = req.params.piid;
-      const doc = await CatalogProviderInstance.UpdateProductInstance(productInstanceId, {
-        description: req.body.description,
-        displayName: req.body.displayName,
-        shortcode: req.body.shortcode,
-        ordinal: req.body.ordinal,
-        externalIDs: req.body.externalIDs,
-        modifiers: req.body.modifiers,
-        displayFlags: req.body.displayFlags
+      const product = CatalogProviderInstance.Catalog.products[req.params.pid]!.product;
+      const doc = await CatalogProviderInstance.UpdateProductInstance({
+        piid: productInstanceId,
+        product: {
+          modifiers: product.modifiers, price: product.price
+        },
+        productInstance: {
+          description: req.body.description,
+          displayName: req.body.displayName,
+          shortcode: req.body.shortcode,
+          ordinal: req.body.ordinal,
+          externalIDs: req.body.externalIDs,
+          modifiers: req.body.modifiers,
+          displayFlags: req.body.displayFlags
+        }
       });
       if (!doc) {
         logger.info(`Unable to update ProductInstance: ${productInstanceId}`);
@@ -223,7 +234,7 @@ export class ProductController implements IExpressController {
       logger.info(`Successfully updated ${JSON.stringify(doc)}`);
       return res.status(200).send(doc);
     } catch (error) {
-      next(error)
+      return next(error)
     }
   }
 
@@ -238,7 +249,7 @@ export class ProductController implements IExpressController {
       logger.info(`Successfully deleted ${doc}`);
       return res.status(200).send(doc);
     } catch (error) {
-      next(error)
+      return next(error)
     }
   }
 

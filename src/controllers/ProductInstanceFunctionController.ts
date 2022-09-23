@@ -57,7 +57,7 @@ export class ProductInstanceFunctionController implements IExpressController {
       res.setHeader('Location', location);
       return res.status(201).send(doc);
     } catch (error) {
-      next(error)
+      return next(error)
     }
   }
 
@@ -81,7 +81,7 @@ export class ProductInstanceFunctionController implements IExpressController {
       logger.info(`Successfully updated ${JSON.stringify(doc)}`);
       return res.status(200).send(doc);
     } catch (error) {
-      next(error)
+      return next(error)
     }
   }
 
@@ -95,7 +95,7 @@ export class ProductInstanceFunctionController implements IExpressController {
       logger.info(`Successfully deleted ${doc}`);
       return res.status(200).send(doc);
     } catch (error) {
-      next(error)
+      return next(error)
     }
   }
 }

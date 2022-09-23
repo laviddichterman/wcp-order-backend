@@ -161,11 +161,11 @@ export class StoreCreditProvider {
     const ivAsString = lock.iv.toString('hex');
     const authAsString = lock.auth.toString('hex');
     const values = await values_promise;
-    const i = values.values.findIndex((x: string[]) => x[7] === credit_code);
+    const i = values.values!.findIndex((x: string[]) => x[7] === credit_code);
     if (i === -1) {
       return { valid: false };
     }
-    const entry = values.values[i];
+    const entry = values.values![i];
     const date_modified = WDateUtils.formatISODate(Date.now());
     const new_entry = [entry[0], entry[1], entry[2], entry[3], entry[4], entry[5], date_modified, entry[7], entry[8], entry[9], lock.enc, ivAsString, authAsString];
     const new_range = `${ACTIVE_SHEET}!${2 + i}:${2 + i}`;
@@ -186,8 +186,8 @@ export class StoreCreditProvider {
     Promise<{ success: false } | ValidateLockAndSpendSuccess> => {
     const beginningOfToday = startOfDay(Date.now());
     const values = await GoogleProviderInstance.GetValuesFromSheet(DataProviderInstance.KeyValueConfig.STORE_CREDIT_SHEET, ACTIVE_RANGE);
-    for (let i = 0; i < values.values.length; ++i) {
-      const entry = values.values[i];
+    for (let i = 0; i < values.values!.length; ++i) {
+      const entry = values.values![i];
       if (entry[7] == code) {
         const credit_balance = Math.round(Number(entry[3]) * 100);
         if (amount.amount > credit_balance) {
@@ -246,9 +246,9 @@ export class StoreCreditProvider {
   RefundStoreCredit = async (code: string, amount: IMoney, updatedBy: string): Promise<{ success: false } | ValidateLockAndSpendSuccess> => {
     const beginningOfToday = startOfDay(Date.now());
     const values = await GoogleProviderInstance.GetValuesFromSheet(DataProviderInstance.KeyValueConfig.STORE_CREDIT_SHEET, ACTIVE_RANGE);
-    const creditCodeIndex = values.values.findIndex(x => x[7] == code);
+    const creditCodeIndex = values.values!.findIndex(x => x[7] == code);
     if (creditCodeIndex !== -1) {
-      const entry = values.values[creditCodeIndex];
+      const entry = values.values![creditCodeIndex];
       const credit_balance = Math.round(Number(entry[3]) * 100);
       const newBalance = ((credit_balance + amount.amount) / 100).toFixed(2);
       const lock = aes256gcm.encrypt(code);
@@ -276,13 +276,15 @@ export class StoreCreditProvider {
     const qr_code_fs_b = new Stream.PassThrough();
     qr_code_fs.pipe(qr_code_fs_a);
     qr_code_fs.pipe(qr_code_fs_b);
-    let orderUpdateCount = 0;
+    
     const create_order_response = await SquareProviderInstance.CreateOrderStoreCredit(referenceId, request.amount, `Purchase of store credit code: ${creditCode}`);
-    if (create_order_response.success === true) {
+    if (create_order_response.success && create_order_response.result.order) {
       const squareOrder = create_order_response.result.order;
-      logger.info(`For internal id ${referenceId} created Square Order ID: ${squareOrder.id} for ${amountString}`)
-      const payment_response = await SquareProviderInstance.ProcessPayment({ sourceId: nonce, amount: request.amount, referenceId, squareOrderId: squareOrder.id });
-      orderUpdateCount = orderUpdateCount + 1;
+      let squareOrderVersion = squareOrder.version!;
+      const squareOrderId = squareOrder.id!;
+      logger.info(`For internal id ${referenceId} created Square Order ID: ${squareOrderId} for ${amountString}`)
+      const payment_response = await SquareProviderInstance.ProcessPayment({ sourceId: nonce, amount: request.amount, referenceId, squareOrderId });
+      ++squareOrderVersion;
       if (payment_response.success === true && payment_response.result.t === PaymentMethod.CreditCard) {
         const orderPayment = payment_response.result;
         await CreateExternalEmailSender(request, creditCode, qr_code_fs_a);
@@ -298,12 +300,12 @@ export class StoreCreditProvider {
           expiration: null
         })
           .then(async (_) => {
-            logger.info(`Store credit code: ${creditCode} and Square Order ID: ${squareOrder.id} payment for ${amountString} successful, credit logged to spreadsheet.`)
+            logger.info(`Store credit code: ${creditCode} and Square Order ID: ${squareOrderId} payment for ${amountString} successful, credit logged to spreadsheet.`)
             return {
               status: 200, error: [], result: {
                 referenceId,
                 code: creditCode,
-                squareOrderId: squareOrder.id,
+                squareOrderId: squareOrderId,
                 amount: orderPayment.amount,
                 last4: orderPayment.payment.last4,
                 receiptUrl: orderPayment.payment.receiptUrl
@@ -321,7 +323,7 @@ export class StoreCreditProvider {
       else {
         logger.error("Failed to process payment: %o", payment_response);
         if (create_order_response.result) {
-          await SquareProviderInstance.OrderStateChange(squareOrder.id, squareOrder.version + orderUpdateCount, "CANCELED");
+          await SquareProviderInstance.OrderStateChange(squareOrderId, squareOrderVersion, "CANCELED");
         }
         return { status: 400, success: false, result: null, error: payment_response.error.map(x => ({ category: x.category, code: x.code, detail: x.detail! })) };
       }

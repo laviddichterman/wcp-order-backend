@@ -62,6 +62,10 @@ export const WOptionSchema = new Schema<MT>({
 
     // boolean flag representing if the option can be split left/right
     can_split: Boolean,
+
+    allowHeavy: Boolean,
+    allowLite: Boolean,
+    allowOTS: Boolean
   },
 
   // optional function object that operates on a product instance

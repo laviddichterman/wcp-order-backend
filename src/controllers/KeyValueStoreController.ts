@@ -33,9 +33,9 @@ export class KeyValueStoreController implements IExpressController {
 
   private getKvStore = async (request: Request, response: Response, next: NextFunction) => {
     try {
-      response.status(200).send(DataProviderInstance.KeyValueConfig);
+      return response.status(200).send(DataProviderInstance.KeyValueConfig);
     } catch (error) {
-      next(error)
+      return next(error)
     }
   }
 
@@ -50,7 +50,7 @@ export class KeyValueStoreController implements IExpressController {
       res.setHeader('Location', location);
       return res.status(201).send(DataProviderInstance.KeyValueConfig);
     } catch (error) {
-      next(error)
+      return next(error)
     }
   }
 }

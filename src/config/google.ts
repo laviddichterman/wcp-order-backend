@@ -25,7 +25,7 @@ export class GoogleProvider implements WProvider {
     try {
       const token = await this.#oauth2Client.getAccessToken();
       logger.debug(`Refreshing Google OAUTH2 access token to ${token.token}`);
-      this.#accessToken = token.token;
+      this.#accessToken = token.token!;
     }
     catch (error) {
       logger.error(`Failed to refresh Google access token, got error ${JSON.stringify(error)}`);

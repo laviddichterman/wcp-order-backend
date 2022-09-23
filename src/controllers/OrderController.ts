@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { body, param, header, query } from 'express-validator';
-import { CreateOrderRequestV2, CreateOrderResponse, CURRENCY, FulfillmentTime, WDateUtils, WOrderStatus } from '@wcp/wcpshared';
+import { CreateOrderRequestV2, CreateOrderResponse, CURRENCY, FulfillmentTime, WOrderStatus } from '@wcp/wcpshared';
 import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
 import { DataProviderInstance } from '../config/dataprovider';
 import { OrderManagerInstance } from '../config/order_manager';
@@ -91,7 +91,8 @@ export class OrderController implements IExpressController {
         balance: req.body.balance,
         nonce: req.body.nonce
       };
-      const response = await OrderManagerInstance.CreateOrder(reqBody, (req.headers['x-real-ip'] as string) || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress);
+      const ipAddress = (req.headers['x-real-ip'] as string) ?? (req.headers['x-forwarded-for'] as string) ?? req.socket.remoteAddress ?? "";
+      const response = await OrderManagerInstance.CreateOrder(reqBody, ipAddress);
       res.status(response.status).json({ success: response.success, errors: response.errors, result: response.result } as CreateOrderResponse);
     } catch (error) {
       const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
@@ -107,7 +108,7 @@ export class OrderController implements IExpressController {
 
   private putCancelOrder = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const idempotencyKey = req.get('idempotency-key');
+      const idempotencyKey = req.get('idempotency-key')!;
       const orderId = req.params.oId;
       const reason = req.body.reason as string;
       const emailCustomer = req.body.emailCustomer as boolean;
@@ -127,7 +128,7 @@ export class OrderController implements IExpressController {
 
   private putConfirmOrder = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const idempotencyKey = req.get('idempotency-key');
+      const idempotencyKey = req.get('idempotency-key')!;
       const orderId = req.params.oId;
       const additionalMessage = req.body.additionalMessage as string;
       const response = await OrderManagerInstance.ConfirmOrder(idempotencyKey, orderId, additionalMessage);
@@ -146,7 +147,7 @@ export class OrderController implements IExpressController {
 
   private putRescheduleOrder = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const idempotencyKey = req.get('idempotency-key');
+      const idempotencyKey = req.get('idempotency-key')!;
       const orderId = req.params.oId;
       const newTime: FulfillmentTime = { selectedDate: req.body.selectedDate, selectedTime: req.body.selectedTime };
       const emailCustomer = req.body.emailCustomer as boolean;

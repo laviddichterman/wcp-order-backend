@@ -57,8 +57,8 @@ export class WApp {
   public async listen() {
     logger.info("Starting connection to DB");
     const DBTABLE = process.env.DBTABLE || "wcp";
-    const DBUSER = process.env.DBUSER || null;
-    const DBPASS = process.env.DBPASS || null;
+    const DBUSER = process.env.DBUSER || undefined;
+    const DBPASS = process.env.DBPASS || undefined;
     const DBENDPOINT = process.env.DBENDPOINT || '127.0.0.1:27017';
     const url = `mongodb://${DBENDPOINT}/${DBTABLE}`;
     mongoose.connect(url, { user: DBUSER, pass: DBPASS });

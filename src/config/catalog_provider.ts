@@ -15,7 +15,8 @@ import {
   RecordOrderInstanceFunctions,
   RecordProductInstanceFunctions,
   CatalogGenerator,
-  ICatalogSelectorWrapper
+  ICatalogSelectorWrapper,
+  KeyValue
 } from "@wcp/wcpshared";
 import DBVersionModel from '../models/DBVersionSchema';
 import { WCategoryModel } from '../models/catalog/category/WCategorySchema';
@@ -29,6 +30,9 @@ import { DataProviderInstance } from "./dataprovider";
 import { SocketIoProviderInstance } from "./socketio_provider";
 import logger from '../logging';
 import { WProvider } from "../types/WProvider";
+import { SquareProviderInstance } from "./square";
+import { GetSquareExternalIds, GetSquareIdIndexFromExternalIds, IdMappingsToExternalIds, ModifierOptionToSquareCatalogObject, ProductInstanceToSquareCatalogObject, WARIO_SQUARE_ID_METADATA_KEY } from "./SquareWarioBridge";
+import { CatalogObject } from "square";
 
 const ValidateProductModifiersFunctionsCategories = function (modifiers: { mtid: string; enable: string | null; }[], category_ids: string[], catalog: CatalogProvider) {
   const found_all_modifiers = modifiers.map(entry =>
@@ -37,6 +41,25 @@ const ValidateProductModifiersFunctionsCategories = function (modifiers: { mtid:
   const found_all_categories = category_ids.map(cid => Object.hasOwn(catalog.Categories, cid)).every(x => x === true);
   return found_all_categories && found_all_modifiers;
 }
+
+const BatchDeleteCatalogObjectsFromExternalIds = async (externalIds: KeyValue[]) => {
+  const squareKV = externalIds.filter(x => x.key.startsWith(WARIO_SQUARE_ID_METADATA_KEY));
+  const squareKeys = squareKV.map(x => x.key.substring(WARIO_SQUARE_ID_METADATA_KEY.length));
+  const squareValues = squareKV.map(x => x.value);
+  logger.debug(`Removing ${squareKeys.join(", ")} from Square: ${squareValues.join(", ")}`);
+  return await SquareProviderInstance.BatchDeleteCatalogObjects(squareKV.map(x => x.value));
+}
+
+type UpdateProductInstanceProps = {
+  piid: string;
+  product: Pick<IProduct, 'price' | 'modifiers'>;
+  productInstance: Partial<Omit<IProductInstance, 'id' | 'productId'>>;
+};
+type UpdateModifierOptionProps = {
+  id: string;
+  modifierOption: Partial<Omit<IOption, 'id' | 'modifierTypeId'>>;
+};
+const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
 export class CatalogProvider implements WProvider {
   #categories: Record<string, ICategory>;
@@ -49,6 +72,7 @@ export class CatalogProvider implements WProvider {
   #catalog: ICatalog;
   #apiver: SEMVER;
   constructor() {
+    this.#apiver = { major: 0, minor: 0, patch: 0 };
   }
 
   get Categories() {
@@ -179,10 +203,27 @@ export class CatalogProvider implements WProvider {
     SocketIoProviderInstance.EmitCatalog(this.#catalog);
   }
 
+  CheckAllModifierOptionsHaveSquareIdsAndFixIfNeeded = async () => {
+    const batches = this.#options
+      .filter(opt => GetSquareIdIndexFromExternalIds(opt.externalIDs, 'MODIFIER_LIST') === -1)
+      .map(opt => ({ id: opt.id, modifierOption: {} } as UpdateModifierOptionProps));
+    return batches.length > 0 ? await this.BatchUpdateModifierOption(batches, true) : null;
+  }
+
+  CheckAllProductsHaveSquareIdsAndFixIfNeeded = async () => {
+    const batches = Object.values(this.#catalog.products)
+      .map(p => p.instances
+        .filter(piid => GetSquareIdIndexFromExternalIds(this.#catalog.productInstances[piid]!.externalIDs, "ITEM") === -1)
+        .map(piid => ({ piid, product: { modifiers: p.product.modifiers, price: p.product.price }, productInstance: {} } as UpdateProductInstanceProps)))
+      .flat();
+    return batches.length > 0 ? await this.BatchUpdateProductInstance(batches, true) : null;
+  }
+
   Bootstrap = async () => {
     logger.info(`Starting Bootstrap of CatalogProvider, Loading catalog from database...`);
 
-    this.#apiver = await DBVersionModel.findOne().exec()
+    const newVer = await DBVersionModel.findOne().exec()!;
+    this.#apiver = newVer!;
 
     await Promise.all([
       this.SyncCategories(),
@@ -193,6 +234,12 @@ export class CatalogProvider implements WProvider {
       this.SyncProductInstanceFunctions(),
       this.SyncOrderInstanceFunctions()]);
 
+    this.RecomputeCatalog();
+    await this.CheckAllModifierOptionsHaveSquareIdsAndFixIfNeeded();
+    await this.CheckAllProductsHaveSquareIdsAndFixIfNeeded();
+
+    await this.SyncOptions();
+    await this.SyncProducts();
     this.RecomputeCatalog();
 
     logger.info(`Finished Bootstrap of CatalogProvider`);
@@ -212,12 +259,12 @@ export class CatalogProvider implements WProvider {
       // not found
       return null;
     }
-    var cycle_update_promise = null;
+    let cycle_update_promise = null;
     if (this.#categories[category_id].parent_id !== category.parent_id && category.parent_id) {
       // need to check for potential cycle
-      var cur = category.parent_id;
-      while (cur && this.#categories[cur].parent_id !== category_id) {
-        cur = this.#categories[cur].parent_id;
+      let cur: string | null = category.parent_id;
+      while (cur && this.#categories[cur]!.parent_id !== category_id) {
+        cur = this.#categories[cur]!.parent_id;
       }
       // if the cursor is not empty/null/blank then we stopped because we found the cycle
       if (cur) {
@@ -234,7 +281,7 @@ export class CatalogProvider implements WProvider {
     await this.SyncCategories();
     this.RecomputeCatalogAndEmit();
     // is this going to still be valid after the Sync above?
-    return response.toObject();
+    return response!.toObject();
   };
 
   DeleteCategory = async (category_id: string) => {
@@ -275,6 +322,7 @@ export class CatalogProvider implements WProvider {
     const doc = new WOptionTypeModel(modifierType);
     await doc.save();
     await this.SyncModifierTypes();
+    // NOTE: we don't make anything in the square catalog for just the modifier type
     this.RecomputeCatalogAndEmit();
     return doc;
   };
@@ -286,6 +334,7 @@ export class CatalogProvider implements WProvider {
     if (!updated) {
       return null;
     }
+    // NOTE: we don't make anything in the square catalog for just the modifier type
     await this.SyncModifierTypes();
     this.RecomputeCatalogAndEmit();
     return updated;
@@ -298,13 +347,9 @@ export class CatalogProvider implements WProvider {
       logger.warn("Unable to delete the ModifierType from the database.");
       return null;
     }
-    const options_delete = await WOptionModel.deleteMany({ modifierTypeId: mt_id }).exec();
-    if (this.#catalog.modifiers[mt_id].options.length !== options_delete.deletedCount) {
-      logger.error(`Mismatch between number of modifier options deleted and the number the catalog sees as child of this modifier type.`);
-    }
-    if (options_delete.deletedCount > 0) {
-      logger.debug(`Removed ${options_delete.deletedCount} Options from the catalog.`);
-    }
+
+    await Promise.all(this.#catalog.modifiers[mt_id].options.map(op => this.DeleteModifierOption(op, true)))
+
     const products_update = await WProductModel
       .updateMany({}, { $pull: { modifiers: { mtid: mt_id } } })
       .exec();
@@ -337,39 +382,139 @@ export class CatalogProvider implements WProvider {
     if (!Object.hasOwn(this.Catalog.modifiers, modifierOption.modifierTypeId)) {
       return null;
     }
+    // First create the square modifier
+    const modifierEntry = this.Catalog.modifiers[modifierOption.modifierTypeId];
+    const upsertResponse = await SquareProviderInstance.UpsertCatalogObject(ModifierOptionToSquareCatalogObject([DataProviderInstance.KeyValueConfig.SQUARE_LOCATION], modifierEntry.modifierType.ordinal, modifierOption, [], ""));
+    if (!upsertResponse.success) {
+      return null;
+    }
+    // add the modifier to all items that reference this modifier option's modifierTypeId
+    const productUpdates = Object.values(this.#catalog.products)
+      .filter(p => p.product.modifiers.findIndex(x => x.mtid === modifierOption.modifierTypeId) !== -1)
+      .map((p) => p.instances.map(piid => ({ piid, product: { modifiers: p.product.modifiers, price: p.product.price }, productInstance: {} }))).flat();
+    if (productUpdates.length > 0) {
+      await this.BatchUpdateProductInstance(productUpdates, true);
+      // explicitly don't need to sync the product instances here since we're just making this batch call for square product updates
+    }
 
-    const doc = new WOptionModel(modifierOption);
+    const doc = new WOptionModel({
+      ...modifierOption,
+      externalIDs: [...modifierOption.externalIDs, ...IdMappingsToExternalIds(upsertResponse.result!.idMappings, "")]
+    });
     await doc.save();
     await this.SyncOptions();
     this.RecomputeCatalogAndEmit();
     return doc;
   };
 
-  UpdateModifierOption = async (id: string, modifierOption: Partial<Omit<IOption, 'id' | 'modifierTypeId'>>) => {
+  UpdateModifierOption = async (props: UpdateModifierOptionProps, suppress_catalog_recomputation: boolean = false) => {
+    return (await this.BatchUpdateModifierOption([props], suppress_catalog_recomputation))[0];
+  };
+
+  BatchUpdateModifierOption = async (batches: UpdateModifierOptionProps[], suppress_catalog_recomputation: boolean = false) => {
+    logger.info(`Request to update ModifierOption(s) ${batches.map(b => `ID: ${b.id}, updates: ${JSON.stringify(b.modifierOption)}`).join(", ")}${suppress_catalog_recomputation ? " suppressing catalog recomputation" : ""}`);
+
     //TODO: post update: rebuild all products with the said modifier option since the ordinal might have changed
-    // 
-    const updated = await WOptionModel
-      .findByIdAndUpdate(id, modifierOption, { new: true })
-      .exec();
-    if (!updated) {
-      return null;
+
+    const oldOptions = batches.map(b => this.#catalog.options[b.id]!);
+    const newExternalIdses = batches.map((b, i) => b.modifierOption.externalIDs ?? oldOptions[i].externalIDs);
+    const squareCatalogObjectsToDelete: string[] = [];
+    batches.forEach((b, i) => {
+      if (b.modifierOption.metadata) {
+        if (b.modifierOption.metadata.allowHeavy === false && oldOptions[i].metadata.allowHeavy === true) {
+          const kv = newExternalIdses[i].splice(GetSquareIdIndexFromExternalIds(newExternalIdses[i], 'MODIFIER_HEAVY'))[0];
+          squareCatalogObjectsToDelete.push(kv.value);
+        }
+        if (b.modifierOption.metadata.allowLite === false && oldOptions[i].metadata.allowLite === true) {
+          const kv = newExternalIdses[i].splice(GetSquareIdIndexFromExternalIds(newExternalIdses[i], 'MODIFIER_LITE'))[0];
+          squareCatalogObjectsToDelete.push(kv.value);
+        }
+        if (b.modifierOption.metadata.allowOTS === false && oldOptions[i].metadata.allowOTS === true) {
+          const kv = newExternalIdses[i].splice(GetSquareIdIndexFromExternalIds(newExternalIdses[i], 'MODIFIER_OTS'))[0];
+          squareCatalogObjectsToDelete.push(kv.value);
+        }
+        if (b.modifierOption.metadata.can_split === false && oldOptions[i].metadata.can_split === true) {
+          const kvL = newExternalIdses[i].splice(GetSquareIdIndexFromExternalIds(newExternalIdses[i], 'MODIFIER_LEFT'))[0];
+          const kvR = newExternalIdses[i].splice(GetSquareIdIndexFromExternalIds(newExternalIdses[i], 'MODIFIER_RIGHT'))[0];
+          squareCatalogObjectsToDelete.push(kvL.value, kvR.value);
+        }
+      }
+    })
+
+    if (squareCatalogObjectsToDelete.length > 0) {
+      logger.info(`Deleting Square Catalog Modifiers due to ModifierOption update: ${squareCatalogObjectsToDelete.join(', ')}`);
+      await SquareProviderInstance.BatchDeleteCatalogObjects(squareCatalogObjectsToDelete);
     }
-    await this.SyncOptions();
-    this.RecomputeCatalogAndEmit();
+    const existingSquareExternalIds = newExternalIdses.map((ids) => GetSquareExternalIds(ids)).flat();
+    let existingSquareObjects: CatalogObject[] = [];
+    if (existingSquareExternalIds.length > 0) {
+      const batchRetrieveCatalogObjectsResponse = await SquareProviderInstance.BatchRetrieveCatalogObjects(existingSquareExternalIds.map(x => x.value), false);
+      if (!batchRetrieveCatalogObjectsResponse.success) {
+        logger.error(`Getting current square CatalogObjects failed with ${JSON.stringify(batchRetrieveCatalogObjectsResponse.error)}`);
+        return batches.map(_ => null);
+      }
+      existingSquareObjects = batchRetrieveCatalogObjectsResponse.result.objects ?? [];
+    }
+    const catalogObjects = batches.map((b, i) => {
+      const modifierTypeOrdinal = this.CatalogSelectors.modifierEntry(oldOptions[i].modifierTypeId)!.modifierType.ordinal;
+      return ModifierOptionToSquareCatalogObject(
+        [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION],
+        modifierTypeOrdinal,
+        {
+          ...oldOptions[i],
+          ...b.modifierOption,
+          externalIDs: newExternalIdses[i]
+        },
+        existingSquareObjects,
+        ('000' + i).slice(-3))
+
+    })
+
+    const upsertResponse = await SquareProviderInstance.BatchUpsertCatalogObjects(catalogObjects.map(x => ({ objects: [x] })));
+    if (!upsertResponse.success) {
+      logger.error(`Failed to update square product`);
+      return batches.map(_ => null);
+    }
+
+    const mappings = upsertResponse.result.idMappings;
+
+    const updated = await Promise.all(batches.map(async (b, i) => {
+      const doc = await WOptionModel
+        .findByIdAndUpdate(b.id,
+          {
+            ...b.modifierOption,
+            externalIDs: [...newExternalIdses[i], ...IdMappingsToExternalIds(mappings, ('000' + i).slice(-3))]
+          }, { new: true })
+        .exec();
+      if (!doc) {
+        return null;
+      }
+      return doc;
+    }));
+
+    if (!suppress_catalog_recomputation) {
+      await this.SyncOptions();
+      this.RecomputeCatalogAndEmit();
+    }
     return updated;
   };
 
-  DeleteModifierOption = async (mo_id: string) => {
+  DeleteModifierOption = async (mo_id: string, suppress_catalog_recomputation: boolean = false) => {
     logger.debug(`Removing Modifier Option ${mo_id}`);
     const doc = await WOptionModel.findByIdAndDelete(mo_id).exec();
     if (!doc) {
       return null;
     }
+
+    // NOTE: this removes the modifiers from the Square ITEMs and ITEM_VARIATIONs as well
+    await BatchDeleteCatalogObjectsFromExternalIds(doc.externalIDs);
+
     const product_instance_options_delete = await WProductInstanceModel.updateMany(
       { "modifiers.modifierTypeId": doc.modifierTypeId },
       { $pull: { "modifiers.$.options": { optionId: mo_id } } }).exec();
     if (product_instance_options_delete.modifiedCount > 0) {
       logger.debug(`Removed ${product_instance_options_delete.modifiedCount} Options from Product Instances.`);
+      // TODO: run query for any modifiers.options.length === 0
       await this.SyncProductInstances();
     }
     await this.SyncOptions();
@@ -383,7 +528,9 @@ export class CatalogProvider implements WProvider {
         await this.DeleteProductInstanceFunction(pif.id, true);
       }
     }));
-    this.RecomputeCatalogAndEmit();
+    if (!suppress_catalog_recomputation) {
+      this.RecomputeCatalogAndEmit();
+    }
     return doc;
   }
 
@@ -391,44 +538,69 @@ export class CatalogProvider implements WProvider {
     if (!ValidateProductModifiersFunctionsCategories(product.modifiers, product.category_ids, this)) {
       return null;
     }
+
+    // add the product instance to the square catalog here
+    const upsertResponse = await SquareProviderInstance.UpsertCatalogObject(ProductInstanceToSquareCatalogObject([DataProviderInstance.KeyValueConfig.SQUARE_LOCATION], product, instance, this.CatalogSelectors, [], ""));
+    if (!upsertResponse.success) {
+      return null;
+    }
+
     const doc = new WProductModel(product);
     const savedProduct = await doc.save();
     logger.debug(`Saved new WProductModel: ${JSON.stringify(savedProduct.toObject())}`);
-    const pi = new WProductInstanceModel({...instance, productId: savedProduct.id});
-    const piDoc = await pi.save(); 
+    const pi = new WProductInstanceModel({
+      ...instance,
+      productId: savedProduct.id,
+      externalIDs: [...instance.externalIDs, ...IdMappingsToExternalIds(upsertResponse.result.idMappings, "")]
+    });
+    const piDoc = await pi.save();
     logger.debug(`Saved new product instance: ${JSON.stringify(piDoc.toObject())}`);
     savedProduct.baseProductId = piDoc.id;
     await savedProduct.save();
-    //const updatedProduct = await WProductModel.findByIdAndUpdate(savedProduct.id, { '$set': { baseProductId: piDoc.id } }).exec();
+
     await Promise.all([this.SyncProducts(), this.SyncProductInstances()]);
-    
+
     this.RecomputeCatalogAndEmit();
     return piDoc;
   };
 
   UpdateProduct = async (pid: string, product: Partial<Omit<IProduct, 'id'>>) => {
-    if (!ValidateProductModifiersFunctionsCategories(product.modifiers, product.category_ids, this)) {
+    if (!ValidateProductModifiersFunctionsCategories(product.modifiers ?? [], product.category_ids ?? [], this)) {
       return null;
     }
+    const oldProductEntry = this.Catalog.products[pid];
     const updated = await WProductModel
       .findByIdAndUpdate(pid, product, { new: true })
       .exec();
     if (!updated) {
       return null;
     }
-
+    let removedModifierTypes: string[] = [];
+    let addedModifierTypes = false;
+    const adjustedPrice = product.price && product.price !== oldProductEntry.product.price ? product.price : null;
     if (product.modifiers) {
-      const old_modifiers = this.#catalog.products[pid].product.modifiers.map(x => x.mtid);
-      const new_modifiers_mtids = product.modifiers.map(x => x.mtid);
-      const removed_modifiers = old_modifiers.filter(x => !new_modifiers_mtids.includes(x));
+      const oldModifierTypes = oldProductEntry.product.modifiers.map(x => x.mtid);
+      const newModifierTypes = product.modifiers.map(x => x.mtid);
+      removedModifierTypes = oldModifierTypes.filter(x => !newModifierTypes.includes(x));
+      addedModifierTypes = newModifierTypes.filter(x => !oldModifierTypes.includes(x)).length > 0;
+    }
 
-      if (removed_modifiers.length) {
-        await Promise.all(removed_modifiers.map(async (mtid) => {
-          const product_instance_update = await WProductInstanceModel.updateMany({ productId: pid }, { $pull: { modifiers: { modifierTypeId: mtid } } });
-          logger.debug(`Removed ModifierType ID ${mtid} from ${product_instance_update.modifiedCount} product instances.`);
-        }));
-        await this.SyncProductInstances();
-      }
+    const batchProductInstanceUpdates = oldProductEntry.instances
+      .map((piId) => this.Catalog.productInstances[piId]!)
+      .filter(pi => adjustedPrice !== null ||
+        addedModifierTypes ||
+        pi.modifiers.filter(mod => removedModifierTypes.includes(mod.modifierTypeId)).length > 0)
+      .map((pi) => ({
+        piid: pi.id,
+        product: { modifiers: updated.modifiers, price: updated.price },
+        productInstance: {
+          modifiers: pi.modifiers.filter(x => !removedModifierTypes.includes(x.modifierTypeId))
+        }
+      }));
+
+    if (batchProductInstanceUpdates.length > 0) {
+      await this.BatchUpdateProductInstance(batchProductInstanceUpdates, true);
+      await this.SyncProductInstances();
     }
 
     await this.SyncProducts();
@@ -438,11 +610,16 @@ export class CatalogProvider implements WProvider {
 
   DeleteProduct = async (p_id: string) => {
     logger.debug(`Removing Product ${p_id}`);
+    const productEntry = this.#catalog.products[p_id]!;
+
     const doc = await WProductModel.findByIdAndDelete(p_id).exec();
     if (!doc) {
       return null;
     }
-    const product_instance_delete = await WProductInstanceModel.deleteMany({ productId: p_id });
+    // removing ALL product instances from Square
+    await BatchDeleteCatalogObjectsFromExternalIds(productEntry.instances.reduce((acc, pi) => [...acc, ...this.#catalog.productInstances[pi]!.externalIDs], []));
+
+    const product_instance_delete = await WProductInstanceModel.deleteMany({ productId: p_id }).exec();
     if (product_instance_delete.deletedCount > 0) {
       logger.debug(`Removed ${product_instance_delete.deletedCount} Product Instances.`);
       await this.SyncProductInstances();
@@ -453,27 +630,78 @@ export class CatalogProvider implements WProvider {
   }
 
   CreateProductInstance = async (productInstance: Omit<IProductInstance, 'id'>) => {
-    const doc = new WProductInstanceModel(productInstance);
+    // add the product instance to the square catalog here
+    const product = this.#catalog.products[productInstance.productId]!.product;
+    const upsertResponse = await SquareProviderInstance.UpsertCatalogObject(ProductInstanceToSquareCatalogObject([DataProviderInstance.KeyValueConfig.SQUARE_LOCATION], product, productInstance, this.CatalogSelectors, [], ""));
+    if (!upsertResponse.success) {
+      return null;
+    }
+    const doc = new WProductInstanceModel({
+      ...productInstance,
+      externalIDs: [...productInstance.externalIDs, ...IdMappingsToExternalIds(upsertResponse.result.idMappings, "")]
+    });
     await doc.save();
     await this.SyncProductInstances();
     this.RecomputeCatalogAndEmit();
     return doc;
   };
 
-  UpdateProductInstance = async (piid: string, productInstance: Partial<Omit<IProductInstance, 'id' | 'productId'>>) => {
-    const updated = await WProductInstanceModel
-      .findByIdAndUpdate(piid, productInstance, { new: true })
-      .exec();
-    if (!updated) {
-      return null;
+  BatchUpdateProductInstance = async (batches: UpdateProductInstanceProps[], suppress_catalog_recomputation: boolean = false): Promise<(IProductInstance | null)[]> => {
+    logger.info(`Updating product instance(s) ${batches.map(x => `ID: ${x.piid}, changes: ${JSON.stringify(x.productInstance)}`).join(", ")}, ${suppress_catalog_recomputation ? "and suppressing the catalog recomputation" : ""}`);
+
+    const oldProductInstances = batches.map(b => this.Catalog.productInstances[b.piid]!);
+    const newExternalIdses = batches.map((b, i) => b.productInstance.externalIDs ?? oldProductInstances[i].externalIDs);
+    const existingSquareExternalIds = newExternalIdses.map((ids) => GetSquareExternalIds(ids)).flat();
+    let existingSquareObjects: CatalogObject[] = [];
+    if (existingSquareExternalIds.length > 0) {
+      const batchRetrieveCatalogObjectsResponse = await SquareProviderInstance.BatchRetrieveCatalogObjects(existingSquareExternalIds.map(x => x.value), false);
+      if (!batchRetrieveCatalogObjectsResponse.success) {
+        logger.error(`Getting current square CatalogObjects failed with ${JSON.stringify(batchRetrieveCatalogObjectsResponse.error)}`);
+        return batches.map(_ => null);
+      }
+      existingSquareObjects = batchRetrieveCatalogObjectsResponse.result.objects ?? [];
     }
 
-    await this.SyncProductInstances();
-    this.RecomputeCatalogAndEmit();
+    const catalogObjects = batches.map((b, i) =>
+      ProductInstanceToSquareCatalogObject(
+        [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION],
+        b.product,
+        { ...oldProductInstances[i], ...b.productInstance },
+        this.CatalogSelectors, existingSquareObjects, ('000' + i).slice(-3)));
+    const upsertResponse = await SquareProviderInstance.BatchUpsertCatalogObjects(catalogObjects.map(x => ({ objects: [x] })));
+    if (!upsertResponse.success) {
+      logger.error(`Failed to update square product`);
+      return batches.map(_ => null);
+    }
+
+    const mappings = upsertResponse.result.idMappings;
+
+    const updated = await Promise.all(batches.map(async (b, i) => {
+      const doc = await WProductInstanceModel
+        .findByIdAndUpdate(b.piid,
+          {
+            ...b.productInstance,
+            externalIDs: [...newExternalIdses[i], ...IdMappingsToExternalIds(mappings, ('000' + i).slice(-3))]
+          }, { new: true })
+        .exec();
+      if (!doc) {
+        return null;
+      }
+      return doc;
+    }));
+
+    if (!suppress_catalog_recomputation) {
+      await this.SyncProductInstances();
+      this.RecomputeCatalogAndEmit();
+    }
     return updated;
+  }
+
+  UpdateProductInstance = async (props: UpdateProductInstanceProps, suppress_catalog_recomputation: boolean = false) => {
+    return (await this.BatchUpdateProductInstance([props], suppress_catalog_recomputation))[0];
   };
 
-  DeleteProductInstance = async (pi_id: string) => {
+  DeleteProductInstance = async (pi_id: string, suppress_catalog_recomputation: boolean = false) => {
     const instance = this.Catalog.productInstances[pi_id];
     if (instance) {
       const productEntry = this.Catalog.products[instance.productId];
@@ -481,15 +709,22 @@ export class CatalogProvider implements WProvider {
         logger.warn(`Attempted to delete base product instance for product ${productEntry.product.id}`);
         return null;
       }
+
       logger.debug(`Removing Product Instance: ${pi_id}`);
       const doc = await WProductInstanceModel.findByIdAndDelete(pi_id).exec();
       if (!doc) {
         return null;
       }
-      await this.SyncProductInstances();
-      this.RecomputeCatalogAndEmit();
-      return doc;  
+
+      await BatchDeleteCatalogObjectsFromExternalIds(doc.externalIDs);
+
+      if (!suppress_catalog_recomputation) {
+        await this.SyncProductInstances();
+        this.RecomputeCatalogAndEmit();
+      }
+      return doc;
     }
+    return null;
   }
 
   CreateProductInstanceFunction = async (productInstanceFunction: Omit<IProductInstanceFunction, 'id'>) => {

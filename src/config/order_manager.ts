@@ -105,7 +105,7 @@ const GenerateShortCode = function (menu: IMenu, p: WProduct) {
 }
 
 const IsNativeAreaCode = function (phone: string, area_codes: string[]) {
-  const numeric_phone = phone.match(/\d/g).join("");
+  const numeric_phone = phone.match(/\d/g)!.join("");
   const area_code = numeric_phone.slice(0, 3);
   return (numeric_phone.length == 10 && area_codes.some(x => x === area_code));
 };
@@ -132,7 +132,7 @@ const CreateExternalConfirmationEmail = async function (
   const nice_area_code = IsNativeAreaCode(order.customerInfo.mobileNum, STORE_NAME === WCP ? WCP_AREA_CODES : BTP_AREA_CODES);
   const payment_section = isPaid ? (fulfillmentConfig.service === FulfillmentType.DineIn ? NOTE_PREPAID : NOTE_PREPAID) : NOTE_PAYMENT;
   const confirm = fulfillmentConfig.messages.CONFIRMATION; // [`We're happy to confirm your ${display_time} pickup at`, `We're happy to confirm your ${display_time} at`, `We're happy to confirm your delivery around ${display_time} at`];
-  const where = order.fulfillment.deliveryInfo?.validation.validated_address ?? STORE_ADDRESS;
+  const where = order.fulfillment.deliveryInfo?.validation?.validated_address ?? STORE_ADDRESS;
 
   return await GoogleProviderInstance.SendEmail(
     {
@@ -157,7 +157,7 @@ const CreateExternalCancelationEmail = async function (
   const display_time = DateTimeIntervalToDisplayServiceInterval(dateTimeInterval);
   const customer_name = [order.customerInfo.givenName, order.customerInfo.familyName].join(" ");
   const service_title = ServiceTitleBuilder(fulfillmentConfig.displayName, order.fulfillment, customer_name, dateTimeInterval);
-  
+
 
   return await GoogleProviderInstance.SendEmail(
     {
@@ -217,7 +217,7 @@ const GeneratePaymentSection = (totals: RecomputeTotalsResult, discounts: OrderL
 }
 
 const GenerateDeliverySection = (deliveryInfo: DeliveryInfoDto | null, ishtml: boolean) => {
-  if (deliveryInfo === null || !deliveryInfo.validation.validated_address) {
+  if (deliveryInfo === null || !deliveryInfo.validation || !deliveryInfo.validation.validated_address) {
     return "";
   }
   const delivery_unit_info = deliveryInfo.address2 ? `, Unit info: ${deliveryInfo.address2}` : "";
@@ -269,15 +269,15 @@ const GenerateDisplayCartStringListFromProducts = (cart: CategorizedRebuiltCart)
   Object.values(cart).map((category_cart) => category_cart.map((item) => `${item.quantity}x: ${item.product.m.name}`)).flat(1);
 
 
-const GenerateShortCartFromFullCart = (cart: CategorizedRebuiltCart) => {
+const GenerateShortCartFromFullCart = (cart: CategorizedRebuiltCart): { category_name: string; products: string[] }[] => {
   const catalogCategories = CatalogProviderInstance.Catalog.categories;
-  return Object.entries(cart).map(([catid, category_cart]) => {
-    if (category_cart.length > 0) {
+  return Object.entries(cart)
+    .filter(([_, cart]) => cart.length > 0)
+    .map(([catid, category_cart]) => {
       const category_name = catalogCategories[catid].category.name;
       const category_shortcart = { category_name: category_name, products: category_cart.map(x => `${x.quantity}x: ${x.product.m.shortname}`) };
       return category_shortcart;
-    }
-  })
+    })
 }
 
 const RebuildOrderState = function (menu: IMenu, cart: CoreCartEntry<WCPProductV2Dto>[], service_time: Date | number, fulfillmentConfig: FulfillmentConfig) {
@@ -434,16 +434,16 @@ const CreateOrderEvent = async (
   totals: RecomputeTotalsResult) => {
   const shortcart = GenerateShortCartFromFullCart(cart);
   const customerName = `${order.customerInfo.givenName} ${order.customerInfo.familyName}`;
-  const calendar_event_title = EventTitleStringBuilder(menu, fulfillmentConfig, customerName, order.fulfillment.dineInInfo, cart, order.specialInstructions, isPaid);
+  const calendar_event_title = EventTitleStringBuilder(menu, fulfillmentConfig, customerName, order.fulfillment.dineInInfo, cart, order.specialInstructions ?? "", isPaid);
   const special_instructions_section = order.specialInstructions && order.specialInstructions.length > 0 ? `\nSpecial Instructions: ${order.specialInstructions}` : "";
   const payment_section = isPaid ? "\n" + GeneratePaymentSection(totals, order.discounts, order.payments, false) : "";
   const delivery_section = GenerateDeliverySection(order.fulfillment.deliveryInfo, false);
   const dineInSecrtion = GenerateDineInSection(order.fulfillment.dineInInfo, false);
-  const calendar_details = `${shortcart.map(x => `${x.category_name}:\n${x.products.join("\n")}`).join("\n")}\n${dineInSecrtion}ph: ${order.customerInfo.mobileNum}${special_instructions_section}${delivery_section}${payment_section}`;
+  const calendar_details = `${shortcart.map((x) => `${x.category_name}:\n${x.products.join("\n")}`).join("\n")}\n${dineInSecrtion}ph: ${order.customerInfo.mobileNum}${special_instructions_section}${delivery_section}${payment_section}`;
 
   return await GoogleProviderInstance.CreateCalendarEvent({
     summary: calendar_event_title,
-    location: order.fulfillment.deliveryInfo?.validation.validated_address ?? "",
+    location: order.fulfillment.deliveryInfo?.validation?.validated_address ?? "",
     description: calendar_details,
     start: {
       dateTime: formatRFC3339(service_time_interval.start),
@@ -503,8 +503,12 @@ export class OrderManager implements WProvider {
       { locked: idempotencyKey },
       { new: true })
       .then(async (lockedOrder) => {
-        logger.debug(`Found order ${JSON.stringify(lockedOrder, null, 2)}, lock applied.`);
+        if (lockedOrder === null) {
+          return { status: 404, success: false, errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'UNEXPECTED_VALUE', detail: 'Order not found/locked' }], result: null };
+        }
+
         const errors: WError[] = [];
+        logger.debug(`Found order ${JSON.stringify(lockedOrder, null, 2)}, lock applied.`);
         try {
           const squareOrderId = lockedOrder.metadata.find(x => x.key === 'SQORDER')!.value;
 
@@ -512,11 +516,11 @@ export class OrderManager implements WProvider {
           const retrieveSquareOrderResponse = await SquareProviderInstance.RetrieveOrder(squareOrderId);
           if (!retrieveSquareOrderResponse.success) {
             // unable to find the order
-            retrieveSquareOrderResponse.error.map(e => errors.push({ category: e.category, code: e.code, detail: e.detail }));
+            retrieveSquareOrderResponse.error.map(e => errors.push({ category: e.category, code: e.code, detail: e.detail ?? "" }));
             return { status: 404, success: false, errors, result: null };
           }
           const squareOrder = retrieveSquareOrderResponse.result.order!;
-          let version = squareOrder.version;
+          let version = squareOrder.version!;
 
           // refund store credits
           const discountCreditRefunds = lockedOrder.discounts.map(async (discount) => {
@@ -536,7 +540,7 @@ export class OrderManager implements WProvider {
             if (!undoPaymentResponse.success) {
               const errorDetail = `Failed to process payment refund for payment ID: ${payment.payment.processorId}`;
               logger.error(errorDetail);
-              undoPaymentResponse.error.map(e => errors.push({ category: e.category, code: e.code, detail: e.detail }));
+              undoPaymentResponse.error.map(e => errors.push({ category: e.category, code: e.code, detail: e.detail ?? "" }));
             }
             return undoPaymentResponse;
           });
@@ -546,13 +550,13 @@ export class OrderManager implements WProvider {
           if (squareOrder.state === 'OPEN') {
             const updateSquareOrderResponse = await SquareProviderInstance.OrderUpdate(squareOrderId, version, {
               ...(lockedOrder.status === WOrderStatus.OPEN ? { state: 'CANCELED' } : {}),
-              fulfillments: squareOrder.fulfillments.map(x => ({
+              fulfillments: squareOrder.fulfillments?.map(x => ({
                 uid: x.uid,
                 state: 'CANCELED'
-              }))
+              })) ?? []
             }, []);
             if (!updateSquareOrderResponse.success) {
-              updateSquareOrderResponse.error.map(e => errors.push({ category: e.category, code: e.code, detail: e.detail }));
+              updateSquareOrderResponse.error.map(e => errors.push({ category: e.category, code: e.code, detail: e.detail ?? "" }));
               return { status: 500, success: false, result: null, errors };
             }
           } else {
@@ -585,8 +589,8 @@ export class OrderManager implements WProvider {
               // send notice to subscribers
 
               // return to caller
-              SocketIoProviderInstance.EmitOrder(updatedOrder.toObject());
-              return { status: 200, success: true, errors: [], result: updatedOrder };
+              SocketIoProviderInstance.EmitOrder(updatedOrder!.toObject());
+              return { status: 200, success: true, errors: [], result: updatedOrder! };
             })
             .catch((err: any) => {
               const errorDetail = `Unable to commit update to order to release lock and cancel. Got error: ${JSON.stringify(err, null, 2)}`;
@@ -614,13 +618,16 @@ export class OrderManager implements WProvider {
       { locked: idempotencyKey },
       { new: true })
       .then(async (lockedOrder) => {
+        if (lockedOrder === null) {
+          return { status: 404, success: false, errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'UNEXPECTED_VALUE', detail: 'Order not found/locked' }], result: null };
+        }
 
         // lookup Square Order
         const squareOrderId = lockedOrder.metadata.find(x => x.key === 'SQORDER')!.value;
         const retrieveSquareOrderResponse = await SquareProviderInstance.RetrieveOrder(squareOrderId);
         if (!retrieveSquareOrderResponse.success) {
           // unable to find the order
-          return { status: 405, success: false, errors: retrieveSquareOrderResponse.error, result: null };
+          return { status: 404, success: false, errors: retrieveSquareOrderResponse.error.map(e => ({ category: e.category, code: e.code, detail: e.detail ?? "" })), result: null };
         }
         const squareOrder = retrieveSquareOrderResponse.result.order!;
         if (squareOrder.state !== 'OPEN') {
@@ -630,9 +637,9 @@ export class OrderManager implements WProvider {
 
 
         //adjust square fulfillment
-        const updateSquareOrderResponse = await SquareProviderInstance.OrderUpdate(squareOrderId, squareOrder.version, {
-          fulfillments: squareOrder.fulfillments.map(x => ({ uid: x.uid, pickupDetails: { pickupAt: formatRFC3339(promisedTime) } })),
-          }, []);
+        const updateSquareOrderResponse = await SquareProviderInstance.OrderUpdate(squareOrderId, squareOrder.version!, {
+          fulfillments: squareOrder.fulfillments?.map(x => ({ uid: x.uid, pickupDetails: { pickupAt: formatRFC3339(promisedTime) } })) ?? [],
+        }, []);
         if (!updateSquareOrderResponse.success) {
           // failed to update square order fulfillment
 
@@ -641,19 +648,20 @@ export class OrderManager implements WProvider {
 
         // adjust calendar event
         const gCalEventId = lockedOrder.metadata.find(x => x.key === 'GCALEVENT')?.value;
-        const fulfillmentConfig = DataProviderInstance.Fulfillments[lockedOrder.fulfillment.selectedService];
-        const dateTimeInterval = DateTimeIntervalBuilder(newTime, fulfillmentConfig);
-        await GoogleProviderInstance.ModifyCalendarEvent(gCalEventId, {
-          start: {
-            dateTime: formatRFC3339(dateTimeInterval.start),
-            timeZone: process.env.TZ
-          },
-          end: {
-            dateTime: formatRFC3339(dateTimeInterval.end),
-            timeZone: process.env.TZ
-          }
-        })
-
+        if (gCalEventId) {
+          const fulfillmentConfig = DataProviderInstance.Fulfillments[lockedOrder.fulfillment.selectedService];
+          const dateTimeInterval = DateTimeIntervalBuilder(newTime, fulfillmentConfig);
+          await GoogleProviderInstance.ModifyCalendarEvent(gCalEventId, {
+            start: {
+              dateTime: formatRFC3339(dateTimeInterval.start),
+              timeZone: process.env.TZ
+            },
+            end: {
+              dateTime: formatRFC3339(dateTimeInterval.end),
+              timeZone: process.env.TZ
+            }
+          })
+        }
         // send email to customer
         if (emailCustomer) {
 
@@ -665,10 +673,9 @@ export class OrderManager implements WProvider {
           { locked: null, 'fulfillment.selectedDate': newTime.selectedDate, 'fulfillment.selectedTime': newTime.selectedTime },
           { new: true })
           .then(async (updatedOrder) => {
-
             // return success/failure
-            SocketIoProviderInstance.EmitOrder(updatedOrder.toObject());
-            return { status: 200, success: true, errors: [], result: updatedOrder };
+            SocketIoProviderInstance.EmitOrder(updatedOrder!.toObject());
+            return { status: 200, success: true, errors: [], result: updatedOrder! };
           })
           .catch((err: any) => {
             const errorDetail = `Unable to commit update to order to release lock and update fulfillment time. Got error: ${JSON.stringify(err, null, 2)}`;
@@ -692,13 +699,15 @@ export class OrderManager implements WProvider {
       { locked: idempotencyKey },
       { new: true })
       .then(async (lockedOrder) => {
-
+        if (lockedOrder === null) {
+          return { status: 404, success: false, errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'UNEXPECTED_VALUE', detail: 'Order not found/locked' }], result: null };
+        }
         // lookup Square Order
         const squareOrderId = lockedOrder.metadata.find(x => x.key === 'SQORDER')!.value;
         const retrieveSquareOrderResponse = await SquareProviderInstance.RetrieveOrder(squareOrderId);
         if (!retrieveSquareOrderResponse.success) {
           // unable to find the order
-          return { status: 405, success: false, errors: retrieveSquareOrderResponse.error, result: null };
+          return { status: 405, success: false, errors: retrieveSquareOrderResponse.error.map(e => ({ category: e.category, code: e.code, detail: e.detail ?? "" })), result: null };
         }
         const squareOrder = retrieveSquareOrderResponse.result.order!;
         if (squareOrder.state !== 'OPEN') {
@@ -707,7 +716,7 @@ export class OrderManager implements WProvider {
         }
 
         // mark the order paid via PayOrder endpoint
-        const payOrderResponse = await SquareProviderInstance.PayOrder(squareOrder.id, squareOrder.tenders.map(x => x.id));
+        const payOrderResponse = await SquareProviderInstance.PayOrder(squareOrderId, squareOrder.tenders?.map(x => x.id!) ?? []);
         if (payOrderResponse.success) {
           logger.info(`Square order successfully marked paid.`);
           // send email to customer
@@ -718,10 +727,9 @@ export class OrderManager implements WProvider {
             { locked: null, status: WOrderStatus.CONFIRMED }, // TODO: payments status need to be changed as committed to the DB
             { new: true })
             .then(async (updatedOrder) => {
-
               // return success/failure
-              SocketIoProviderInstance.EmitOrder(updatedOrder.toObject());
-              return { status: 200, success: true, errors: [], result: updatedOrder };
+              SocketIoProviderInstance.EmitOrder(updatedOrder!.toObject());
+              return { status: 200, success: true, errors: [], result: updatedOrder! };
             })
             .catch((err: any) => {
               const errorDetail = `Unable to commit update to order to release lock and update fulfillment time. Got error: ${JSON.stringify(err, null, 2)}`;
@@ -731,7 +739,7 @@ export class OrderManager implements WProvider {
         } else {
           const errorDetail = `Failed to pay the order: ${JSON.stringify(payOrderResponse)}`;
           logger.error(errorDetail);
-          return { status: 422, success: false, errors: payOrderResponse.error, result: null };
+          return { status: 422, success: false, errors: payOrderResponse.error.map(e => ({ category: e.category, code: e.code, detail: e.detail ?? "" })), result: null };
         }
       })
       .catch((err: any) => {
@@ -902,9 +910,8 @@ export class OrderManager implements WProvider {
 
     // Payment Part B: we've processed any credits, make an order
     let errors: WError[] = [];
-    let hasChargingSucceeded = false;
     let squareOrder: SquareOrder | null = null;
-    let orderUpdateCount = 0;
+    let squareOrderVersion = 0;
     const squarePayments: OrderPayment[] = [];
     try {
       const squareOrderResponse = await (SquareProviderInstance.CreateOrderCart(
@@ -914,27 +921,29 @@ export class OrderManager implements WProvider {
         rebuiltCart,
         ""));
       if (squareOrderResponse.success === true) {
-        squareOrder = squareOrderResponse.result.order;
-        logger.info(`For internal id ${reference_id} created Square Order ID: ${squareOrder.id}`);
+        squareOrder = squareOrderResponse.result.order!;
+        const squareOrderId = squareOrder.id!;
+        squareOrderVersion = squareOrder.version!;
+        logger.info(`For internal id ${reference_id} created Square Order ID: ${squareOrderId}`);
         // Payment Part C: create payments
         //  substep i: close out the order via credit card payment or if no money credit payments either, a 0 cash money payment, 
         if (recomputedTotals.balanceAfterCredits.amount > 0 || moneyCreditPayments.length === 0) {
           const squarePaymentResponse = await SquareProviderInstance.CreatePayment({
-            sourceId: recomputedTotals.balanceAfterCredits.amount > 0 ? createOrderRequest.nonce : 'CASH',
+            sourceId: recomputedTotals.balanceAfterCredits.amount > 0 ? createOrderRequest.nonce! : 'CASH',
             amount: recomputedTotals.balanceAfterCredits,
             tipAmount: { currency: recomputedTotals.tipAmount.currency, amount: tipAmountRemaining },
             referenceId: reference_id,
-            squareOrderId: squareOrder.id,
+            squareOrderId,
             autocomplete: false
           });
-          orderUpdateCount += 1;
+          squareOrderVersion += 1;
           if (squarePaymentResponse.success === true) {
-            logger.info(`For internal id ${reference_id} and Square Order ID: ${squareOrder.id} payment for ${MoneyToDisplayString(squarePaymentResponse.result.amount, true)} successful.`)
+            logger.info(`For internal id ${reference_id} and Square Order ID: ${squareOrderId} payment for ${MoneyToDisplayString(squarePaymentResponse.result.amount, true)} successful.`)
             squarePayments.push(squarePaymentResponse.result);
           } else {
             const errorDetail = `Failed to process payment: ${JSON.stringify(squarePaymentResponse)}`;
             logger.error(errorDetail);
-            squarePaymentResponse.error.forEach(e => errors.push({ category: e.category, code: e.code, detail: e.detail }))
+            squarePaymentResponse.error.forEach(e => errors.push({ category: e.category, code: e.code, detail: e.detail ?? "" }))
             // throw for flow control
             throw errorDetail;
           }
@@ -948,18 +957,18 @@ export class OrderManager implements WProvider {
               amount: payment.amount,
               tipAmount: payment.tipAmount,
               referenceId: payment.payment.code,
-              squareOrderId: squareOrder.id,
+              squareOrderId,
               autocomplete: false
             });
-            orderUpdateCount += 1;
+            squareOrderVersion += 1;
             if (squareMoneyCreditPaymentResponse.success === true) {
-              logger.info(`For internal id ${reference_id} and Square Order ID: ${squareOrder.id} payment for ${MoneyToDisplayString(squareMoneyCreditPaymentResponse.result.amount, true)} successful.`)
+              logger.info(`For internal id ${reference_id} and Square Order ID: ${squareOrderId} payment for ${MoneyToDisplayString(squareMoneyCreditPaymentResponse.result.amount, true)} successful.`)
               //this next line duplicates the store credit payments, since we already have them independently processed
               squarePayments.push(squareMoneyCreditPaymentResponse.result);
             } else {
               const errorDetail = `Failed to process payment: ${JSON.stringify(squareMoneyCreditPaymentResponse)}`;
               logger.error(errorDetail);
-              squareMoneyCreditPaymentResponse.error.forEach(e => (errors.push({ category: e.category, code: e.code, detail: e.detail })));
+              squareMoneyCreditPaymentResponse.error.forEach(e => (errors.push({ category: e.category, code: e.code, detail: e.detail ?? "" })));
             }
           }
           catch (err: any) {
@@ -969,103 +978,96 @@ export class OrderManager implements WProvider {
         }));
 
         // THE GOAL YALL
-        hasChargingSucceeded = true;
 
+        const completedOrderInstance: Omit<WOrderInstance, 'id' | 'metadata'> = {
+          ...orderInstanceBeforeCharging,
+          payments: squarePayments.slice(),
+          discounts: discounts.slice(),
+          status: WOrderStatus.OPEN,
+          locked: null
+        };
+
+        // 6. create calendar event
+        try {
+          return await CreateOrderEvent(
+            menu,
+            fulfillmentConfig,
+            completedOrderInstance,
+            rebuiltCart,
+            dateTimeInterval,
+            isPaid,
+            recomputedTotals)
+            .then(async (orderEvent) => {
+              return await new WOrderInstanceModel({
+                ...completedOrderInstance,
+                metadata: [
+                  { key: 'SQORDER', value: squareOrderId },
+                  { key: 'GCALEVENT', value: orderEvent.data.id }]
+              })
+                .save()
+                .then(async (dbOrderInstance) => {
+                  logger.info(`Successfully saved OrderInstance to database: ${JSON.stringify(dbOrderInstance.toJSON())}`)
+                  // TODO, need to actually test the failure of these service calls and some sort of retrying
+                  // for example, the event not created error happens, and it doesn't fail the service call. it should
+
+                  // send email to customer
+                  const createExternalEmailInfo = CreateExternalEmail(
+                    dbOrderInstance,
+                    service_title,
+                    rebuiltCart);
+
+                  // send email to eat(pie)
+                  const createInternalEmailInfo = CreateInternalEmail(
+                    dbOrderInstance,
+                    service_title,
+                    requestTime,
+                    dateTimeInterval,
+                    rebuiltCart,
+                    isPaid,
+                    recomputedTotals,
+                    ipAddress);
+
+                  SocketIoProviderInstance.EmitOrder(dbOrderInstance.toObject());
+
+                  return { status: 200, success: true, errors, result: dbOrderInstance.toObject() };
+                })
+                .catch(async (error: any) => {
+                  logger.error(`Caught error while saving order to database: ${JSON.stringify(error)}`);
+                  errors.push({ category: "INTERNAL_SERVER_ERROR", code: "INTERNAL_SERVER_ERROR", detail: "Unable to save order to database" });
+                  throw error;
+                });
+            }).catch(async (error: any) => {
+              logger.error(`Caught error while saving calendary entry: ${JSON.stringify(error)}`);
+              errors.push({ category: "INTERNAL_SERVER_ERROR", code: "INTERNAL_SERVER_ERROR", detail: "Unable to create order entry" });
+              throw error;
+            });
+        } catch (err) {
+          logger.error(JSON.stringify(err));
+          // pass, failed in creating the event?
+        }
       } else {
         logger.error(`Failed to create order: ${JSON.stringify(squareOrderResponse.error)}`);
-        squareOrderResponse.error.map(e => errors.push({ category: e.category, code: e.code, detail: e.detail }))
+        squareOrderResponse.error.map(e => errors.push({ category: e.category, code: e.code, detail: e.detail ?? "" }))
       }
     } catch (err: any) {
       logger.error(JSON.stringify(err));
       // pass
     }
-    // Payment part E: make sure it worked and if not, undo the payments
-    if (!hasChargingSucceeded) {
-      try {
-        if (squareOrder !== null) {
-          SquareProviderInstance.OrderStateChange(squareOrder.id, squareOrder.version + orderUpdateCount, "CANCELED");
-        }
-        RefundSquarePayments(squarePayments, 'Refunding failed order');
-        CancelSquarePayments(squarePayments);
-        RefundStoreCreditDebits(storeCreditResponses);
-      }
-      catch (err: any) {
-        logger.error(`Got error when unwinding the order after failure: ${JSON.stringify(err)}`);
-        return { status: 500, success: false, result: null, errors };
-      }
-      return { status: 400, success: false, result: null, errors };
-    }
-    else {
-      isPaid = true;
-    }
 
-    const completedOrderInstance: Omit<WOrderInstance, 'id' | 'metadata'> = {
-      ...orderInstanceBeforeCharging,
-      payments: squarePayments.slice(),
-      discounts: discounts.slice(),
-      status: WOrderStatus.OPEN,
-      locked: null
-    };
-
-    // 6. create calendar event
+    // Payment Appendix: if we're here, then we didn't charge the order and we need to back it out.
     try {
-      return await CreateOrderEvent(
-        menu,
-        fulfillmentConfig,
-        completedOrderInstance,
-        rebuiltCart,
-        dateTimeInterval,
-        isPaid,
-        recomputedTotals)
-        .then(async (orderEvent) => {
-          return await new WOrderInstanceModel({
-            ...completedOrderInstance,
-            metadata: [
-              { key: 'SQORDER', value: squareOrder.id },
-              { key: 'GCALEVENT', value: orderEvent.data.id }]
-          })
-            .save()
-            .then(async (dbOrderInstance) => {
-              logger.info(`Successfully saved OrderInstance to database: ${JSON.stringify(dbOrderInstance.toJSON())}`)
-              // TODO, need to actually test the failure of these service calls and some sort of retrying
-              // for example, the event not created error happens, and it doesn't fail the service call. it should
-
-              // send email to customer
-              const createExternalEmailInfo = CreateExternalEmail(
-                dbOrderInstance,
-                service_title,
-                rebuiltCart);
-
-              // send email to eat(pie)
-              const createInternalEmailInfo = CreateInternalEmail(
-                dbOrderInstance,
-                service_title,
-                requestTime,
-                dateTimeInterval,
-                rebuiltCart,
-                isPaid,
-                recomputedTotals,
-                ipAddress);
-
-              SocketIoProviderInstance.EmitOrder(dbOrderInstance.toObject());
-
-              return { status: 200, success: true, errors, result: dbOrderInstance.toObject() };
-            })
-            .catch(async (error: any) => {
-              logger.error(`Caught error while saving order to database: ${JSON.stringify(error)}`);
-              errors.push({ category: "INTERNAL_SERVER_ERROR", code: "INTERNAL_SERVER_ERROR", detail: "Unable to save order to database" });
-              throw error;
-            });
-        }).catch(async (error: any) => {
-          logger.error(`Caught error while saving calendary entry: ${JSON.stringify(error)}`);
-          errors.push({ category: "INTERNAL_SERVER_ERROR", code: "INTERNAL_SERVER_ERROR", detail: "Unable to create order entry" });
-          throw error;
-        });
-    } catch (err) {
-      await RefundSquarePayments(squarePayments, 'Refunding failed order');
-      await RefundStoreCreditDebits(storeCreditResponses);
+      if (squareOrder !== null) {
+        SquareProviderInstance.OrderStateChange(squareOrder.id!, squareOrderVersion, "CANCELED");
+      }
+      RefundSquarePayments(squarePayments, 'Refunding failed order');
+      CancelSquarePayments(squarePayments);
+      RefundStoreCreditDebits(storeCreditResponses);
+    }
+    catch (err: any) {
+      logger.error(`Got error when unwinding the order after failure: ${JSON.stringify(err)}`);
       return { status: 500, success: false, result: null, errors };
     }
+    return { status: 400, success: false, result: null, errors };
   };
 
   Bootstrap = async () => {
