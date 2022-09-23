@@ -512,16 +512,6 @@ export class OrderManager implements WProvider {
         try {
           const squareOrderId = lockedOrder.metadata.find(x => x.key === 'SQORDER')!.value;
 
-          // lookup Square Order for payments and version number
-          const retrieveSquareOrderResponse = await SquareProviderInstance.RetrieveOrder(squareOrderId);
-          if (!retrieveSquareOrderResponse.success) {
-            // unable to find the order
-            retrieveSquareOrderResponse.error.map(e => errors.push({ category: e.category, code: e.code, detail: e.detail ?? "" }));
-            return { status: 404, success: false, errors, result: null };
-          }
-          const squareOrder = retrieveSquareOrderResponse.result.order!;
-          let version = squareOrder.version!;
-
           // refund store credits
           const discountCreditRefunds = lockedOrder.discounts.map(async (discount) => {
             return StoreCreditProviderInstance.RefundStoreCredit(discount.discount.code, discount.discount.amount, 'WARIO');
@@ -536,7 +526,6 @@ export class OrderManager implements WProvider {
             const undoPaymentResponse = await (lockedOrder.status === WOrderStatus.CONFIRMED ?
               SquareProviderInstance.RefundPayment(payment.payment.processorId, payment.amount, reason) :
               SquareProviderInstance.CancelPayment(payment.payment.processorId));
-            version += 1;
             if (!undoPaymentResponse.success) {
               const errorDetail = `Failed to process payment refund for payment ID: ${payment.payment.processorId}`;
               logger.error(errorDetail);
@@ -546,9 +535,17 @@ export class OrderManager implements WProvider {
           });
           // TODO: check refund statuses
 
+          // lookup Square Order for payments and version number
+          const retrieveSquareOrderResponse = await SquareProviderInstance.RetrieveOrder(squareOrderId);
+          if (!retrieveSquareOrderResponse.success) {
+            // unable to find the order
+            retrieveSquareOrderResponse.error.map(e => errors.push({ category: e.category, code: e.code, detail: e.detail ?? "" }));
+            return { status: 404, success: false, errors, result: null };
+          }
+          const squareOrder = retrieveSquareOrderResponse.result.order!;
           // cancel square fulfillment(s) and the order if it's not paid
           if (squareOrder.state === 'OPEN') {
-            const updateSquareOrderResponse = await SquareProviderInstance.OrderUpdate(squareOrderId, version, {
+            const updateSquareOrderResponse = await SquareProviderInstance.OrderUpdate(squareOrderId, squareOrder.version!, {
               ...(lockedOrder.status === WOrderStatus.OPEN ? { state: 'CANCELED' } : {}),
               fulfillments: squareOrder.fulfillments?.map(x => ({
                 uid: x.uid,
@@ -562,7 +559,6 @@ export class OrderManager implements WProvider {
           } else {
             // is this an error condition?
           }
-
 
           // send email if we're supposed to
           if (emailCustomer) {
