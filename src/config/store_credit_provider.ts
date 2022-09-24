@@ -8,6 +8,7 @@ import { DataProviderInstance } from './dataprovider';
 import internal, { Stream } from 'stream';
 import aes256gcm from './crypto-aes-256-gcm';
 import logger from '../logging';
+import { CreateOrderStoreCredit } from './SquareWarioBridge';
 
 
 const ACTIVE_SHEET = "CurrentWARIO"
@@ -276,23 +277,25 @@ export class StoreCreditProvider {
     const qr_code_fs_b = new Stream.PassThrough();
     qr_code_fs.pipe(qr_code_fs_a);
     qr_code_fs.pipe(qr_code_fs_b);
-    
-    const create_order_response = await SquareProviderInstance.CreateOrderStoreCredit(
-      DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE, 
-      referenceId, 
-      request.amount, 
-      `Purchase of store credit code: ${creditCode}`);
+
+    const create_order_response = await SquareProviderInstance.CreateOrder(
+      CreateOrderStoreCredit(
+        DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE,
+        referenceId,
+        request.amount,
+        `Purchase of store credit code: ${creditCode}`));
     if (create_order_response.success && create_order_response.result.order) {
       const squareOrder = create_order_response.result.order;
       let squareOrderVersion = squareOrder.version!;
       const squareOrderId = squareOrder.id!;
       logger.info(`For internal id ${referenceId} created Square Order ID: ${squareOrderId} for ${amountString}`)
-      const payment_response = await SquareProviderInstance.ProcessPayment({ 
+      const payment_response = await SquareProviderInstance.ProcessPayment({
         locationId: DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE,
-        sourceId: nonce, 
-        amount: request.amount, 
-        referenceId, 
-        squareOrderId });
+        sourceId: nonce,
+        amount: request.amount,
+        referenceId,
+        squareOrderId
+      });
       ++squareOrderVersion;
       if (payment_response.success === true && payment_response.result.t === PaymentMethod.CreditCard) {
         const orderPayment = payment_response.result;
@@ -335,8 +338,8 @@ export class StoreCreditProvider {
         if (create_order_response.result) {
           await SquareProviderInstance.OrderStateChange(
             DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE,
-            squareOrderId, 
-            squareOrderVersion, 
+            squareOrderId,
+            squareOrderVersion,
             "CANCELED");
         }
         return { status: 400, success: false, result: null, error: payment_response.error.map(x => ({ category: x.category, code: x.code, detail: x.detail! })) };

@@ -69,11 +69,11 @@
     "ws": "^8.9.0"
   },
   "devDependencies": {
-    "@types/bluebird": "^3.5.36",
+    "@types/bluebird": "^3.5.37",
     "@types/express": "^4.17.14",
     "@types/glob": "^8.0.0",
     "@types/json-bigint": "^1.0.1",
-    "@types/node": "^18.7.19",
+    "@types/node": "^18.7.20",
     "@types/nodemailer": "^6.4.6",
     "@types/qrcode": "^1.5.0",
     "@types/validator": "^13.7.6",
@@ -81,7 +81,7 @@
     "@typescript-eslint/eslint-plugin": "^5.38.0",
     "@typescript-eslint/parser": "^5.38.0",
     "chai": "^4.3.6",
-    "eslint": "^8.23.1",
+    "eslint": "^8.24.0",
     "eslint-config-airbnb-base": "^15.0.0",
     "eslint-plugin-import": "^2.26.0",
     "mocha": "^10.0.0",

@@ -1,12 +1,13 @@
-import { OrderLineItem, Money, OrderLineItemModifier, Order, CatalogObject, CatalogIdMapping } from 'square';
+import { OrderLineItem, Money, OrderLineItemModifier, Order, CatalogObject, CatalogIdMapping, OrderFulfillment } from 'square';
 import logger from '../logging';
 import { CatalogProviderInstance } from './catalog_provider';
-import { CategorizedRebuiltCart, IMoney, TenderBaseStatus, WOrderInstance, PRODUCT_LOCATION, IProduct, IProductInstance, KeyValue, ICatalogSelectors, OptionPlacement, OptionQualifier, IOption, IOptionInstance, PrinterGroup, CURRENCY } from '@wcp/wcpshared';
+import { CategorizedRebuiltCart, IMoney, TenderBaseStatus, WOrderInstance, PRODUCT_LOCATION, IProduct, IProductInstance, KeyValue, ICatalogSelectors, OptionPlacement, OptionQualifier, IOption, IOptionInstance, PrinterGroup, CURRENCY, CoreCartEntry, WProduct, CustomerInfoDto, OrderLineDiscount, OrderTax, DiscountMethod } from '@wcp/wcpshared';
 import { formatRFC3339 } from 'date-fns';
 import { IS_PRODUCTION } from '../utils';
 
 export const SQUARE_TAX_RATE_CATALOG_ID = IS_PRODUCTION ? "TMG7E3E5E45OXHJTBOHG2PMS" : "LOFKVY5UC3SLKPT2WANSBPZQ";
 export const VARIABLE_PRICE_STORE_CREDIT_CATALOG_ID = IS_PRODUCTION ? "DNP5YT6QDIWTB53H46F3ECIN" : "RBYUD52HGFHPL4IG55LBHQAG";
+export const DISCOUNT_CATALOG_ID = IS_PRODUCTION ? "AKIYDPB5WJD2HURCWWZSAIF5" : "?????";
 
 export const WARIO_SQUARE_ID_METADATA_KEY = 'SQID_';
 
@@ -21,6 +22,28 @@ export const GetSquareIdIndexFromExternalIds = (externalIds: KeyValue[], specifi
 export const GetSquareIdFromExternalIds = (externalIds: KeyValue[], specifier: string): string | null => {
   const kvIdx = GetSquareIdIndexFromExternalIds(externalIds, specifier);
   return kvIdx === -1 ? null : externalIds[kvIdx].value;
+}
+
+export interface SquareOrderFulfillmentInfo {
+  displayName: string;
+  emailAddress: string;
+  phoneNumber: string;
+  pickupAt: Date | number;
+};
+
+export const CreateFulfillment = (info: SquareOrderFulfillmentInfo): OrderFulfillment => {
+  return {
+    type: "PICKUP",
+    pickupDetails: {
+      scheduleType: 'SCHEDULED',
+      recipient: {
+        displayName: info.displayName,
+        emailAddress: info.emailAddress,
+        phoneNumber: info.phoneNumber
+      },
+      pickupAt: formatRFC3339(info.pickupAt),
+    },
+  };
 }
 
 const OptionInstanceToSquareIdSpecifier = (optionInstance: IOptionInstance) => {
@@ -62,18 +85,95 @@ export const MapPaymentStatus = (sqStatus: string) => {
   return TenderBaseStatus.CANCELED;
 }
 
+export const CreateOrderStoreCredit = (locationId: string, referenceId: string, amount: IMoney, note: string): Order => {
+  return {
+    referenceId: referenceId,
+    lineItems: [{
+      quantity: "1",
+      catalogObjectId: VARIABLE_PRICE_STORE_CREDIT_CATALOG_ID,
+      basePriceMoney: IMoneyToBigIntMoney(amount),
+      note: note
+    }],
+    locationId,
+    state: "OPEN",
+  }
+}
+
+export const CreateOrdersForPrintingFromCart = (
+  locationId: string,
+  referenceId: string,
+  cart: CoreCartEntry<WProduct>[],
+  fulfillmentInfo: SquareOrderFulfillmentInfo): Order[] => {
+
+  const carts: CoreCartEntry<WProduct>[][] = [];
+  // split out the items we need to get printed
+  const cartEntriesByPrinterGroup = Object.values(cart)
+    .flat()
+    .filter(x => x.product.p.PRODUCT_CLASS.printerGroup !== null)
+    .reduce((acc: Record<string, CoreCartEntry<WProduct>[]>, x) =>
+    ({
+      ...acc,
+      [x.product.p.PRODUCT_CLASS.printerGroup!]: Object.hasOwn(acc, x.product.p.PRODUCT_CLASS.printerGroup!) ?
+        [...acc[x.product.p.PRODUCT_CLASS.printerGroup!], x] :
+        [x]
+    }), {});
+  // this checks if there's anything left in the queue
+  while (Object.values(cartEntriesByPrinterGroup).reduce((acc, x) => acc || x.length > 0, false)) {
+    const orderEntries: CoreCartEntry<WProduct>[] = [];
+    Object.entries(cartEntriesByPrinterGroup)
+      .forEach(([pgId, cartEntryList]) => {
+        if (CatalogProviderInstance.PrinterGroups[pgId]!.singleItemPerTicket) {
+          if (cartEntryList[-1].quantity === 1) {
+            orderEntries.push(cartEntryList.pop()!);
+          } else {
+            // multiple items in the entry
+            orderEntries.push({ ...cartEntryList[-1], quantity: 1 });
+            cartEntryList[-1] = { ...cartEntryList[-1], quantity: cartEntryList[-1].quantity - 1 };
+          }
+        } else {
+          orderEntries.push(cartEntryList.pop()!);
+        }
+        if (cartEntryList.length === 0) {
+          delete cartEntriesByPrinterGroup[pgId];
+        }
+      });
+    carts.push(orderEntries);
+  }
+  const totalOrders = carts.length;
+  return carts.map((cart, i) =>
+    CreateOrderFromCart(
+      locationId,
+      referenceId,
+      [{
+        t: DiscountMethod.CreditCodeAmount,
+        createdAt: Date.now(),
+        discount: {
+          amount: {
+            currency: CURRENCY.USD,
+            amount: cart.reduce((acc, x) => acc + (x.product.m.price.amount * x.quantity), 0)
+          },
+          code: "FOOBAR",
+          lock: { auth: "YES", enc: "YES", iv: "YES" }
+        },
+        status: TenderBaseStatus.AUTHORIZED
+      }],
+      [{ amount: { currency: CURRENCY.USD, amount: 0 } }],
+      cart,
+      totalOrders > 1 ? { ...fulfillmentInfo, displayName: `${fulfillmentInfo.displayName} ${i} of ${totalOrders}` } : fulfillmentInfo));
+}
+
 
 export const CreateOrderFromCart = (
   locationId: string,
-  reference_id: string,
-  orderBeforeCharging: Omit<WOrderInstance, 'id' | 'metadata' | 'status' | 'refunds' | 'locked'>,
-  promisedTime: Date | number,
-  cart: CategorizedRebuiltCart,
-  withFulfillment: boolean): Order => {
+  referenceId: string,
+  discounts: OrderLineDiscount[],
+  taxes: OrderTax[],
+  cart: CoreCartEntry<WProduct>[],
+  fulfillmentInfo: SquareOrderFulfillmentInfo | null): Order => {
 
   return {
-    referenceId: reference_id,
-    lineItems: Object.values(cart).flatMap(e => e.map(x => {
+    referenceId,
+    lineItems: Object.values(cart).map(x => {
       const catalogProductInstance = CatalogProviderInstance.Catalog.productInstances[x.product.m.pi[PRODUCT_LOCATION.LEFT]];
       const squareItemVariationId = GetSquareIdFromExternalIds(catalogProductInstance.externalIDs, "ITEM_VARIATION");
       // // left and right catalog product instance are the same, 
@@ -110,8 +210,8 @@ export const CreateOrderFromCart = (
           }) as OrderLineItemModifier;
         }))
       } as OrderLineItem;
-    })),
-    discounts: [...orderBeforeCharging.discounts.map(discount => ({
+    }),
+    discounts: [...discounts.map(discount => ({
       type: 'VARIABLE_AMOUNT',
       scope: 'ORDER',
       catalogObjectId: 'AKIYDPB5WJD2HURCWWZSAIF5',
@@ -130,28 +230,17 @@ export const CreateOrderFromCart = (
       autoApplyDiscounts: true,
       autoApplyTaxes: true
     },
-    taxes: orderBeforeCharging.taxes.map(tax => ({
+    taxes: taxes.map(tax => ({
       catalogObjectId: SQUARE_TAX_RATE_CATALOG_ID,
       appliedMoney: IMoneyToBigIntMoney(tax.amount),
       scope: 'ORDER'
     })),
     locationId,
     state: "OPEN",
-    fulfillments: withFulfillment ? [{
-      type: "PICKUP",
-      pickupDetails: {
-        scheduleType: 'SCHEDULED',
-        recipient: {
-          displayName: `${orderBeforeCharging.customerInfo.givenName} ${orderBeforeCharging.customerInfo.familyName}`,
-          emailAddress: orderBeforeCharging.customerInfo.email,
-          phoneNumber: orderBeforeCharging.customerInfo.mobileNum
-        },
-        pickupAt: formatRFC3339(promisedTime),
-      },
-    }] : [],
-
+    fulfillments: fulfillmentInfo ? [CreateFulfillment(fulfillmentInfo)] : [],
   };
 }
+
 
 /**
  * BEGIN CATALOG SECTION

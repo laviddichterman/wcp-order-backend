@@ -49,7 +49,7 @@ import {
 
 import { WProvider } from '../types/WProvider';
 
-import { formatRFC3339, format, Interval, isSameMinute, isSameDay, formatISO, intervalToDuration, formatDuration } from 'date-fns';
+import { formatRFC3339, format, Interval, isSameMinute, formatISO } from 'date-fns';
 import { GoogleProviderInstance } from "./google";
 import { SquareProviderInstance } from "./square";
 import { StoreCreditProviderInstance } from "./store_credit_provider";
@@ -60,6 +60,7 @@ import { OrderFunctional } from "@wcp/wcpshared";
 import { WOrderInstanceModel } from "../models/orders/WOrderInstance";
 import { Order as SquareOrder } from "square";
 import { SocketIoProviderInstance } from "./socketio_provider";
+import { CreateOrderFromCart } from "./SquareWarioBridge";
 
 const WCP = "Windy City Pie";
 
@@ -68,11 +69,6 @@ const MI_AREA_CODES = ["231", "248", "269", "313", "517", "586", "616", "734", "
 
 const BTP_AREA_CODES = IL_AREA_CODES.concat(MI_AREA_CODES);
 const WCP_AREA_CODES = IL_AREA_CODES;
-
-const FormatDurationHelper = function (milliseconds: number) {
-  return formatDuration(intervalToDuration({ start: 0, end: milliseconds }));
-}
-
 
 interface RecomputeTotalsArgs {
   order: WOrderInstancePartial;
@@ -300,7 +296,6 @@ const RebuildOrderState = function (menu: IMenu, cart: CoreCartEntry<WCPProductV
   };
 }
 
-
 const RecomputeTotals = function ({ cart, creditValidations, fulfillment, order }: RecomputeTotalsArgs): RecomputeTotalsResult {
   const TAX_RATE = DataProviderInstance.Settings.config.TAX_RATE as number;
   const AUTOGRAT_THRESHOLD = DataProviderInstance.Settings.config.AUTOGRAT_THRESHOLD as number ?? 5;
@@ -335,54 +330,6 @@ const RecomputeTotals = function ({ cart, creditValidations, fulfillment, order 
     balanceAfterCredits,
     tipAmount
   };
-}
-const CreateInternalEmail = async (
-  order: WOrderInstance,
-  service_title: string,
-  requestTime: Date | number,
-  dateTimeInterval: Interval,
-  cart: CategorizedRebuiltCart,
-  isPaid: boolean,
-  totals: RecomputeTotalsResult,
-  ipAddress: string) => {
-
-  const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
-  const sameDayOrder = isSameDay(requestTime, dateTimeInterval.start);
-  const payment_section = isPaid ? GeneratePaymentSection(totals, order.discounts, order.payments, true) : "";
-  const delivery_section = GenerateDeliverySection(order.fulfillment.deliveryInfo, true);
-  const dineInSection = GenerateDineInSection(order.fulfillment.dineInInfo, true);
-  const shortcart = GenerateShortCartFromFullCart(cart);
-  const special_instructions_section = order.specialInstructions && order.specialInstructions.length > 0 ? "<br />Special Instructions: " + order.specialInstructions : "";
-  const emailbody = `<p>From: ${order.customerInfo.givenName} ${order.customerInfo.familyName} ${order.customerInfo.email}</p>${dineInSection}
-<p>${shortcart.map(x => `<strong>${x.category_name}:</strong><br />${x.products.join("<br />")}`).join("<br />")}
-${special_instructions_section}<br />
-Phone: ${order.customerInfo.mobileNum}</p>
-${sameDayOrder ? "" : '<strong style="color: red;">DOUBLE CHECK THIS IS FOR TODAY BEFORE SENDING THE TICKET</strong> <br />'}
-
-    
-<p>Referral Information: ${order.customerInfo.referral}</p>
-
-${delivery_section}    
-
-${payment_section}
-
-<p>Debug info:<br />
-Load: ${formatRFC3339(order.metrics.pageLoadTime)}<br />
-Time select: ${FormatDurationHelper(order.metrics.timeToServiceTime)}<br />
-Submit: ${FormatDurationHelper(order.metrics.submitTime)}<br />
-Stages: ${order.metrics.timeToStage.map((t, i) => `S${i}: ${FormatDurationHelper(t)}`).join(", ")}<br />
-Time Bumps: ${order.metrics.numTimeBumps}<br />
-User IP: ${ipAddress}<br />
-<p>Useragent: ${order.metrics.useragent}</p>`;
-  return await GoogleProviderInstance.SendEmail(
-    {
-      name: `${order.customerInfo.givenName} ${order.customerInfo.familyName}`,
-      address: EMAIL_ADDRESS
-    },
-    EMAIL_ADDRESS,
-    service_title + (isPaid ? " *ORDER PAID*" : " _UNPAID_"),
-    order.customerInfo.email,
-    emailbody);
 }
 
 const CreateExternalEmail = async (
@@ -547,7 +494,7 @@ export class OrderManager implements WProvider {
           if (squareOrder.state === 'OPEN') {
             const updateSquareOrderResponse = await SquareProviderInstance.OrderUpdate(
               DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
-              squareOrderId, 
+              squareOrderId,
               squareOrder.version!, {
               ...(lockedOrder.status === WOrderStatus.OPEN ? { state: 'CANCELED' } : {}),
               fulfillments: squareOrder.fulfillments?.map(x => ({
@@ -637,7 +584,7 @@ export class OrderManager implements WProvider {
         //adjust square fulfillment
         const updateSquareOrderResponse = await SquareProviderInstance.OrderUpdate(
           DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
-          squareOrderId, 
+          squareOrderId,
           squareOrder.version!, {
           fulfillments: squareOrder.fulfillments?.map(x => ({ uid: x.uid, pickupDetails: { pickupAt: formatRFC3339(promisedTime) } })) ?? [],
         }, []);
@@ -759,7 +706,7 @@ export class OrderManager implements WProvider {
     }
     const fulfillmentConfig = DataProviderInstance.Fulfillments[createOrderRequest.fulfillment.selectedService];
     const STORE_NAME = DataProviderInstance.KeyValueConfig.STORE_NAME;
-    const reference_id = requestTime.toString(36).toUpperCase();
+    const referenceId = requestTime.toString(36).toUpperCase();
     const dateTimeInterval = DateTimeIntervalBuilder(createOrderRequest.fulfillment, fulfillmentConfig);
     const customer_name = [createOrderRequest.customerInfo.givenName, createOrderRequest.customerInfo.familyName].join(" ");
     const service_title = ServiceTitleBuilder(fulfillmentConfig.displayName, createOrderRequest.fulfillment, customer_name, dateTimeInterval);
@@ -915,18 +862,25 @@ export class OrderManager implements WProvider {
     let squareOrderVersion = 0;
     const squarePayments: OrderPayment[] = [];
     try {
-      const squareOrderResponse = await (SquareProviderInstance.CreateOrderCart(
-        DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
-        reference_id,
-        orderInstanceBeforeCharging,
-        dateTimeInterval.start,
-        rebuiltCart,
-        true));
+      const squareOrderResponse = await SquareProviderInstance.CreateOrder(
+        CreateOrderFromCart(
+          DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
+          referenceId,
+
+          orderInstanceBeforeCharging.discounts, orderInstanceBeforeCharging.taxes,
+          Object.values(rebuiltCart).flat(),
+          {
+            displayName: customer_name,
+            emailAddress: orderInstanceBeforeCharging.customerInfo.email,
+            phoneNumber: orderInstanceBeforeCharging.customerInfo.mobileNum,
+            pickupAt: dateTimeInterval.start
+
+          }));
       if (squareOrderResponse.success === true) {
         squareOrder = squareOrderResponse.result.order!;
-        const squareOrderId = squareOrder.id!;
-        squareOrderVersion = squareOrder.version!;
-        logger.info(`For internal id ${reference_id} created Square Order ID: ${squareOrderId}`);
+        const squareOrderId = squareOrder!.id!;
+        squareOrderVersion = squareOrder!.version!;
+        logger.info(`For internal id ${referenceId} created Square Order ID: ${squareOrderId}`);
         // Payment Part C: create payments
         //  substep i: close out the order via credit card payment or if no money credit payments either, a 0 cash money payment, 
         if (recomputedTotals.balanceAfterCredits.amount > 0 || moneyCreditPayments.length === 0) {
@@ -935,13 +889,13 @@ export class OrderManager implements WProvider {
             sourceId: recomputedTotals.balanceAfterCredits.amount > 0 ? createOrderRequest.nonce! : 'CASH',
             amount: recomputedTotals.balanceAfterCredits,
             tipAmount: { currency: recomputedTotals.tipAmount.currency, amount: tipAmountRemaining },
-            referenceId: reference_id,
+            referenceId: referenceId,
             squareOrderId,
             autocomplete: false
           });
           squareOrderVersion += 1;
           if (squarePaymentResponse.success === true) {
-            logger.info(`For internal id ${reference_id} and Square Order ID: ${squareOrderId} payment for ${MoneyToDisplayString(squarePaymentResponse.result.amount, true)} successful.`)
+            logger.info(`For internal id ${referenceId} and Square Order ID: ${squareOrderId} payment for ${MoneyToDisplayString(squarePaymentResponse.result.amount, true)} successful.`)
             squarePayments.push(squarePaymentResponse.result);
           } else {
             const errorDetail = `Failed to process payment: ${JSON.stringify(squarePaymentResponse)}`;
@@ -966,7 +920,7 @@ export class OrderManager implements WProvider {
             });
             squareOrderVersion += 1;
             if (squareMoneyCreditPaymentResponse.success === true) {
-              logger.info(`For internal id ${reference_id} and Square Order ID: ${squareOrderId} payment for ${MoneyToDisplayString(squareMoneyCreditPaymentResponse.result.amount, true)} successful.`)
+              logger.info(`For internal id ${referenceId} and Square Order ID: ${squareOrderId} payment for ${MoneyToDisplayString(squareMoneyCreditPaymentResponse.result.amount, true)} successful.`)
               //this next line duplicates the store credit payments, since we already have them independently processed
               squarePayments.push(squareMoneyCreditPaymentResponse.result);
             } else {
@@ -1020,17 +974,6 @@ export class OrderManager implements WProvider {
                     service_title,
                     rebuiltCart);
 
-                  // send email to eat(pie)
-                  const createInternalEmailInfo = CreateInternalEmail(
-                    dbOrderInstance,
-                    service_title,
-                    requestTime,
-                    dateTimeInterval,
-                    rebuiltCart,
-                    isPaid,
-                    recomputedTotals,
-                    ipAddress);
-
                   SocketIoProviderInstance.EmitOrder(dbOrderInstance.toObject());
 
                   return { status: 200, success: true, errors, result: dbOrderInstance.toObject() };
@@ -1064,7 +1007,7 @@ export class OrderManager implements WProvider {
         SquareProviderInstance.OrderStateChange(
           DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
           squareOrder.id!,
-          squareOrderVersion, 
+          squareOrderVersion,
           "CANCELED");
       }
       RefundSquarePayments(squarePayments, 'Refunding failed order');
