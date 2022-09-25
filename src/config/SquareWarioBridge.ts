@@ -1,7 +1,7 @@
 import { OrderLineItem, Money, OrderLineItemModifier, Order, CatalogObject, CatalogIdMapping, OrderFulfillment } from 'square';
 import logger from '../logging';
 import { CatalogProviderInstance } from './catalog_provider';
-import { CategorizedRebuiltCart, IMoney, TenderBaseStatus, WOrderInstance, PRODUCT_LOCATION, IProduct, IProductInstance, KeyValue, ICatalogSelectors, OptionPlacement, OptionQualifier, IOption, IOptionInstance, PrinterGroup, CURRENCY, CoreCartEntry, WProduct, CustomerInfoDto, OrderLineDiscount, OrderTax, DiscountMethod } from '@wcp/wcpshared';
+import { IMoney, TenderBaseStatus, PRODUCT_LOCATION, IProduct, IProductInstance, KeyValue, ICatalogSelectors, OptionPlacement, OptionQualifier, IOption, IOptionInstance, PrinterGroup, CURRENCY, CoreCartEntry, WProduct, OrderLineDiscount, OrderTax, DiscountMethod } from '@wcp/wcpshared';
 import { formatRFC3339 } from 'date-fns';
 import { IS_PRODUCTION } from '../utils';
 
@@ -160,6 +160,35 @@ export const CreateOrdersForPrintingFromCart = (
       [{ amount: { currency: CURRENCY.USD, amount: 0 } }],
       cart,
       totalOrders > 1 ? { ...fulfillmentInfo, displayName: `${fulfillmentInfo.displayName} ${i} of ${totalOrders}` } : fulfillmentInfo));
+}
+
+
+export const CreateOrdersForMessages = (
+  locationId: string,
+  referenceId: string,
+  messages: { squareItemVariationId: string; message: string[]; }[],
+  fulfillmentInfo: SquareOrderFulfillmentInfo): Order => {
+  return {
+    lineItems: messages.map(x => ({
+      quantity: "1",
+      catalogObjectId: x.squareItemVariationId,
+      itemType: "ITEM",
+      modifiers: x.message.map(msg => ({
+        basePriceMoney: { currency: "USD", amount: 0n },
+        name: msg
+      }))
+    })),
+    referenceId,
+    pricingOptions: {
+      autoApplyDiscounts: true,
+      autoApplyTaxes: true
+    },
+    taxes: [],
+    locationId,
+    state: "OPEN",
+    fulfillments: [CreateFulfillment(fulfillmentInfo)],
+  };
+
 }
 
 

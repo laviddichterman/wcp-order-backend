@@ -11,6 +11,18 @@ import cors from 'cors';
 import { WProvider } from './types/WProvider';
 import errorMiddleware from './middleware/errorMiddleware';
 
+/**
+ * TODOS:
+ * migrate to graphql 
+ * migrate away from socketio if graphql subscriptions seem viable
+ * migrate to classes to enable...
+    * migrate to class-validator
+    * migrate to typegoose
+    * migrate to typegraphql
+ * add worker queues (Bee?)
+ * 
+ */
+
 const PORT = process.env.PORT || 4001;
 // TODO: move to env config
 const ORIGINS = [/https:\/\/.*\.windycitypie\.com$/,

@@ -5,7 +5,6 @@ import {
   PRODUCT_LOCATION,
   WProduct,
   WCPProductV2Dto,
-  CreateProductWithMetadataFromV2Dto,
   CreateOrderRequestV2,
   FulfillmentDto,
   DeliveryInfoDto,
@@ -44,7 +43,8 @@ import {
   StoreCreditPayment,
   WOrderStatus,
   FulfillmentTime,
-  FulfillmentType
+  FulfillmentType,
+  RebuildAndSortCart
 } from "@wcp/wcpshared";
 
 import { WProvider } from '../types/WProvider';
@@ -278,18 +278,9 @@ const GenerateShortCartFromFullCart = (cart: CategorizedRebuiltCart): { category
 
 const RebuildOrderState = function (menu: IMenu, cart: CoreCartEntry<WCPProductV2Dto>[], service_time: Date | number, fulfillmentConfig: FulfillmentConfig) {
   const catalogSelectors = CatalogProviderInstance.CatalogSelectors;
-  const noLongerAvailable: CoreCartEntry<WCPProductV2Dto>[] = [];
-
-  const rebuiltCart: CategorizedRebuiltCart = cart.reduce(
-    (acc, entry) => {
-      const product = CreateProductWithMetadataFromV2Dto(entry.product, catalogSelectors, service_time, fulfillmentConfig.id);
-      if (!CanThisBeOrderedAtThisTimeAndFulfillment(product.p, menu, catalogSelectors, service_time, fulfillmentConfig.id) || !catalogSelectors.category(entry.categoryId)) {
-        noLongerAvailable.push(entry);
-      }
-      const rebuiltEntry: CoreCartEntry<WProduct> = { ...entry, product };
-      return { ...acc, [entry.categoryId]: Object.hasOwn(acc, entry.categoryId) ? [...acc[entry.categoryId], rebuiltEntry] : [rebuiltEntry] }
-    }, {} as CategorizedRebuiltCart);
-
+  const rebuiltCart = RebuildAndSortCart(cart, catalogSelectors, service_time, fulfillmentConfig);
+  const noLongerAvailable: CoreCartEntry<WProduct>[] = Object.values(rebuiltCart).flatMap(entries=>entries.filter(x=>!CanThisBeOrderedAtThisTimeAndFulfillment(x.product.p, menu, catalogSelectors, service_time, fulfillmentConfig.id) ||
+  !catalogSelectors.category(x.categoryId)))
   return {
     noLongerAvailable,
     rebuiltCart
@@ -714,11 +705,13 @@ export class OrderManager implements WProvider {
     const menu = GenerateMenu(CatalogProviderInstance.CatalogSelectors, CatalogProviderInstance.Catalog.version, dateTimeInterval.start, createOrderRequest.fulfillment.selectedService);
     const { noLongerAvailable, rebuiltCart } = RebuildOrderState(menu, createOrderRequest.cart, dateTimeInterval.start, fulfillmentConfig);
     if (noLongerAvailable.length > 0) {
+      const errorDetail = `Unable to rebuild order from current catalog data, missing: ${noLongerAvailable.map(x=>x.product.m.name).join(', ')}`
+      logger.warn(errorDetail);
       return {
         status: 410,
         success: false,
         result: null,
-        errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'GONE', detail: "Unable to rebuild order from current catalog data." }]
+        errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'GONE', detail: errorDetail }]
       };
     }
 
