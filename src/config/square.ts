@@ -348,6 +348,24 @@ export class SquareProvider implements WProvider {
     }
     return await SquareRequestHandler(callFxn);
   }
+
+  SendMessageOrder = async (order: Order) => {
+    const sentOrder = await this.CreateOrder(order);
+    if (sentOrder.success && sentOrder.result.order?.id) {
+      const payment = await this.CreatePayment({ 
+        amount: { currency: CURRENCY.USD, amount: 0 }, 
+        autocomplete: true,
+        locationId: order.locationId,
+        referenceId: "",
+        squareOrderId: sentOrder.result.order.id,
+        sourceId: "EXTERNAL"
+      });
+      if (payment.success) { 
+        return true;
+      }
+    }
+    return false;
+  }
 };
 
 export const SquareProviderInstance = new SquareProvider();
