@@ -342,12 +342,12 @@ export class StoreCreditProvider {
             squareOrderVersion,
             "CANCELED");
         }
-        return { status: 400, success: false, result: null, error: payment_response.error.map(x => ({ category: x.category, code: x.code, detail: x.detail! })) };
+        return { status: 400, success: false, error: payment_response.error.map(x => ({ category: x.category, code: x.code, detail: x.detail! })) };
       }
     } else {
       const errorDetail = JSON.stringify(create_order_response);
       logger.error(errorDetail);
-      return { status: 500, success: false, result: null, error: [{ category: 'INTERNAL_SERVER_ERROR', code: 'INTERNAL_SERVER_ERROR', detail: errorDetail }] };
+      return { status: 500, success: false, error: [{ category: 'INTERNAL_SERVER_ERROR', code: 'INTERNAL_SERVER_ERROR', detail: errorDetail }] };
     }
   };
 

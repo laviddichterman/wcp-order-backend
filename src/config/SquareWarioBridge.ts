@@ -122,16 +122,17 @@ export const CreateOrdersForPrintingFromCart = (
     const orderEntries: CoreCartEntry<WProduct>[] = [];
     Object.entries(cartEntriesByPrinterGroup)
       .forEach(([pgId, cartEntryList]) => {
-        if (CatalogProviderInstance.PrinterGroups[pgId]!.singleItemPerTicket) {
-          if (cartEntryList[-1].quantity === 1) {
+        if (CatalogProviderInstance.PrinterGroups[pgId]!.singleItemPerTicket || cartEntryList[cartEntryList.length-1].categoryId === '5eb21d084f5f1946916c6baf') {
+          const { product, categoryId, quantity } = cartEntryList[cartEntryList.length-1];
+          if (quantity === 1) {
             orderEntries.push(cartEntryList.pop()!);
           } else {
             // multiple items in the entry
-            orderEntries.push({ ...cartEntryList[-1], quantity: 1 });
-            cartEntryList[-1] = { ...cartEntryList[-1], quantity: cartEntryList[-1].quantity - 1 };
+            orderEntries.push({ categoryId, product, quantity: 1 });
+            cartEntryList[cartEntryList.length-1] = { product, categoryId, quantity: cartEntryList[cartEntryList.length-1].quantity - 1 };
           }
         } else {
-          orderEntries.push(cartEntryList.pop()!);
+          orderEntries.push(...cartEntryList.splice(0));
         }
         if (cartEntryList.length === 0) {
           delete cartEntriesByPrinterGroup[pgId];
@@ -140,8 +141,9 @@ export const CreateOrdersForPrintingFromCart = (
     carts.push(orderEntries);
   }
   const totalOrders = carts.length;
-  return carts.map((cart, i) =>
-    CreateOrderFromCart(
+  return carts.map((cart, i) => {
+    const total = cart.reduce((acc, x) => acc + (x.product.m.price.amount * x.quantity), 0);
+    return CreateOrderFromCart(
       locationId,
       referenceId,
       [{
@@ -150,7 +152,7 @@ export const CreateOrdersForPrintingFromCart = (
         discount: {
           amount: {
             currency: CURRENCY.USD,
-            amount: cart.reduce((acc, x) => acc + (x.product.m.price.amount * x.quantity), 0)
+            amount: total
           },
           code: "FOOBAR",
           lock: { auth: "YES", enc: "YES", iv: "YES" }
@@ -159,7 +161,8 @@ export const CreateOrdersForPrintingFromCart = (
       }],
       [{ amount: { currency: CURRENCY.USD, amount: 0 } }],
       cart,
-      totalOrders > 1 ? { ...fulfillmentInfo, displayName: `${fulfillmentInfo.displayName} ${i} of ${totalOrders}` } : fulfillmentInfo));
+      totalOrders > 1 ? { ...fulfillmentInfo, displayName: `${fulfillmentInfo.displayName} ${i+1} of ${totalOrders}` } : fulfillmentInfo) 
+    });
 }
 
 
@@ -243,7 +246,7 @@ export const CreateOrderFromCart = (
     discounts: [...discounts.map(discount => ({
       type: 'VARIABLE_AMOUNT',
       scope: 'ORDER',
-      catalogObjectId: 'AKIYDPB5WJD2HURCWWZSAIF5',
+      //catalogObjectId: DISCOUNT_CATALOG_ID,
       name: `Discount Code: ${discount.discount.code}`,
       amountMoney: IMoneyToBigIntMoney(discount.discount.amount),
       appliedMoney: IMoneyToBigIntMoney(discount.discount.amount),

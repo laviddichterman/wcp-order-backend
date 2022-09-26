@@ -15,7 +15,7 @@ import {
   ComputeTotal,
   ComputeBalanceAfterCredits,
   JSFECreditV2,
-  CreateOrderResponse,
+  CrudOrderResponse,
   WDateUtils,
   GenerateMenu,
   IMenu,
@@ -44,7 +44,11 @@ import {
   WOrderStatus,
   FulfillmentTime,
   FulfillmentType,
-  RebuildAndSortCart
+  RebuildAndSortCart,
+  CreateProductWithMetadataFromV2Dto,
+  ResponseWithStatusCode,
+  ResponseSuccess,
+  ResponseFailure
 } from "@wcp/wcpshared";
 
 import { WProvider } from '../types/WProvider';
@@ -60,8 +64,8 @@ import { OrderFunctional } from "@wcp/wcpshared";
 import { WOrderInstanceModel } from "../models/orders/WOrderInstance";
 import { Order as SquareOrder } from "square";
 import { SocketIoProviderInstance } from "./socketio_provider";
-import { CreateOrderFromCart } from "./SquareWarioBridge";
-
+import { CreateOrderFromCart, CreateOrdersForPrintingFromCart } from "./SquareWarioBridge";
+type CrudFunctionResponseWithStatusCode = (order: WOrderInstance) => ResponseWithStatusCode<CrudOrderResponse>;
 const WCP = "Windy City Pie";
 
 const IL_AREA_CODES = ["217", "309", "312", "630", "331", "618", "708", "773", "815", "779", "847", "224", "872"];
@@ -276,11 +280,11 @@ const GenerateShortCartFromFullCart = (cart: CategorizedRebuiltCart): { category
     })
 }
 
-const RebuildOrderState = function (menu: IMenu, cart: CoreCartEntry<WCPProductV2Dto>[], service_time: Date | number, fulfillmentConfig: FulfillmentConfig) {
+const RebuildOrderState = function (menu: IMenu, cart: CoreCartEntry<WCPProductV2Dto>[], service_time: Date | number, fulfillmentId: string) {
   const catalogSelectors = CatalogProviderInstance.CatalogSelectors;
-  const rebuiltCart = RebuildAndSortCart(cart, catalogSelectors, service_time, fulfillmentConfig);
-  const noLongerAvailable: CoreCartEntry<WProduct>[] = Object.values(rebuiltCart).flatMap(entries=>entries.filter(x=>!CanThisBeOrderedAtThisTimeAndFulfillment(x.product.p, menu, catalogSelectors, service_time, fulfillmentConfig.id) ||
-  !catalogSelectors.category(x.categoryId)))
+  const rebuiltCart = RebuildAndSortCart(cart, catalogSelectors, service_time, fulfillmentId);
+  const noLongerAvailable: CoreCartEntry<WProduct>[] = Object.values(rebuiltCart).flatMap(entries => entries.filter(x => !CanThisBeOrderedAtThisTimeAndFulfillment(x.product.p, menu, catalogSelectors, service_time, fulfillmentId) ||
+    !catalogSelectors.category(x.categoryId)))
   return {
     noLongerAvailable,
     rebuiltCart
@@ -430,270 +434,323 @@ export class OrderManager implements WProvider {
     }).exec();
   };
 
+  private LockAndActOnOrder = async (
+    idempotencyKey: string,
+    orderId: string,
+    testDbOrder: (order: WOrderInstance) => boolean,
+    onSuccess: (order: WOrderInstance) => Promise<ResponseWithStatusCode<CrudOrderResponse>>): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
+    logger.info(`Received request (nonce: ${idempotencyKey}) to lock order ${orderId}`);
+    return await WOrderInstanceModel.findByIdAndUpdate(orderId,
+      { locked: idempotencyKey },
+      { new: true })
+      .then(async (order): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
+        if (!order || !testDbOrder(order)) {
+          return { status: 404, success: false, error: [{ category: 'INVALID_REQUEST_ERROR', code: 'UNEXPECTED_VALUE', detail: 'Order not found/locked' }] };
+        }
+        return await onSuccess(order);
+      })
+      .catch((err: any) => {
+        const errorDetail = `Unable to find ${orderId}. Got error: ${JSON.stringify(err, Object.getOwnPropertyNames(err), 2)}`;
+        logger.error(errorDetail);
+        return { status: 404, success: false, error: [{ category: 'INVALID_REQUEST_ERROR', code: 'NOT_FOUND', detail: errorDetail }] };
+      });
+  }
+
   public DiscountOrder = async (idempotencyKey: string, orderId: string, reason: string) => {
     // TODO
   }
 
-  public CancelOrder = async (idempotencyKey: string, orderId: string, reason: string, emailCustomer: boolean): Promise<CreateOrderResponse & { status: number }> => {
-    logger.info(`Received request (nonce: ${idempotencyKey}) to cancel order ${orderId} for reason: ${reason}`);
-    return await WOrderInstanceModel.findOneAndUpdate(
-      { locked: null, id: orderId, status: { $in: [WOrderStatus.OPEN, WOrderStatus.CONFIRMED] } },
-      { locked: idempotencyKey },
-      { new: true })
-      .then(async (lockedOrder) => {
-        if (lockedOrder === null) {
-          return { status: 404, success: false, errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'UNEXPECTED_VALUE', detail: 'Order not found/locked' }], result: null };
+  private SendLockedOrder = async (lockedOrder: WOrderInstance): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
+    logger.debug(`Found order ${JSON.stringify(lockedOrder, null, 2)}, lock applied.`);
+    try {
+      const squareOrderId = lockedOrder.metadata.find(x => x.key === 'SQORDER')!.value;
+      // send order to alternate location
+      const fulfillmentConfig = DataProviderInstance.Fulfillments[lockedOrder.fulfillment.selectedService];
+      const promisedTime = DateTimeIntervalBuilder(lockedOrder.fulfillment, fulfillmentConfig);
+      const messageOrders = CreateOrdersForPrintingFromCart(
+        DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE,
+        lockedOrder.id,
+        lockedOrder.cart.map(x => ({
+          categoryId: x.categoryId,
+          quantity: x.quantity,
+          product: CreateProductWithMetadataFromV2Dto(x.product, CatalogProviderInstance.CatalogSelectors, promisedTime.start, fulfillmentConfig.id)
         }
+        )),
+        {
+          displayName: `${lockedOrder.customerInfo.givenName} ${lockedOrder.customerInfo.familyName}`,
+          emailAddress: lockedOrder.customerInfo.email,
+          phoneNumber: lockedOrder.customerInfo.mobileNum,
+          pickupAt: promisedTime.start
 
-        const errors: WError[] = [];
-        logger.debug(`Found order ${JSON.stringify(lockedOrder, null, 2)}, lock applied.`);
-        try {
-          const squareOrderId = lockedOrder.metadata.find(x => x.key === 'SQORDER')!.value;
+        })
+      messageOrders.forEach(async (o) => await SquareProviderInstance.SendMessageOrder(o));
+      // update order in DB, release lock
+      return await WOrderInstanceModel.findOneAndUpdate(
+        { locked: lockedOrder.locked, _id: lockedOrder.id },
+        {
+          locked: null
+          // TODO: need to add refunds to the order too?
+        },
+        { new: true })
+        .then(async (updatedOrder): Promise<ResponseWithStatusCode<ResponseSuccess<WOrderInstance>>> => {
+          // TODO: free up order slot and unblock time as appropriate
 
-          // refund store credits
-          const discountCreditRefunds = lockedOrder.discounts.map(async (discount) => {
-            return StoreCreditProviderInstance.RefundStoreCredit(discount.discount.code, discount.discount.amount, 'WARIO');
-          });
+          // send notice to subscribers
 
-          // refund square payments
-          const paymentRefunds = lockedOrder.payments.map(async (payment) => {
-            if (payment.t === PaymentMethod.StoreCredit) {
-              // refund the credit in the store credit DB
-              StoreCreditProviderInstance.RefundStoreCredit(payment.payment.code, payment.amount, 'WARIO');
-            }
-            const undoPaymentResponse = await (lockedOrder.status === WOrderStatus.CONFIRMED ?
-              SquareProviderInstance.RefundPayment(payment.payment.processorId, payment.amount, reason) :
-              SquareProviderInstance.CancelPayment(payment.payment.processorId));
-            if (!undoPaymentResponse.success) {
-              const errorDetail = `Failed to process payment refund for payment ID: ${payment.payment.processorId}`;
-              logger.error(errorDetail);
-              undoPaymentResponse.error.map(e => errors.push({ category: e.category, code: e.code, detail: e.detail ?? "" }));
-            }
-            return undoPaymentResponse;
-          });
-          // TODO: check refund statuses
+          // return to caller
+          SocketIoProviderInstance.EmitOrder(updatedOrder!.toObject());
+          return { success: true, status: 200, result: updatedOrder! };
+        })
+        .catch((err: any) => {
+          const errorDetail = `Unable to commit update to order to release lock and cancel. Got error: ${JSON.stringify(err, Object.getOwnPropertyNames(err), 2)}`;
+          return { status: 500, success: false, error: [{ category: 'API_ERROR', code: 'INTERNAL_SERVER_ERROR', detail: errorDetail }] };
+        })
+    } catch (error: any) {
+      const errorDetail = `Caught error when attempting to cancel order: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`;
+      logger.error(errorDetail);
+      return { status: 500, success: false, error: [{ category: 'API_ERROR', code: 'INTERNAL_SERVER_ERROR', detail: errorDetail }] };
+    }
+  }
 
-          // lookup Square Order for payments and version number
-          const retrieveSquareOrderResponse = await SquareProviderInstance.RetrieveOrder(squareOrderId);
-          if (!retrieveSquareOrderResponse.success) {
-            // unable to find the order
-            retrieveSquareOrderResponse.error.map(e => errors.push({ category: e.category, code: e.code, detail: e.detail ?? "" }));
-            return { status: 404, success: false, errors, result: null };
-          }
-          const squareOrder = retrieveSquareOrderResponse.result.order!;
-          // cancel square fulfillment(s) and the order if it's not paid
-          if (squareOrder.state === 'OPEN') {
-            const updateSquareOrderResponse = await SquareProviderInstance.OrderUpdate(
-              DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
-              squareOrderId,
-              squareOrder.version!, {
-              ...(lockedOrder.status === WOrderStatus.OPEN ? { state: 'CANCELED' } : {}),
-              fulfillments: squareOrder.fulfillments?.map(x => ({
-                uid: x.uid,
-                state: 'CANCELED'
-              })) ?? []
-            }, []);
-            if (!updateSquareOrderResponse.success) {
-              updateSquareOrderResponse.error.map(e => errors.push({ category: e.category, code: e.code, detail: e.detail ?? "" }));
-              return { status: 500, success: false, result: null, errors };
-            }
-          } else {
-            // is this an error condition?
-          }
+  public CancelOrderDUMMY = async (idempotencyKey: string, orderId: string, reason: string, emailCustomer: boolean): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
+    return await this.LockAndActOnOrder(idempotencyKey, orderId,
+      (o) => o.status !== WOrderStatus.OPEN && o.status !== WOrderStatus.CONFIRMED,
+      this.SendLockedOrder
+    );
+  }
 
-          // send email if we're supposed to
-          if (emailCustomer) {
-            await CreateExternalCancelationEmail(lockedOrder, reason);
-          }
+  private CancelLockedOrder = async (lockedOrder: WOrderInstance, reason: string, emailCustomer: boolean): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
+    logger.debug(`Found order to cancel: ${JSON.stringify(lockedOrder, null, 2)}, lock applied.`);
+    const errors: WError[] = [];
+    try {
+      const squareOrderId = lockedOrder.metadata.find(x => x.key === 'SQORDER')!.value;
 
-          // delete calendar entry
-          const gCalEventId = lockedOrder.metadata.find(x => x.key === 'GCALEVENT')?.value;
-          if (gCalEventId) {
-            await GoogleProviderInstance.DeleteCalendarEvent(gCalEventId);
-          }
-
-          // update order in DB, release lock
-          return await WOrderInstanceModel.findOneAndUpdate(
-            { locked: idempotencyKey, id: orderId },
-            {
-              locked: null, status: WOrderStatus.CANCELED
-              // TODO: need to add refunds to the order too?
-            },
-            { new: true })
-            .then(async (updatedOrder) => {
-              // TODO: free up order slot and unblock time as appropriate
-
-              // send notice to subscribers
-
-              // return to caller
-              SocketIoProviderInstance.EmitOrder(updatedOrder!.toObject());
-              return { status: 200, success: true, errors: [], result: updatedOrder! };
-            })
-            .catch((err: any) => {
-              const errorDetail = `Unable to commit update to order to release lock and cancel. Got error: ${JSON.stringify(err, null, 2)}`;
-              return { status: 500, success: false, result: null, errors: [{ category: 'API_ERROR', code: 'INTERNAL_SERVER_ERROR', detail: errorDetail }] };
-            })
-        } catch (error: any) {
-          const errorDetail = `Caught error when attempting to cancel order: ${JSON.stringify(error, null, 2)}`;
-          logger.error(errorDetail);
-          return { status: 500, success: false, result: null, errors: [{ category: 'API_ERROR', code: 'INTERNAL_SERVER_ERROR', detail: errorDetail }] };
-        }
-      })
-      .catch((err: any) => {
-        const errorDetail = `Unable to find ${orderId} that can be canceled. Got error: ${JSON.stringify(err, null, 2)}`;
-        logger.error(errorDetail);
-        return { status: 404, success: false, errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'NOT_FOUND', detail: errorDetail }], result: null };
+      // refund store credits
+      const discountCreditRefunds = lockedOrder.discounts.map(async (discount) => {
+        return StoreCreditProviderInstance.RefundStoreCredit(discount.discount.code, discount.discount.amount, 'WARIO');
       });
-  };
 
-  public AdjustOrderTime = async (idempotencyKey: string, orderId: string, newTime: FulfillmentTime, emailCustomer: boolean): Promise<CreateOrderResponse & { status: number }> => {
-    const promisedTime = WDateUtils.ComputeServiceDateTime(newTime);
-    logger.info(`Received request (nonce: ${idempotencyKey}) to adjust order ${orderId} time to: ${format(promisedTime, WDateUtils.ISODateTimeNoOffset)}`);
-    // find order and acquire lock
-    return await WOrderInstanceModel.findOneAndUpdate(
-      { locked: null, id: orderId, status: { $in: [WOrderStatus.OPEN, WOrderStatus.CONFIRMED] } },
-      { locked: idempotencyKey },
-      { new: true })
-      .then(async (lockedOrder) => {
-        if (lockedOrder === null) {
-          return { status: 404, success: false, errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'UNEXPECTED_VALUE', detail: 'Order not found/locked' }], result: null };
+      // refund square payments
+      const paymentRefunds = lockedOrder.payments.map(async (payment) => {
+        if (payment.t === PaymentMethod.StoreCredit) {
+          // refund the credit in the store credit DB
+          StoreCreditProviderInstance.RefundStoreCredit(payment.payment.code, payment.amount, 'WARIO');
         }
+        const undoPaymentResponse = await (lockedOrder.status === WOrderStatus.CONFIRMED ?
+          SquareProviderInstance.RefundPayment(payment.payment.processorId, payment.amount, reason) :
+          SquareProviderInstance.CancelPayment(payment.payment.processorId));
+        if (!undoPaymentResponse.success) {
+          const errorDetail = `Failed to process payment refund for payment ID: ${payment.payment.processorId}`;
+          logger.error(errorDetail);
+          undoPaymentResponse.error.map(e => errors.push({ category: e.category, code: e.code, detail: e.detail ?? "" }));
+        }
+        return undoPaymentResponse;
+      });
+      // TODO: check refund statuses
 
-        // lookup Square Order
-        const squareOrderId = lockedOrder.metadata.find(x => x.key === 'SQORDER')!.value;
-        const retrieveSquareOrderResponse = await SquareProviderInstance.RetrieveOrder(squareOrderId);
-        if (!retrieveSquareOrderResponse.success) {
-          // unable to find the order
-          return { status: 404, success: false, errors: retrieveSquareOrderResponse.error.map(e => ({ category: e.category, code: e.code, detail: e.detail ?? "" })), result: null };
-        }
-        const squareOrder = retrieveSquareOrderResponse.result.order!;
-        if (squareOrder.state !== 'OPEN') {
-          // unable to edit the order at this point, error out
-          return { status: 405, success: false, errors: [], result: null };
-        }
-
-        //adjust square fulfillment
+      // lookup Square Order for payments and version number
+      const retrieveSquareOrderResponse = await SquareProviderInstance.RetrieveOrder(squareOrderId);
+      if (!retrieveSquareOrderResponse.success) {
+        // unable to find the order
+        retrieveSquareOrderResponse.error.map(e => errors.push({ category: e.category, code: e.code, detail: e.detail ?? "" }));
+        return { status: 404, success: false, error: errors };
+      }
+      const squareOrder = retrieveSquareOrderResponse.result.order!;
+      // cancel square fulfillment(s) and the order if it's not paid
+      if (squareOrder.state === 'OPEN') {
         const updateSquareOrderResponse = await SquareProviderInstance.OrderUpdate(
           DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
           squareOrderId,
           squareOrder.version!, {
-          fulfillments: squareOrder.fulfillments?.map(x => ({ uid: x.uid, pickupDetails: { pickupAt: formatRFC3339(promisedTime) } })) ?? [],
+          ...(lockedOrder.status === WOrderStatus.OPEN ? { state: 'CANCELED' } : {}),
+          fulfillments: squareOrder.fulfillments?.map(x => ({
+            uid: x.uid,
+            state: 'CANCELED'
+          })) ?? []
         }, []);
         if (!updateSquareOrderResponse.success) {
-          // failed to update square order fulfillment
-
-          logger.error(``)
+          updateSquareOrderResponse.error.map(e => errors.push({ category: e.category, code: e.code, detail: e.detail ?? "" }));
+          return { status: 500, success: false, error: errors };
         }
+      } else {
+        // is this an error condition?
+      }
 
-        // adjust calendar event
-        const gCalEventId = lockedOrder.metadata.find(x => x.key === 'GCALEVENT')?.value;
-        if (gCalEventId) {
-          const fulfillmentConfig = DataProviderInstance.Fulfillments[lockedOrder.fulfillment.selectedService];
-          const dateTimeInterval = DateTimeIntervalBuilder(newTime, fulfillmentConfig);
-          await GoogleProviderInstance.ModifyCalendarEvent(gCalEventId, {
-            start: {
-              dateTime: formatRFC3339(dateTimeInterval.start),
-              timeZone: process.env.TZ
-            },
-            end: {
-              dateTime: formatRFC3339(dateTimeInterval.end),
-              timeZone: process.env.TZ
-            }
-          })
-        }
-        // send email to customer
-        if (emailCustomer) {
+      // send email if we're supposed to
+      if (emailCustomer) {
+        await CreateExternalCancelationEmail(lockedOrder, reason);
+      }
 
-        }
+      // delete calendar entry
+      const gCalEventId = lockedOrder.metadata.find(x => x.key === 'GCALEVENT')?.value;
+      if (gCalEventId) {
+        await GoogleProviderInstance.DeleteCalendarEvent(gCalEventId);
+      }
 
-        // adjust DB event
-        return await WOrderInstanceModel.findOneAndUpdate(
-          { locked: idempotencyKey, id: orderId, status: { $in: [WOrderStatus.OPEN, WOrderStatus.CONFIRMED] } },
-          { locked: null, 'fulfillment.selectedDate': newTime.selectedDate, 'fulfillment.selectedTime': newTime.selectedTime },
-          { new: true })
-          .then(async (updatedOrder) => {
-            // return success/failure
-            SocketIoProviderInstance.EmitOrder(updatedOrder!.toObject());
-            return { status: 200, success: true, errors: [], result: updatedOrder! };
-          })
-          .catch((err: any) => {
-            const errorDetail = `Unable to commit update to order to release lock and update fulfillment time. Got error: ${JSON.stringify(err, null, 2)}`;
-            logger.error(errorDetail);
-            return { status: 500, success: false, result: null, errors: [{ category: 'API_ERROR', code: 'INTERNAL_SERVER_ERROR', detail: errorDetail }] };
-          })
-      })
-      .catch((err: any) => {
-        const errorDetail = `Unable to find ${orderId} that can be updated. Got error: ${JSON.stringify(err, null, 2)}`;
-        logger.error(errorDetail);
-        return { status: 404, success: false, errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'NOT_FOUND', detail: errorDetail }], result: null };
-      });
+      // update order in DB, release lock
+      return await WOrderInstanceModel.findOneAndUpdate(
+        { locked: lockedOrder.locked, _id: lockedOrder.id },
+        {
+          locked: null, status: WOrderStatus.CANCELED
+          // TODO: need to add refunds to the order too?
+        },
+        { new: true })
+        .then(async (updatedOrder): Promise<ResponseWithStatusCode<ResponseSuccess<WOrderInstance>>> => {
+          const updatedOrderObject = updatedOrder!.toObject();
+          // TODO: free up order slot and unblock time as appropriate
 
+          // send notice to subscribers
+
+          // return to caller
+          SocketIoProviderInstance.EmitOrder(updatedOrderObject);
+          return { status: 200, success: true, result: updatedOrderObject };
+        })
+        .catch((err: any) => {
+          const errorDetail = `Unable to commit update to order to release lock and cancel. Got error: ${JSON.stringify(err, null, 2)}`;
+          return { status: 500, success: false, error: [{ category: 'API_ERROR', code: 'INTERNAL_SERVER_ERROR', detail: errorDetail }] };
+        })
+    } catch (error: any) {
+      const errorDetail = `Caught error when attempting to cancel order: ${JSON.stringify(error, null, 2)}`;
+      logger.error(errorDetail);
+      return { status: 500, success: false, error: [{ category: 'API_ERROR', code: 'INTERNAL_SERVER_ERROR', detail: errorDetail }] };
+    }
   }
 
-  public ConfirmOrder = async (idempotencyKey: string, orderId: string, messageToCustomer: string): Promise<CreateOrderResponse & { status: number }> => {
-    logger.info(`Received request (nonce: ${idempotencyKey}) to confirm order ${orderId}`);
-    // find order and acquire lock
-    return await WOrderInstanceModel.findOneAndUpdate(
-      { locked: null, id: orderId, status: { $in: [WOrderStatus.OPEN] } },
-      { locked: idempotencyKey },
-      { new: true })
-      .then(async (lockedOrder) => {
-        if (lockedOrder === null) {
-          return { status: 404, success: false, errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'UNEXPECTED_VALUE', detail: 'Order not found/locked' }], result: null };
-        }
-        // lookup Square Order
-        const squareOrderId = lockedOrder.metadata.find(x => x.key === 'SQORDER')!.value;
-        const retrieveSquareOrderResponse = await SquareProviderInstance.RetrieveOrder(squareOrderId);
-        if (!retrieveSquareOrderResponse.success) {
-          // unable to find the order
-          return { status: 405, success: false, errors: retrieveSquareOrderResponse.error.map(e => ({ category: e.category, code: e.code, detail: e.detail ?? "" })), result: null };
-        }
-        const squareOrder = retrieveSquareOrderResponse.result.order!;
-        if (squareOrder.state !== 'OPEN') {
-          // unable to edit the order at this point, error out
-          return { status: 405, success: false, errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'UNEXPECTED_VALUE', detail: 'Square order found, but not in a state where we can confirm it' }], result: null };
-        }
+  public CancelOrder = async (idempotencyKey: string, orderId: string, reason: string, emailCustomer: boolean): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
+    return await this.LockAndActOnOrder(idempotencyKey, orderId,
+      (o) => o.status !== WOrderStatus.OPEN && o.status !== WOrderStatus.CONFIRMED,
+      (o) => this.CancelLockedOrder(o, reason, emailCustomer)
+    );
+  }
 
-        // mark the order paid via PayOrder endpoint
-        const payOrderResponse = await SquareProviderInstance.PayOrder(squareOrderId, squareOrder.tenders?.map(x => x.id!) ?? []);
-        if (payOrderResponse.success) {
-          logger.info(`Square order successfully marked paid.`);
-          // send email to customer
-          await CreateExternalConfirmationEmail(lockedOrder, true);
-          // adjust DB event
-          return await WOrderInstanceModel.findOneAndUpdate(
-            { locked: idempotencyKey, id: orderId, status: { $in: [WOrderStatus.OPEN] } },
-            { locked: null, status: WOrderStatus.CONFIRMED }, // TODO: payments status need to be changed as committed to the DB
-            { new: true })
-            .then(async (updatedOrder) => {
-              // return success/failure
-              SocketIoProviderInstance.EmitOrder(updatedOrder!.toObject());
-              return { status: 200, success: true, errors: [], result: updatedOrder! };
-            })
-            .catch((err: any) => {
-              const errorDetail = `Unable to commit update to order to release lock and update fulfillment time. Got error: ${JSON.stringify(err, null, 2)}`;
-              logger.error(errorDetail);
-              return { status: 500, success: false, result: null, errors: [{ category: 'API_ERROR', code: 'INTERNAL_SERVER_ERROR', detail: errorDetail }] };
-            })
-        } else {
-          const errorDetail = `Failed to pay the order: ${JSON.stringify(payOrderResponse)}`;
-          logger.error(errorDetail);
-          return { status: 422, success: false, errors: payOrderResponse.error.map(e => ({ category: e.category, code: e.code, detail: e.detail ?? "" })), result: null };
+  private AdjustLockedOrderTime = async (lockedOrder: WOrderInstance, newTime: FulfillmentTime, emailCustomer: boolean): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
+    const promisedTime = WDateUtils.ComputeServiceDateTime(newTime);
+    logger.info(`Received request (nonce: ${lockedOrder.locked}) to adjust order ${lockedOrder.id} time to: ${format(promisedTime, WDateUtils.ISODateTimeNoOffset)}`);
+    // lookup Square Order
+    const squareOrderId = lockedOrder.metadata.find(x => x.key === 'SQORDER')!.value;
+    const retrieveSquareOrderResponse = await SquareProviderInstance.RetrieveOrder(squareOrderId);
+    if (!retrieveSquareOrderResponse.success) {
+      // unable to find the order
+      return { status: 404, success: false, error: retrieveSquareOrderResponse.error.map(e => ({ category: e.category, code: e.code, detail: e.detail ?? "" })) };
+    }
+    const squareOrder = retrieveSquareOrderResponse.result.order!;
+    if (squareOrder.state !== 'OPEN') {
+      // unable to edit the order at this point, error out
+      return { status: 405, success: false, error: [] };
+    }
+
+    //adjust square fulfillment
+    const updateSquareOrderResponse = await SquareProviderInstance.OrderUpdate(
+      DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
+      squareOrderId,
+      squareOrder.version!, {
+      fulfillments: squareOrder.fulfillments?.map(x => ({ uid: x.uid, pickupDetails: { pickupAt: formatRFC3339(promisedTime) } })) ?? [],
+    }, []);
+    if (!updateSquareOrderResponse.success) {
+      // failed to update square order fulfillment
+
+      logger.error(``)
+    }
+
+    // adjust calendar event
+    const gCalEventId = lockedOrder.metadata.find(x => x.key === 'GCALEVENT')?.value;
+    if (gCalEventId) {
+      const fulfillmentConfig = DataProviderInstance.Fulfillments[lockedOrder.fulfillment.selectedService];
+      const dateTimeInterval = DateTimeIntervalBuilder(newTime, fulfillmentConfig);
+      await GoogleProviderInstance.ModifyCalendarEvent(gCalEventId, {
+        start: {
+          dateTime: formatRFC3339(dateTimeInterval.start),
+          timeZone: process.env.TZ
+        },
+        end: {
+          dateTime: formatRFC3339(dateTimeInterval.end),
+          timeZone: process.env.TZ
         }
       })
+    }
+    // send email to customer
+    if (emailCustomer) {
+
+    }
+
+    // adjust DB event
+    return await WOrderInstanceModel.findOneAndUpdate(
+      { locked: lockedOrder.locked, _id: lockedOrder.id },
+      { locked: null, 'fulfillment.selectedDate': newTime.selectedDate, 'fulfillment.selectedTime': newTime.selectedTime },
+      { new: true })
+      .then(async (updatedOrder) => {
+        // return success/failure
+        SocketIoProviderInstance.EmitOrder(updatedOrder!.toObject());
+        return { status: 200, success: true, error: [], result: updatedOrder! };
+      })
       .catch((err: any) => {
-        const errorDetail = `Unable to find ${orderId} that can be updated. Got error: ${JSON.stringify(err, null, 2)}`;
+        const errorDetail = `Unable to commit update to order to release lock and update fulfillment time. Got error: ${JSON.stringify(err, null, 2)}`;
         logger.error(errorDetail);
-        return { status: 404, success: false, errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'NOT_FOUND', detail: errorDetail }], result: null };
-      });
+        return { status: 500, success: false, error: [{ category: 'API_ERROR', code: 'INTERNAL_SERVER_ERROR', detail: errorDetail }] };
+      })
+  }
+
+  public AdjustOrderTime = async (idempotencyKey: string, orderId: string, newTime: FulfillmentTime, emailCustomer: boolean): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
+    return await this.LockAndActOnOrder(idempotencyKey, orderId,
+      (o) => o.status !== WOrderStatus.OPEN && o.status !== WOrderStatus.CONFIRMED,
+      (o) => this.AdjustLockedOrderTime(o, newTime, emailCustomer)
+    );
+  }
+
+  public ConfirmOrder = async (idempotencyKey: string, orderId: string, messageToCustomer: string): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
+    return await this.LockAndActOnOrder(idempotencyKey, orderId,
+      (o) => o.status !== WOrderStatus.OPEN,
+      (o) => this.ConfirmLockedOrder(o, messageToCustomer)
+    );
+  }
+  public ConfirmLockedOrder = async (lockedOrder: WOrderInstance, messageToCustomer: string): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
+    // lookup Square Order
+    const squareOrderId = lockedOrder.metadata.find(x => x.key === 'SQORDER')!.value;
+    const retrieveSquareOrderResponse = await SquareProviderInstance.RetrieveOrder(squareOrderId);
+    if (!retrieveSquareOrderResponse.success) {
+      // unable to find the order
+      return { status: 405, success: false, error: retrieveSquareOrderResponse.error.map(e => ({ category: e.category, code: e.code, detail: e.detail ?? "" })) };
+    }
+    const squareOrder = retrieveSquareOrderResponse.result.order!;
+    if (squareOrder.state !== 'OPEN') {
+      // unable to edit the order at this point, error out
+      return { status: 405, success: false, error: [{ category: 'INVALID_REQUEST_ERROR', code: 'UNEXPECTED_VALUE', detail: 'Square order found, but not in a state where we can confirm it' }] };
+    }
+
+    // mark the order paid via PayOrder endpoint
+    const payOrderResponse = await SquareProviderInstance.PayOrder(squareOrderId, squareOrder.tenders?.map(x => x.id!) ?? []);
+    if (payOrderResponse.success) {
+      logger.info(`Square order successfully marked paid.`);
+      // send email to customer
+      await CreateExternalConfirmationEmail(lockedOrder, true);
+      // adjust DB event
+      return await WOrderInstanceModel.findOneAndUpdate(
+        { locked: lockedOrder.locked, _id: lockedOrder.id },
+        { locked: null, status: WOrderStatus.CONFIRMED }, // TODO: payments status need to be changed as committed to the DB
+        { new: true })
+        .then(async (updatedOrder) => {
+          // return success/failure
+          SocketIoProviderInstance.EmitOrder(updatedOrder!.toObject());
+          return { status: 200, success: true, error: [], result: updatedOrder! };
+        })
+        .catch((err: any) => {
+          const errorDetail = `Unable to commit update to order to release lock and update fulfillment time. Got error: ${JSON.stringify(err, null, 2)}`;
+          logger.error(errorDetail);
+          return { status: 500, success: false, error: [{ category: 'API_ERROR', code: 'INTERNAL_SERVER_ERROR', detail: errorDetail }] };
+        })
+    } else {
+      const errorDetail = `Failed to pay the order: ${JSON.stringify(payOrderResponse)}`;
+      logger.error(errorDetail);
+      return { status: 422, success: false, error: payOrderResponse.error.map(e => ({ category: e.category, code: e.code, detail: e.detail ?? "" })) };
+    }
   };
 
-  public CreateOrder = async (createOrderRequest: CreateOrderRequestV2, ipAddress: string): Promise<CreateOrderResponse & { status: number }> => {
+  public CreateOrder = async (createOrderRequest: CreateOrderRequestV2, ipAddress: string): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
     const requestTime = Date.now();
 
     // 1. get the fulfillment and other needed constants from the DataProvider, generate a reference ID, quick computations
     if (!Object.hasOwn(DataProviderInstance.Fulfillments, createOrderRequest.fulfillment.selectedService)) {
-      return { status: 404, success: false, result: null, errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'NOT_FOUND', detail: "Fulfillment specified does not exist." }] };
+      return { status: 404, success: false, error: [{ category: 'INVALID_REQUEST_ERROR', code: 'NOT_FOUND', detail: "Fulfillment specified does not exist." }] };
     }
     const fulfillmentConfig = DataProviderInstance.Fulfillments[createOrderRequest.fulfillment.selectedService];
     const STORE_NAME = DataProviderInstance.KeyValueConfig.STORE_NAME;
@@ -703,15 +760,14 @@ export class OrderManager implements WProvider {
     const service_title = ServiceTitleBuilder(fulfillmentConfig.displayName, createOrderRequest.fulfillment, customer_name, dateTimeInterval);
     // 2. Rebuild the order from the menu/catalog
     const menu = GenerateMenu(CatalogProviderInstance.CatalogSelectors, CatalogProviderInstance.Catalog.version, dateTimeInterval.start, createOrderRequest.fulfillment.selectedService);
-    const { noLongerAvailable, rebuiltCart } = RebuildOrderState(menu, createOrderRequest.cart, dateTimeInterval.start, fulfillmentConfig);
+    const { noLongerAvailable, rebuiltCart } = RebuildOrderState(menu, createOrderRequest.cart, dateTimeInterval.start, fulfillmentConfig.id);
     if (noLongerAvailable.length > 0) {
-      const errorDetail = `Unable to rebuild order from current catalog data, missing: ${noLongerAvailable.map(x=>x.product.m.name).join(', ')}`
+      const errorDetail = `Unable to rebuild order from current catalog data, missing: ${noLongerAvailable.map(x => x.product.m.name).join(', ')}`
       logger.warn(errorDetail);
       return {
         status: 410,
         success: false,
-        result: null,
-        errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'GONE', detail: errorDetail }]
+        error: [{ category: 'INVALID_REQUEST_ERROR', code: 'GONE', detail: errorDetail }]
       };
     }
 
@@ -733,8 +789,7 @@ export class OrderManager implements WProvider {
       return {
         status: 500,
         success: false,
-        result: null,
-        errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'INSUFFICIENT_FUNDS', detail: errorDetail }]
+        error: [{ category: 'INVALID_REQUEST_ERROR', code: 'INSUFFICIENT_FUNDS', detail: errorDetail }]
       };
     }
     if (recomputedTotals.balanceAfterCredits.amount > 0 && !createOrderRequest.nonce) {
@@ -743,8 +798,7 @@ export class OrderManager implements WProvider {
       return {
         status: 500,
         success: false,
-        result: null,
-        errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'INSUFFICIENT_FUNDS', detail: errorDetail }]
+        error: [{ category: 'INVALID_REQUEST_ERROR', code: 'INSUFFICIENT_FUNDS', detail: errorDetail }]
       };
     }
 
@@ -754,8 +808,7 @@ export class OrderManager implements WProvider {
       return {
         status: 500,
         success: false,
-        result: null,
-        errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'INSUFFICIENT_FUNDS', detail: errorDetail }]
+        error: [{ category: 'INVALID_REQUEST_ERROR', code: 'INSUFFICIENT_FUNDS', detail: errorDetail }]
       };
     }
 
@@ -770,8 +823,7 @@ export class OrderManager implements WProvider {
       return {
         status: 410,
         success: false,
-        result: null,
-        errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'GONE', detail: errorDetail }]
+        error: [{ category: 'INVALID_REQUEST_ERROR', code: 'GONE', detail: errorDetail }]
       };
     }
 
@@ -834,7 +886,7 @@ export class OrderManager implements WProvider {
       // unwind storeCreditResponses
       await RefundStoreCreditDebits(storeCreditResponses);
       logger.error("Failed to process store credit step of ordering");
-      return { status: 404, success: false, result: null, errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'INSUFFICIENT_FUNDS', detail: "Unable to debit store credit." }] };
+      return { status: 404, success: false, error: [{ category: 'INVALID_REQUEST_ERROR', code: 'INSUFFICIENT_FUNDS', detail: "Unable to debit store credit." }] };
     }
 
     if (recomputedTotals.balanceAfterCredits.amount === 0) {
@@ -956,7 +1008,7 @@ export class OrderManager implements WProvider {
                   { key: 'GCALEVENT', value: orderEvent.data.id }]
               })
                 .save()
-                .then(async (dbOrderInstance) => {
+                .then(async (dbOrderInstance): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
                   logger.info(`Successfully saved OrderInstance to database: ${JSON.stringify(dbOrderInstance.toJSON())}`)
                   // TODO, need to actually test the failure of these service calls and some sort of retrying
                   // for example, the event not created error happens, and it doesn't fail the service call. it should
@@ -969,7 +1021,7 @@ export class OrderManager implements WProvider {
 
                   SocketIoProviderInstance.EmitOrder(dbOrderInstance.toObject());
 
-                  return { status: 200, success: true, errors, result: dbOrderInstance.toObject() };
+                  return { status: 200, success: true, result: dbOrderInstance.toObject() };
                 })
                 .catch(async (error: any) => {
                   logger.error(`Caught error while saving order to database: ${JSON.stringify(error)}`);
@@ -1009,9 +1061,9 @@ export class OrderManager implements WProvider {
     }
     catch (err: any) {
       logger.error(`Got error when unwinding the order after failure: ${JSON.stringify(err)}`);
-      return { status: 500, success: false, result: null, errors };
+      return { status: 500, success: false, error: errors };
     }
-    return { status: 400, success: false, result: null, errors };
+    return { status: 400, success: false, error: errors };
   };
 
   Bootstrap = async () => {

@@ -127,7 +127,7 @@ export class StoreCreditController implements IExpressController {
         recipientMessage: req.body.recipientMessage
       };
       const result = await StoreCreditProviderInstance.PurchaseStoreCredit(typedRequest, nonce);
-      return res.status(result.status).json({ error: result.error, result: result.result, success: result.success } as PurchaseStoreCreditResponse);
+      return res.status(result.status).json(result);
     } catch (error) {
       GoogleProviderInstance.SendEmail(
         DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS,

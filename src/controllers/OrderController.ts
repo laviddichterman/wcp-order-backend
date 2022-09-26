@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { body, param, header, query } from 'express-validator';
-import { CreateOrderRequestV2, CreateOrderResponse, CURRENCY, FulfillmentTime, WOrderStatus } from '@wcp/wcpshared';
+import { CreateOrderRequestV2, CURRENCY, FulfillmentTime, WFulfillmentStatus, WOrderStatus } from '@wcp/wcpshared';
 import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
 import { DataProviderInstance } from '../config/dataprovider';
 import { OrderManagerInstance } from '../config/order_manager';
@@ -14,6 +14,7 @@ const OrderIdValidationChain = [
 ]
 
 const CreateOrderValidationChain = [
+  body('fulfillment.status').exists().equals(WFulfillmentStatus.PROPOSED),
   body('fulfillment.selectedService').exists().isMongoId().custom(isFulfillmentDefined),
   body('fulfillment.selectedDate').isISO8601(),
   body('fulfillment.selectedTime').isInt({ min: 0, max: 1440 }).exists(),
@@ -93,7 +94,7 @@ export class OrderController implements IExpressController {
       };
       const ipAddress = (req.headers['x-real-ip'] as string) ?? (req.headers['x-forwarded-for'] as string) ?? req.socket.remoteAddress ?? "";
       const response = await OrderManagerInstance.CreateOrder(reqBody, ipAddress);
-      res.status(response.status).json({ success: response.success, errors: response.errors, result: response.result } as CreateOrderResponse);
+      res.status(response.status).json(response);
     } catch (error) {
       const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
       GoogleProviderInstance.SendEmail(
@@ -112,8 +113,8 @@ export class OrderController implements IExpressController {
       const orderId = req.params.oId;
       const reason = req.body.reason as string;
       const emailCustomer = req.body.emailCustomer as boolean;
-      const response = await OrderManagerInstance.CancelOrder(idempotencyKey, orderId, reason, emailCustomer);
-      res.status(response.status).json({ success: response.success, errors: response.errors, result: response.result } as CreateOrderResponse);
+      const response = await OrderManagerInstance.CancelOrderDUMMY(idempotencyKey, orderId, reason, emailCustomer);
+      res.status(response.status).json(response);
     } catch (error) {
       const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
       GoogleProviderInstance.SendEmail(
@@ -132,7 +133,7 @@ export class OrderController implements IExpressController {
       const orderId = req.params.oId;
       const additionalMessage = req.body.additionalMessage as string;
       const response = await OrderManagerInstance.ConfirmOrder(idempotencyKey, orderId, additionalMessage);
-      res.status(response.status).json({ success: response.success, errors: response.errors, result: response.result } as CreateOrderResponse);
+      res.status(response.status).json(response);
     } catch (error) {
       const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
       GoogleProviderInstance.SendEmail(
@@ -152,7 +153,7 @@ export class OrderController implements IExpressController {
       const newTime: FulfillmentTime = { selectedDate: req.body.selectedDate, selectedTime: req.body.selectedTime };
       const emailCustomer = req.body.emailCustomer as boolean;
       const response = await OrderManagerInstance.AdjustOrderTime(idempotencyKey, orderId, newTime, emailCustomer);
-      res.status(response.status).json({ success: response.success, errors: response.errors, result: response.result } as CreateOrderResponse);
+      res.status(response.status).json(response);
     } catch (error) {
       const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
       GoogleProviderInstance.SendEmail(

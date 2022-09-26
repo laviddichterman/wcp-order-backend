@@ -3,7 +3,7 @@ import { WProvider } from '../types/WProvider';
 import crypto from 'crypto';
 import logger from '../logging';
 import { DataProviderInstance } from './dataprovider';
-import { IMoney, PaymentMethod, OrderPayment, CURRENCY } from '@wcp/wcpshared';
+import { IMoney, PaymentMethod, OrderPayment, CURRENCY, TenderBaseStatus } from '@wcp/wcpshared';
 import { parseISO } from 'date-fns';
 import { StoreCreditPayment } from '@wcp/wcpshared';
 import { BigIntMoneyToIntMoney, IMoneyToBigIntMoney, MapPaymentStatus } from './SquareWarioBridge';
@@ -357,6 +357,22 @@ export class SquareProvider implements WProvider {
         autocomplete: true,
         locationId: order.locationId,
         referenceId: "",
+        storeCreditPayment: {
+          t: PaymentMethod.StoreCredit,
+          amount: { currency: CURRENCY.USD, amount: 0 },
+          createdAt: Date.now(),
+          payment: { 
+            code: "FOO",
+            lock:  { 
+              auth: 'FOO',
+              iv: 'FOO',
+              enc: 'FOO',
+            },
+            processorId: 'FOO',
+          },
+          status: TenderBaseStatus.AUTHORIZED,
+          tipAmount: { currency: CURRENCY.USD, amount: 0 }
+        },
         squareOrderId: sentOrder.result.order.id,
         sourceId: "EXTERNAL"
       });
