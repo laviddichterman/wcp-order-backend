@@ -7,7 +7,7 @@ import { IS_PRODUCTION } from '../utils';
 
 export const SQUARE_TAX_RATE_CATALOG_ID = IS_PRODUCTION ? "TMG7E3E5E45OXHJTBOHG2PMS" : "LOFKVY5UC3SLKPT2WANSBPZQ";
 export const VARIABLE_PRICE_STORE_CREDIT_CATALOG_ID = IS_PRODUCTION ? "DNP5YT6QDIWTB53H46F3ECIN" : "RBYUD52HGFHPL4IG55LBHQAG";
-export const DISCOUNT_CATALOG_ID = IS_PRODUCTION ? "AKIYDPB5WJD2HURCWWZSAIF5" : "?????";
+export const DISCOUNT_CATALOG_ID = IS_PRODUCTION ? "AKIYDPB5WJD2HURCWWZSAIF5" : 'PAMEV3WAZYEBJKFUAVQATS3K'
 
 export const WARIO_SQUARE_ID_METADATA_KEY = 'SQID_';
 
@@ -23,12 +23,25 @@ export const GetSquareIdFromExternalIds = (externalIds: KeyValue[], specifier: s
   const kvIdx = GetSquareIdIndexFromExternalIds(externalIds, specifier);
   return kvIdx === -1 ? null : externalIds[kvIdx].value;
 }
+type MapPrinterGroupToCartEntry = Record<string, CoreCartEntry<WProduct>[]>;
+export const CartByPrinterGroup = (cart: CoreCartEntry<WProduct>[]): MapPrinterGroupToCartEntry =>
+  cart
+    .flat()
+    .filter(x => x.product.p.PRODUCT_CLASS.printerGroup !== null)
+    .reduce((acc: MapPrinterGroupToCartEntry, x) =>
+    ({
+      ...acc,
+      [x.product.p.PRODUCT_CLASS.printerGroup!]: Object.hasOwn(acc, x.product.p.PRODUCT_CLASS.printerGroup!) ?
+        [...acc[x.product.p.PRODUCT_CLASS.printerGroup!], x] :
+        [x]
+    }), {});
 
 export interface SquareOrderFulfillmentInfo {
   displayName: string;
   emailAddress: string;
   phoneNumber: string;
   pickupAt: Date | number;
+  note?: string;
 };
 
 export const CreateFulfillment = (info: SquareOrderFulfillmentInfo): OrderFulfillment => {
@@ -42,6 +55,7 @@ export const CreateFulfillment = (info: SquareOrderFulfillmentInfo): OrderFulfil
         phoneNumber: info.phoneNumber
       },
       pickupAt: formatRFC3339(info.pickupAt),
+      ...(info.note ? { note: info.note } : {})
     },
   };
 }
@@ -107,29 +121,20 @@ export const CreateOrdersForPrintingFromCart = (
 
   const carts: CoreCartEntry<WProduct>[][] = [];
   // split out the items we need to get printed
-  const cartEntriesByPrinterGroup = Object.values(cart)
-    .flat()
-    .filter(x => x.product.p.PRODUCT_CLASS.printerGroup !== null)
-    .reduce((acc: Record<string, CoreCartEntry<WProduct>[]>, x) =>
-    ({
-      ...acc,
-      [x.product.p.PRODUCT_CLASS.printerGroup!]: Object.hasOwn(acc, x.product.p.PRODUCT_CLASS.printerGroup!) ?
-        [...acc[x.product.p.PRODUCT_CLASS.printerGroup!], x] :
-        [x]
-    }), {});
+  const cartEntriesByPrinterGroup = CartByPrinterGroup(cart);
   // this checks if there's anything left in the queue
   while (Object.values(cartEntriesByPrinterGroup).reduce((acc, x) => acc || x.length > 0, false)) {
     const orderEntries: CoreCartEntry<WProduct>[] = [];
     Object.entries(cartEntriesByPrinterGroup)
       .forEach(([pgId, cartEntryList]) => {
-        if (CatalogProviderInstance.PrinterGroups[pgId]!.singleItemPerTicket || cartEntryList[cartEntryList.length-1].categoryId === '5eb21d084f5f1946916c6baf') {
-          const { product, categoryId, quantity } = cartEntryList[cartEntryList.length-1];
+        if (CatalogProviderInstance.PrinterGroups[pgId]!.singleItemPerTicket || cartEntryList[cartEntryList.length - 1].categoryId === '5eb21d084f5f1946916c6baf') {
+          const { product, categoryId, quantity } = cartEntryList[cartEntryList.length - 1];
           if (quantity === 1) {
             orderEntries.push(cartEntryList.pop()!);
           } else {
             // multiple items in the entry
             orderEntries.push({ categoryId, product, quantity: 1 });
-            cartEntryList[cartEntryList.length-1] = { product, categoryId, quantity: cartEntryList[cartEntryList.length-1].quantity - 1 };
+            cartEntryList[cartEntryList.length - 1] = { product, categoryId, quantity: cartEntryList[cartEntryList.length - 1].quantity - 1 };
           }
         } else {
           orderEntries.push(...cartEntryList.splice(0));
@@ -161,12 +166,12 @@ export const CreateOrdersForPrintingFromCart = (
       }],
       [{ amount: { currency: CURRENCY.USD, amount: 0 } }],
       cart,
-      totalOrders > 1 ? { ...fulfillmentInfo, displayName: `${fulfillmentInfo.displayName} ${i+1} of ${totalOrders}` } : fulfillmentInfo) 
-    });
+      totalOrders > 1 ? { ...fulfillmentInfo, displayName: `${fulfillmentInfo.displayName} ${i + 1} of ${totalOrders}` } : fulfillmentInfo)
+  });
 }
 
 
-export const CreateOrdersForMessages = (
+export const CreateOrderForMessages = (
   locationId: string,
   referenceId: string,
   messages: { squareItemVariationId: string; message: string[]; }[],

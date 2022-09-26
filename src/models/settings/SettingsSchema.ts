@@ -22,7 +22,8 @@ export const SettingsSchema = new Schema<IWSettings>({
     MESSAGE_REQUEST_HALF: String,
     MESSAGE_REQUEST_WELLDONE: String,
     MESSAGE_REQUEST_SLICING: String,
-    TIP_PREAMBLE: String
+    TIP_PREAMBLE: String,
+    LOCATION_PHONE_NUMBER: String,
   },
 });
 

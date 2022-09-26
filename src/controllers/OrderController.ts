@@ -55,6 +55,7 @@ const RescheduleOrderValidationChain = [
   body('selectedDate').isISO8601(),
   body('selectedTime').isInt({ min: 0, max: 1440 }).exists(),
   body('emailCustomer').exists().toBoolean(true),
+  body('additionalMessage').trim().exists(),
 ]
 
 const QueryOrdersValidationChain = [
@@ -75,6 +76,7 @@ export class OrderController implements IExpressController {
     this.router.get(`${this.path}/:oId`, CheckJWT, ScopeReadOrders, expressValidationMiddleware(OrderIdValidationChain), this.getOrder);
     this.router.get(`${this.path}`, CheckJWT, ScopeReadOrders, expressValidationMiddleware(QueryOrdersValidationChain), this.getOrders);
     this.router.put(`${this.path}/:oId/cancel`, CheckJWT, ScopeWriteOrders, expressValidationMiddleware(CancelOrderValidationChain), this.putCancelOrder);
+    this.router.put(`${this.path}/:oId/send`, CheckJWT, ScopeWriteOrders, expressValidationMiddleware(IdempotentOrderIdPutValidationChain), this.putSendOrder);
     this.router.put(`${this.path}/:oId/confirm`, CheckJWT, ScopeWriteOrders, expressValidationMiddleware(ConfirmOrderValidationChain), this.putConfirmOrder);
     this.router.put(`${this.path}/:oId/reschedule`, CheckJWT, ScopeWriteOrders, expressValidationMiddleware(RescheduleOrderValidationChain), this.putRescheduleOrder);
   };
@@ -113,7 +115,7 @@ export class OrderController implements IExpressController {
       const orderId = req.params.oId;
       const reason = req.body.reason as string;
       const emailCustomer = req.body.emailCustomer as boolean;
-      const response = await OrderManagerInstance.CancelOrderDUMMY(idempotencyKey, orderId, reason, emailCustomer);
+      const response = await OrderManagerInstance.CancelOrder(idempotencyKey, orderId, reason, emailCustomer);
       res.status(response.status).json(response);
     } catch (error) {
       const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
@@ -152,8 +154,31 @@ export class OrderController implements IExpressController {
       const orderId = req.params.oId;
       const newTime: FulfillmentTime = { selectedDate: req.body.selectedDate, selectedTime: req.body.selectedTime };
       const emailCustomer = req.body.emailCustomer as boolean;
-      const response = await OrderManagerInstance.AdjustOrderTime(idempotencyKey, orderId, newTime, emailCustomer);
+      const response = await OrderManagerInstance.AdjustOrderTime(idempotencyKey, orderId, newTime, emailCustomer, req.body.additionalMessage);
       res.status(response.status).json(response);
+    } catch (error) {
+      const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
+      GoogleProviderInstance.SendEmail(
+        EMAIL_ADDRESS,
+        { name: EMAIL_ADDRESS, address: "dave@windycitypie.com" },
+        "ERROR IN ORDER PROCESSING. CONTACT DAVE IMMEDIATELY",
+        "dave@windycitypie.com",
+        `<p>Order request: ${JSON.stringify(req.body)}</p><p>Error info:${JSON.stringify(error)}</p>`);
+      next(error)
+    }
+  }
+
+  private putSendOrder = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const orderId = req.params.oId;
+      const idempotencyKey = req.get('idempotency-key')!;
+
+      const response = await OrderManagerInstance.SendOrder(orderId, idempotencyKey);
+      if (response) { 
+        res.status(200).json(response);
+      } else {
+        res.status(404).json(null);
+      }
     } catch (error) {
       const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
       GoogleProviderInstance.SendEmail(
