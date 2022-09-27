@@ -446,6 +446,8 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
       }));
     }
   }],
+  "0.5.13": [{ major: 0, minor: 5, patch: 14 }, async () => {
+  }],
 }
 
 export class DatabaseManager implements WProvider {

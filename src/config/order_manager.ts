@@ -2,7 +2,6 @@ import {
   CanThisBeOrderedAtThisTimeAndFulfillment,
   ComputeCartSubTotal,
   CategorizedRebuiltCart,
-  PRODUCT_LOCATION,
   WProduct,
   WCPProductV2Dto,
   CreateOrderRequestV2,
@@ -49,12 +48,15 @@ import {
   ResponseWithStatusCode,
   ResponseSuccess,
   WFulfillmentStatus,
-  CustomerInfoDto
+  CustomerInfoDto,
+  GenerateShortCode,
+  EventTitleStringBuilder,
+  GenerateDineInPlusString
 } from "@wcp/wcpshared";
 
 import { WProvider } from '../types/WProvider';
 
-import { formatRFC3339, format, Interval, isSameMinute, formatISO, differenceInMinutes, startOfDay, subDays, addHours, isSameDay } from 'date-fns';
+import { formatRFC3339, format, Interval, isSameMinute, formatISO, addHours, isSameDay } from 'date-fns';
 import { GoogleProviderInstance } from "./google";
 import { SquareProviderInstance } from "./square";
 import { StoreCreditProviderInstance } from "./store_credit_provider";
@@ -77,6 +79,15 @@ const MI_AREA_CODES = ["231", "248", "269", "313", "517", "586", "616", "734", "
 
 const BTP_AREA_CODES = IL_AREA_CODES.concat(MI_AREA_CODES);
 const WCP_AREA_CODES = IL_AREA_CODES;
+
+/**
+ * order transitions to check
+ * new order -> cancel
+ * new order -> reschedule (within 5 hrs) -> cancel
+ * new order -> reschedule (within 5 hrs) -> confirm -> reschedule -> cancel
+ * new order (tomorrow) -> reschedule (within 5 hrs) -> confirm -> cancel 
+ * new order (w/in 5 hrs) -> confirm -> cancel 
+ */
 
 interface RecomputeTotalsArgs {
   order: WOrderInstancePartial;
@@ -101,21 +112,6 @@ export interface RecomputeTotalsResult {
   tipAmount: IMoney;
 }
 
-// will live in WDateUtils
-const ComputeFulfillmentTime = (d: Date | number): FulfillmentTime => {
-  //d - 1 day - selectedDate  + 1440 =  selectedTime min
-  const isoDate = WDateUtils.formatISODate(d);
-  const minutes = 1440 - differenceInMinutes(subDays(d, 1), startOfDay(d))
-  return { selectedDate: isoDate, selectedTime: minutes };
-}
-
-const GenerateShortCode = function (menu: IMenu, p: WProduct) {
-  const pInstances = menu.product_classes[p.p.PRODUCT_CLASS.id].instances;
-  return p.m.is_split && String(p.m.pi[PRODUCT_LOCATION.LEFT]) !== String(p.m.pi[PRODUCT_LOCATION.RIGHT]) ?
-    `${pInstances[p.m.pi[PRODUCT_LOCATION.LEFT]].shortcode}|${pInstances[p.m.pi[PRODUCT_LOCATION.RIGHT]].shortcode}` :
-    pInstances[p.m.pi[PRODUCT_LOCATION.LEFT]].shortcode;
-}
-
 const IsNativeAreaCode = function (phone: string, area_codes: string[]) {
   const numeric_phone = phone.match(/\d/g)!.join("");
   const area_code = numeric_phone.slice(0, 3);
@@ -126,12 +122,8 @@ const DateTimeIntervalToDisplayServiceInterval = (interval: Interval) => {
   return isSameMinute(interval.start, interval.end) ? format(interval.start, WDateUtils.DisplayTimeFormat) : `${format(interval.start, WDateUtils.DisplayTimeFormat)} - ${format(interval.end, WDateUtils.DisplayTimeFormat)}`;
 }
 
-const CreateExternalConfirmationEmail = async function (
-  order: WOrderInstance,
-  isPaid: boolean
-) {
-  const NOTE_PREPAID = "You've already paid, so unless there's an issue with the order, there's no need to handle payment from this point forward.";
-  const NOTE_PAYMENT = "We happily accept any major credit card or cash for payment.";
+const CreateExternalConfirmationEmail = async function (order: WOrderInstance) {
+  const NOTE_PREPAID = "You've already paid, so unless there's an issue with the order or you need to add something, there's no need to handle payment from this point forward.";
   const STORE_NAME = DataProviderInstance.KeyValueConfig.STORE_NAME;
   const STORE_ADDRESS = DataProviderInstance.KeyValueConfig.STORE_ADDRESS;
   const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
@@ -142,7 +134,7 @@ const CreateExternalConfirmationEmail = async function (
   const customer_name = [order.customerInfo.givenName, order.customerInfo.familyName].join(" ");
   const service_title = ServiceTitleBuilder(fulfillmentConfig.displayName, order.fulfillment, customer_name, dateTimeInterval);
   const nice_area_code = IsNativeAreaCode(order.customerInfo.mobileNum, STORE_NAME === WCP ? WCP_AREA_CODES : BTP_AREA_CODES);
-  const payment_section = isPaid ? (fulfillmentConfig.service === FulfillmentType.DineIn ? NOTE_PREPAID : NOTE_PREPAID) : NOTE_PAYMENT;
+  const payment_section = (fulfillmentConfig.service === FulfillmentType.DineIn ? NOTE_PREPAID : NOTE_PREPAID);
   const confirm = fulfillmentConfig.messages.CONFIRMATION; // [`We're happy to confirm your ${display_time} pickup at`, `We're happy to confirm your ${display_time} at`, `We're happy to confirm your delivery around ${display_time} at`];
   const where = order.fulfillment.deliveryInfo?.validation?.validated_address ?? STORE_ADDRESS;
 
@@ -244,37 +236,9 @@ const GenerateDineInSection = (dineInInfo: DineInInfoDto | null, ishtml: boolean
   return ishtml ? `<strong>Party size:</strong> ${dineInInfo.partySize}<br \>` : `Party size: ${dineInInfo.partySize}\n`;
 }
 
-const GenerateDineInPlusString = (dineInInfo: DineInInfoDto | null) => dineInInfo !== null && dineInInfo.partySize > 1 ? `+${dineInInfo.partySize - 1}` : "";
-
-const EventTitleStringBuilder = (menu: IMenu, fulfillmentConfig: FulfillmentConfig, customer: string, dineInInfo: DineInInfoDto | null, cart: CategorizedRebuiltCart, special_instructions: string, ispaid: boolean) => {
-  const catalogCategories = CatalogProviderInstance.Catalog.categories;
-  const has_special_instructions = special_instructions && special_instructions.length > 0;
-
-  const titles = Object.entries(cart).map(([catid, category_cart]) => {
-    const category = catalogCategories[catid].category;
-    const call_line_category_name_with_space = category.display_flags && category.display_flags.call_line_name ? `${category.display_flags.call_line_name} ` : "";
-    // TODO: this is incomplete since both technically use the shortcode for now. so we don't get modifiers in the call line
-    // pending https://app.asana.com/0/1192054646278650/1192054646278651
-    switch (category.display_flags.call_line_display) {
-      case CALL_LINE_DISPLAY.SHORTCODE:
-        var total = 0;
-        var product_shortcodes: string[] = [];
-        category_cart.forEach(item => {
-          total += item.quantity;
-          product_shortcodes = product_shortcodes.concat(Array(item.quantity).fill(GenerateShortCode(menu, item.product)));
-        });
-        return `${total.toString(10)}x ${call_line_category_name_with_space}${product_shortcodes.join(" ")}`;
-      case CALL_LINE_DISPLAY.SHORTNAME:
-        var product_shortcodes: string[] = category_cart.map(item => `${item.quantity}x${GenerateShortCode(menu, item.product)}`);
-        return `${call_line_category_name_with_space}${product_shortcodes.join(" ")}`;
-    }
-  });
-  return `${fulfillmentConfig.shortcode} ${customer}${GenerateDineInPlusString(dineInInfo)} ${titles.join(" ")}${has_special_instructions ? " *" : ""}${ispaid ? " PAID" : " UNPAID"}`;
-};
-
 const ServiceTitleBuilder = (service_option_display_string: string, fulfillmentInfo: FulfillmentDto, customer_name: string, service_time_interval: Interval) => {
   const display_service_time_interval = DateTimeIntervalToDisplayServiceInterval(service_time_interval);
-  return `${service_option_display_string} for ${customer_name}${GenerateDineInPlusString(fulfillmentInfo.dineInInfo)} on ${format(service_time_interval.start, WDateUtils.ServiceDateDisplayFormat)} at ${display_service_time_interval}`;
+  return `${service_option_display_string} for ${customer_name}${fulfillmentInfo.dineInInfo ? GenerateDineInPlusString(fulfillmentInfo.dineInInfo) : ''} on ${format(service_time_interval.start, WDateUtils.ServiceDateDisplayFormat)} at ${display_service_time_interval}`;
 }
 
 const GenerateDisplayCartStringListFromProducts = (cart: CategorizedRebuiltCart) =>
@@ -406,21 +370,24 @@ const CreateExternalEmailForOrderReschedule = async (
 }
 
 const CreateOrderEvent = async (
-  menu: IMenu,
   fulfillmentConfig: FulfillmentConfig,
   order: Pick<WOrderInstance, 'customerInfo' | 'fulfillment' | 'payments' | 'discounts' | 'specialInstructions'>,
   cart: CategorizedRebuiltCart,
   service_time_interval: Interval,
-  isPaid: boolean,
   totals: RecomputeTotalsResult) => {
   const shortcart = GenerateShortCartFromFullCart(cart);
   const customerName = `${order.customerInfo.givenName} ${order.customerInfo.familyName}`;
-  const calendar_event_title = EventTitleStringBuilder(menu, fulfillmentConfig, customerName, order.fulfillment.dineInInfo, cart, order.specialInstructions ?? "", isPaid);
+  const calendar_event_title = EventTitleStringBuilder(CatalogProviderInstance.CatalogSelectors, fulfillmentConfig, customerName, order.fulfillment.dineInInfo, cart, order.specialInstructions ?? "");
   const special_instructions_section = order.specialInstructions && order.specialInstructions.length > 0 ? `\nSpecial Instructions: ${order.specialInstructions}` : "";
-  const payment_section = isPaid ? "\n" + GeneratePaymentSection(totals, order.discounts, order.payments, false) : "";
+  const payment_section = "\n" + GeneratePaymentSection(totals, order.discounts, order.payments, false);
   const delivery_section = GenerateDeliverySection(order.fulfillment.deliveryInfo, false);
-  const dineInSecrtion = GenerateDineInSection(order.fulfillment.dineInInfo, false);
-  const calendar_details = `${shortcart.map((x) => `${x.category_name}:\n${x.products.join("\n")}`).join("\n")}\n${dineInSecrtion}ph: ${order.customerInfo.mobileNum}${special_instructions_section}${delivery_section}${payment_section}`;
+  const dineInSection = GenerateDineInSection(order.fulfillment.dineInInfo, false);
+  const calendar_details = `
+    ${shortcart.map((x) => `${x.category_name}:
+    ${x.products.join("\n")}`).join("\n")}
+    ${dineInSection}
+    ph: ${order.customerInfo.mobileNum}
+    ${special_instructions_section}${delivery_section}${payment_section}`;
 
   return await GoogleProviderInstance.CreateCalendarEvent({
     summary: calendar_event_title,
@@ -468,7 +435,7 @@ export class OrderManager implements WProvider {
     const now = Date.now();
     const endOfRange = addHours(now, 5);
     const isEndRangeSameDay = isSameDay(now, endOfRange);
-    const endOfRangeAsFT = ComputeFulfillmentTime(endOfRange);
+    const endOfRangeAsFT = WDateUtils.ComputeFulfillmentTime(endOfRange);
     const endOfRangeAsQuery = { 'fulfillment.selectedDate': endOfRangeAsFT.selectedDate, 'fulfillment.selectedTime': { $lte: endOfRangeAsFT.selectedTime } };
     const timeConstraint = isEndRangeSameDay ?
       endOfRangeAsQuery :
@@ -535,6 +502,10 @@ export class OrderManager implements WProvider {
 
   public DiscountOrder = async (idempotencyKey: string, orderId: string, reason: string) => {
     // TODO
+  }
+
+  public ObliterateLocks = async () => {
+    await WOrderInstanceModel.updateMany({}, { locked: null });
   }
 
   /**
@@ -824,7 +795,7 @@ export class OrderManager implements WProvider {
     if (payOrderResponse.success) {
       logger.info(`Square order successfully marked paid.`);
       // send email to customer
-      await CreateExternalConfirmationEmail(lockedOrder, true);
+      await CreateExternalConfirmationEmail(lockedOrder);
       // adjust DB event
       return await WOrderInstanceModel.findOneAndUpdate(
         { locked: lockedOrder.locked, _id: lockedOrder.id },
@@ -930,7 +901,6 @@ export class OrderManager implements WProvider {
     }
 
     // 5. enter payment subsection
-    let isPaid = false;
     let tipAmountRemaining = recomputedTotals.tipAmount.amount;
     const discounts: OrderLineDiscount[] = [];
     const moneyCreditPayments: StoreCreditPayment[] = [];
@@ -989,10 +959,6 @@ export class OrderManager implements WProvider {
       await RefundStoreCreditDebits(storeCreditResponses);
       logger.error("Failed to process store credit step of ordering");
       return { status: 404, success: false, error: [{ category: 'INVALID_REQUEST_ERROR', code: 'INSUFFICIENT_FUNDS', detail: "Unable to debit store credit." }] };
-    }
-
-    if (recomputedTotals.balanceAfterCredits.amount === 0) {
-      isPaid = true;
     }
 
     const orderInstanceBeforeCharging: Omit<WOrderInstance, 'id' | 'metadata' | 'status' | 'locked'> = {
@@ -1076,7 +1042,6 @@ export class OrderManager implements WProvider {
         }));
 
         // THE GOAL YALL
-
         const completedOrderInstance: Omit<WOrderInstance, 'id' | 'metadata'> = {
           ...orderInstanceBeforeCharging,
           payments: squarePayments.slice(),
@@ -1088,12 +1053,10 @@ export class OrderManager implements WProvider {
         // 6. create calendar event
         try {
           return await CreateOrderEvent(
-            menu,
             fulfillmentConfig,
             completedOrderInstance,
             rebuiltCart,
             dateTimeInterval,
-            isPaid,
             recomputedTotals)
             .then(async (orderEvent) => {
               return await new WOrderInstanceModel({

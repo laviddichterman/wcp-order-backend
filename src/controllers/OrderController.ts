@@ -75,6 +75,7 @@ export class OrderController implements IExpressController {
     this.router.post(`${this.path}`, expressValidationMiddleware(CreateOrderValidationChain), this.postOrder);
     this.router.get(`${this.path}/:oId`, CheckJWT, ScopeReadOrders, expressValidationMiddleware(OrderIdValidationChain), this.getOrder);
     this.router.get(`${this.path}`, CheckJWT, ScopeReadOrders, expressValidationMiddleware(QueryOrdersValidationChain), this.getOrders);
+    this.router.put(`${this.path}/unlock`, CheckJWT, ScopeWriteOrders, this.putUnlock);
     this.router.put(`${this.path}/:oId/cancel`, CheckJWT, ScopeWriteOrders, expressValidationMiddleware(CancelOrderValidationChain), this.putCancelOrder);
     this.router.put(`${this.path}/:oId/send`, CheckJWT, ScopeWriteOrders, expressValidationMiddleware(IdempotentOrderIdPutValidationChain), this.putSendOrder);
     this.router.put(`${this.path}/:oId/confirm`, CheckJWT, ScopeWriteOrders, expressValidationMiddleware(ConfirmOrderValidationChain), this.putConfirmOrder);
@@ -156,6 +157,22 @@ export class OrderController implements IExpressController {
       const emailCustomer = req.body.emailCustomer as boolean;
       const response = await OrderManagerInstance.AdjustOrderTime(idempotencyKey, orderId, newTime, emailCustomer, req.body.additionalMessage);
       res.status(response.status).json(response);
+    } catch (error) {
+      const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
+      GoogleProviderInstance.SendEmail(
+        EMAIL_ADDRESS,
+        { name: EMAIL_ADDRESS, address: "dave@windycitypie.com" },
+        "ERROR IN ORDER PROCESSING. CONTACT DAVE IMMEDIATELY",
+        "dave@windycitypie.com",
+        `<p>Order request: ${JSON.stringify(req.body)}</p><p>Error info:${JSON.stringify(error)}</p>`);
+      next(error)
+    }
+  }
+
+  private putUnlock = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const response = await OrderManagerInstance.ObliterateLocks();
+        res.status(200).json({ ok: "yay!" });
     } catch (error) {
       const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
       GoogleProviderInstance.SendEmail(
