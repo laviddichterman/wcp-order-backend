@@ -6,7 +6,7 @@ import { DataProviderInstance } from '../config/dataprovider';
 import { OrderManagerInstance } from '../config/order_manager';
 import IExpressController from '../types/IExpressController';
 import { GoogleProviderInstance } from '../config/google';
-import { CheckJWT, ScopeReadOrders, ScopeWriteOrders } from '../config/authorization';
+import { CheckJWT, ScopeReadOrders, ScopeWriteOrders, ScopeCancelOrders } from '../config/authorization';
 import { isFulfillmentDefined } from '../types/Validations';
 
 const OrderIdValidationChain = [

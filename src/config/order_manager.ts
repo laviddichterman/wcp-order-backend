@@ -432,13 +432,14 @@ export class OrderManager implements WProvider {
   private SendOrders = async () => {
     const idempotencyKey = crypto.randomBytes(22).toString('hex');
     const now = Date.now();
-    const endOfRange = addHours(now, 5);
+    const endOfRange = addHours(now, 3);
     const isEndRangeSameDay = isSameDay(now, endOfRange);
     const endOfRangeAsFT = WDateUtils.ComputeFulfillmentTime(endOfRange);
     const endOfRangeAsQuery = { 'fulfillment.selectedDate': endOfRangeAsFT.selectedDate, 'fulfillment.selectedTime': { $lte: endOfRangeAsFT.selectedTime } };
     const timeConstraint = isEndRangeSameDay ?
       endOfRangeAsQuery :
       { $or: [{ 'fulfillment.selectedDate': WDateUtils.formatISODate(now) }, endOfRangeAsQuery] }
+    logger.debug(`Running SendOrders job for the time constraint: ${JSON.stringify(timeConstraint)}`);
     await WOrderInstanceModel.updateMany({
       status: WOrderStatus.CONFIRMED,
       'locked': null,
@@ -470,9 +471,11 @@ export class OrderManager implements WProvider {
 
   public GetOrders = async (queryDate: string | null, queryStatus: WOrderStatus | null): Promise<WOrderInstance[]> => {
     // find orders and return
+    const dateConstraint = queryDate ? { 'fulfillment.selectedDate': queryDate } : {};
+    const statusConstraint = queryStatus ? { 'status': queryStatus } : {};
     return await WOrderInstanceModel.find({
-      ...(queryDate ? { 'fulfillment.selectedDate': queryDate } : {}),
-      ...(queryStatus ? { 'status': queryStatus } : {})
+      ...(dateConstraint),
+      ...(statusConstraint)
     }).exec();
   };
 
@@ -716,6 +719,19 @@ export class OrderManager implements WProvider {
       await SquareProviderInstance.SendMessageOrder(messageOrder);
     }
 
+    // const updateSquareOrderResponse = await SquareProviderInstance.OrderUpdate(
+    //   DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
+    //   squareOrderId,
+    //   squareOrder.version!, {
+    //   fulfillments: squareOrder.fulfillments?.map(x => ({ uid: x.uid, pickupDetails: { pickupAt: formatRFC3339(promisedTime) } })) ?? [],
+    // }, []);
+    // if (!updateSquareOrderResponse.success) {
+    //   // failed to update square order fulfillment
+
+    //   logger.error(``)
+    // }
+
+
     // adjust calendar event
     const gCalEventId = lockedOrder.metadata.find(x => x.key === 'GCALEVENT')?.value;
     if (gCalEventId) {
@@ -847,7 +863,14 @@ export class OrderManager implements WProvider {
     const orderInstance: WOrderInstancePartial = {
       cart: createOrderRequest.cart,
       customerInfo: createOrderRequest.customerInfo,
-      fulfillment: createOrderRequest.fulfillment,
+      fulfillment: { 
+        dineInInfo: createOrderRequest.fulfillment.dineInInfo ?? null,
+        deliveryInfo: createOrderRequest.fulfillment.deliveryInfo ?? null,
+        selectedService: createOrderRequest.fulfillment.selectedService,
+        selectedDate: WDateUtils.formatISODate(dateTimeInterval.start), // REFORMAT THE DATE HERE FOR SAFETY
+        selectedTime: createOrderRequest.fulfillment.selectedTime,
+        status: WFulfillmentStatus.PROPOSED,
+      },
       metrics: createOrderRequest.metrics,
       tip: createOrderRequest.tip,
       specialInstructions: createOrderRequest.specialInstructions
@@ -980,7 +1003,13 @@ export class OrderManager implements WProvider {
           referenceId,
           orderInstanceBeforeCharging.discounts, orderInstanceBeforeCharging.taxes,
           Object.values(rebuiltCart).flat(),
-          null));
+          {
+            displayName: customer_name,
+            emailAddress: orderInstanceBeforeCharging.customerInfo.email,
+            phoneNumber: orderInstanceBeforeCharging.customerInfo.mobileNum,
+            pickupAt: dateTimeInterval.start
+
+          }));
       if (squareOrderResponse.success === true) {
         squareOrder = squareOrderResponse.result.order!;
         const squareOrderId = squareOrder!.id!;

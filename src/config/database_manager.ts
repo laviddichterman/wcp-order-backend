@@ -1,7 +1,7 @@
 import logger from '../logging';
 import { WProvider } from '../types/WProvider';
 import PACKAGE_JSON from '../../package.json';
-import { OptionPlacement, OptionQualifier, ReduceArrayToMapByKey, SEMVER } from '@wcp/wcpshared';
+import { OptionPlacement, OptionQualifier, ReduceArrayToMapByKey, SEMVER, WDateUtils } from '@wcp/wcpshared';
 import DBVersionModel from '../models/DBVersionSchema';
 import { KeyValueModel } from '../models/settings/KeyValueSchema';
 import { WMoney } from '../models/WMoney';
@@ -14,6 +14,8 @@ import { WProductInstanceModel as WProductInstanceModelActual } from '../models/
 import { PrinterGroupModel } from '../models/catalog/WPrinterGroupSchema';
 import mongoose, { Schema } from "mongoose";
 import { exit } from 'process';
+import { WOrderInstanceModel } from '../models/orders/WOrderInstance';
+import { parseISO } from 'date-fns';
 
 const SetVersion = async (new_version: SEMVER) => {
   return await DBVersionModel.findOneAndUpdate({}, new_version, { new: true, upsert: true });
@@ -455,6 +457,20 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
   "0.5.16": [{ major: 0, minor: 5, patch: 17 }, async () => {
   }],
   "0.5.17": [{ major: 0, minor: 5, patch: 18 }, async () => {
+  }],
+  "0.5.18": [{ major: 0, minor: 5, patch: 19 }, async () => {
+  }],
+  "0.5.19": [{ major: 0, minor: 5, patch: 20 }, async () => {
+    const allOrders = await WOrderInstanceModel.find();
+    await Promise.all(allOrders.map(async (o) => {
+      const newTime = WDateUtils.formatISODate(parseISO(o.fulfillment.selectedDate));
+      logger.info(`Converting ${o.fulfillment.selectedDate} to ${newTime}`);
+      return await WOrderInstanceModel.findByIdAndUpdate(o.id, { 'fulfillment.selectedDate': WDateUtils.formatISODate(parseISO(o.fulfillment.selectedDate)) });
+    }))
+  }],
+  "0.5.20": [{ major: 0, minor: 5, patch: 21 }, async () => {
+  }],
+  "0.5.21": [{ major: 0, minor: 5, patch: 22 }, async () => {
   }],
 }
 

@@ -27,7 +27,7 @@ if (!process.env.TZ) {
   process.exit(1);
 }
 
-const app = new WApp(["nsRO", 'nsAUTH'],
+const app = new WApp(["nsRO"],
   [
     new DeliveryAddressController(),
     new KeyValueStoreController(),

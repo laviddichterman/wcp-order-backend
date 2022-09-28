@@ -348,7 +348,9 @@ export const ProductInstanceToSquareCatalogObject = (locationIds: string[],
   // do we need to add an additional variation on the square item corresponding to the base product instance for split and otherwise unruly product instances likely with pricingType: VARIABLE?
   // maybe we add variations for each half and half combo?
   // maybe we can just set variationName on the line item and call it good?
-
+  // TODO: MODIFIERS THAT ARE SINGLE SELECT (and therefore cannot be split) should all live in the same MODIFIER LIST in square, similar to how they are in WARIO
+  // TODO: when we transition off the square POS, if we're still using the finance or employee management or whatever, we'll need to pull pre-selected modifiers off of the ITEM_VARIATIONs for a product instance
+  // 
   const squareItemId = GetSquareIdFromExternalIds(productInstance.externalIDs, 'ITEM') ?? `#${batch}ITEM`;
   const versionItem = currentObjects.find(x => x.id === squareItemId)?.version ?? null;
   const squareItemVariationId = GetSquareIdFromExternalIds(productInstance.externalIDs, 'ITEM_VARIATION') ?? `#${batch}ITEM_VARIATION`;

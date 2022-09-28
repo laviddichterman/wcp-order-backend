@@ -31,11 +31,13 @@ import { PrinterGroupModel } from "../models/catalog/WPrinterGroupSchema";
 import { DataProviderInstance } from "./dataprovider";
 import { SocketIoProviderInstance } from "./socketio_provider";
 import logger from '../logging';
+import { chunk } from 'lodash';
 import { WProvider } from "../types/WProvider";
 import { SquareProviderInstance } from "./square";
 import { GetSquareExternalIds, GetSquareIdIndexFromExternalIds, IdMappingsToExternalIds, ModifierOptionToSquareCatalogObject, PrinterGroupToSquareCatalogObjectPlusDummyProduct, ProductInstanceToSquareCatalogObject, WARIO_SQUARE_ID_METADATA_KEY } from "./SquareWarioBridge";
 import { CatalogObject } from "square";
 
+const SQUARE_BATCH_CHUNK_SIZE = process.env.WARIO_SQUARE_BATCH_CHUNK_SIZE ? parseInt(process.env.WARIO_SQUARE_BATCH_CHUNK_SIZE): 100;
 const SUPPRESS_SQUARE_SYNC = process.env.WARIO_SUPPRESS_SQUARE_INIT_SYNC === '1' || process.env.WARIO_SUPPRESS_SQUARE_INIT_SYNC === 'true';
 
 const ValidateProductModifiersFunctionsCategories = function (modifiers: { mtid: string; enable: string | null; }[], category_ids: string[], catalog: CatalogProvider) {
@@ -331,11 +333,12 @@ export class CatalogProvider implements WProvider {
 
   CreatePrinterGroup = async (printerGroup: Omit<PrinterGroup, "id">) => {
     logger.info(`Creating Printer Group: ${JSON.stringify(printerGroup)}`);
-    const upsertResponse =
-      await SquareProviderInstance.BatchUpsertCatalogObjects([{
-        objects: PrinterGroupToSquareCatalogObjectPlusDummyProduct(
-          [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION, DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE], printerGroup, [], "")
-      }]);
+    const upsertResponse = await SquareProviderInstance.BatchUpsertCatalogObjects([{ 
+      objects: PrinterGroupToSquareCatalogObjectPlusDummyProduct(
+          [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION, DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE], 
+          printerGroup, 
+          [], 
+          "") }]);
     if (!upsertResponse.success) {
       logger.error(`failed to add square category, got errors: ${JSON.stringify(upsertResponse.error)}`);
       return null;
@@ -372,7 +375,7 @@ export class CatalogProvider implements WProvider {
         { ...oldPGs[i], ...b.printerGroup },
         existingSquareObjects,
         ('000' + i).slice(-3)));
-    const upsertResponse = await SquareProviderInstance.BatchUpsertCatalogObjects(catalogObjects.map(x => ({ objects: x })));
+    const upsertResponse = await SquareProviderInstance.BatchUpsertCatalogObjects(catalogObjects.map(x=>({objects: x})));
     if (!upsertResponse.success) {
       logger.error(`Failed to update square categories, got errors: ${JSON.stringify(upsertResponse.error)}`);
       return batches.map(_ => null);
@@ -666,7 +669,7 @@ export class CatalogProvider implements WProvider {
 
     })
 
-    const upsertResponse = await SquareProviderInstance.BatchUpsertCatalogObjects(catalogObjects.map(x => ({ objects: [x] })));
+    const upsertResponse = await SquareProviderInstance.BatchUpsertCatalogObjects(chunk(catalogObjects, SQUARE_BATCH_CHUNK_SIZE).map(x=>({objects: x})));
     if (!upsertResponse.success) {
       logger.error(`Failed to update square product, got errors: ${JSON.stringify(upsertResponse.error)}`);
       return batches.map(_ => null);
@@ -890,7 +893,7 @@ export class CatalogProvider implements WProvider {
         { ...oldProductInstances[i], ...b.productInstance },
         b.product.printerGroup ? this.#printerGroups[b.product.printerGroup] : null,
         this.CatalogSelectors, existingSquareObjects, ('000' + i).slice(-3)));
-    const upsertResponse = await SquareProviderInstance.BatchUpsertCatalogObjects(catalogObjects.map(x => ({ objects: [x] })));
+    const upsertResponse = await SquareProviderInstance.BatchUpsertCatalogObjects(chunk(catalogObjects, SQUARE_BATCH_CHUNK_SIZE).map(x=>({objects: x})));
     if (!upsertResponse.success) {
       logger.error(`Failed to update square product, got errors: ${JSON.stringify(upsertResponse.error)}`);
       return batches.map(_ => null);
