@@ -177,7 +177,7 @@ export class ProductController implements IExpressController {
         logger.info(`Unable to delete Product: ${productId}`);
         return res.status(404).send(`Unable to delete Product: ${productId}`);
       }
-      logger.info(`Successfully deleted ${doc}`);
+      logger.info(`Successfully deleted ${JSON.stringify(doc)}`);
       return res.status(200).send(doc);
     } catch (error) {
       return next(error)
@@ -248,7 +248,7 @@ export class ProductController implements IExpressController {
         logger.info(`Unable to delete ProductInstance Type: ${productInstanceId}`);
         return res.status(404).send(`Unable to delete ProductInstance: ${productInstanceId}`);
       }
-      logger.info(`Successfully deleted ${doc}`);
+      logger.info(`Successfully deleted ${JSON.stringify(doc)}`);
       return res.status(200).send(doc);
     } catch (error) {
       return next(error)
