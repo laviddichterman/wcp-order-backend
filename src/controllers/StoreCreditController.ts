@@ -9,7 +9,7 @@ import { CheckJWT, ScopeEditCredit } from '../config/authorization';
 import { StoreCreditProviderInstance } from '../config/store_credit_provider';
 import { GoogleProviderInstance } from '../config/google';
 
-import { SpendCreditResponse, ValidateLockAndSpendRequest, CURRENCY, IssueStoreCreditRequest, StoreCreditType, PurchaseStoreCreditRequest, PurchaseStoreCreditResponse } from '@wcp/wcpshared';
+import { SpendCreditResponse, ValidateLockAndSpendRequest, CURRENCY, IssueStoreCreditRequest, StoreCreditType, PurchaseStoreCreditRequest, PurchaseStoreCreditResponse, MoneyToDisplayString } from '@wcp/wcpshared';
 import { BigIntStringify } from '../utils';
 
 const CreditCodeValidationChain = [
@@ -74,7 +74,7 @@ export class StoreCreditController implements IExpressController {
       const credit_code = req.query.code as string;
       const validate_response = await StoreCreditProviderInstance.ValidateAndLockCode(credit_code);
       if (validate_response.valid && validate_response.amount.amount > 0) {
-        logger.info(`Found and locked ${credit_code} with value ${validate_response.amount}.`);
+        logger.info(`Found and locked ${credit_code} with value ${MoneyToDisplayString(validate_response.amount, true)}.`);
         return res.status(200).json(validate_response);
       }
       else {
