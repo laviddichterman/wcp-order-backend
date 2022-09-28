@@ -36,8 +36,8 @@ export class PrinterGroupController implements IExpressController {
   private initializeRoutes() {
     this.router.get(`${this.path}`, CheckJWT, ScopeWriteCatalog, this.getPrinterGroups);
     this.router.post(`${this.path}`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(PrinterGroupValidationChain), this.postPrinterGroup);
-    this.router.patch(`${this.path}/:catid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(EditPrinterGroupValidationChain), this.patchPrinterGroup);
-    this.router.delete(`${this.path}/:catid`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware(PrinterGroupByIdValidationChain), this.deletePrinterGroup);
+    this.router.patch(`${this.path}/:pgId`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(EditPrinterGroupValidationChain), this.patchPrinterGroup);
+    this.router.delete(`${this.path}/:pgId`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware(PrinterGroupByIdValidationChain), this.deletePrinterGroup);
   };
 
   private getPrinterGroups = async (_: Request, res: Response, __: NextFunction) => {
@@ -74,8 +74,8 @@ export class PrinterGroupController implements IExpressController {
         }
       });
       if (!doc) {
-        logger.info(`Unable to update PrinterGroup: ${req.params.catid}`);
-        return res.status(404).send(`Unable to update PrinterGroup: ${req.params.catid}`);
+        logger.info(`Unable to update PrinterGroup: ${req.params.pgId}`);
+        return res.status(404).send(`Unable to update PrinterGroup: ${req.params.pgId}`);
       }
       logger.info(`Successfully updated ${JSON.stringify(doc)}`);
       return res.status(200).send(doc);
@@ -86,10 +86,10 @@ export class PrinterGroupController implements IExpressController {
 
   private deletePrinterGroup = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const doc = await CatalogProviderInstance.DeletePrinterGroup(req.params.catid);
+      const doc = await CatalogProviderInstance.DeletePrinterGroup(req.params.pgId);
       if (!doc) {
-        logger.info(`Unable to delete PrinterGroup: ${req.params.catid}`);
-        return res.status(404).send(`Unable to delete PrinterGroup: ${req.params.catid}`);
+        logger.info(`Unable to delete PrinterGroup: ${req.params.pgId}`);
+        return res.status(404).send(`Unable to delete PrinterGroup: ${req.params.pgId}`);
       }
       logger.info(`Successfully deleted ${JSON.stringify(doc)}`);
       return res.status(200).send(doc);

@@ -18,6 +18,7 @@ import { CategoryController } from "./controllers/CategoryController";
 import { StoreCreditController } from "./controllers/StoreCreditController";
 import { AccountingController } from "./controllers/AccountingController";
 import { OrderController } from "./controllers/OrderController";
+import { PrinterGroupController } from "./controllers/PrinterGroupController";
 import WApp from './App';
 import logger from './logging';
 
@@ -38,7 +39,8 @@ const app = new WApp(["nsRO", 'nsAUTH'],
     new StoreCreditController(),
     new AccountingController(),
     new OrderController(),
-    new FulfillmentController()
+    new FulfillmentController(),
+    new PrinterGroupController()
   ],
   [DatabaseManagerInstance, 
     DataProviderInstance, 

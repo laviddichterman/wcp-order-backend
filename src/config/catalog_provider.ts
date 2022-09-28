@@ -36,6 +36,8 @@ import { SquareProviderInstance } from "./square";
 import { GetSquareExternalIds, GetSquareIdIndexFromExternalIds, IdMappingsToExternalIds, ModifierOptionToSquareCatalogObject, PrinterGroupToSquareCatalogObjectPlusDummyProduct, ProductInstanceToSquareCatalogObject, WARIO_SQUARE_ID_METADATA_KEY } from "./SquareWarioBridge";
 import { CatalogObject } from "square";
 
+const SUPPRESS_SQUARE_SYNC = process.env.WARIO_SUPPRESS_SQUARE_INIT_SYNC === '1' || process.env.WARIO_SUPPRESS_SQUARE_INIT_SYNC === 'true';
+
 const ValidateProductModifiersFunctionsCategories = function (modifiers: { mtid: string; enable: string | null; }[], category_ids: string[], catalog: CatalogProvider) {
   const found_all_modifiers = modifiers.map(entry =>
     catalog.ModifierTypes.some(x => x.id === entry.mtid) &&
@@ -48,8 +50,11 @@ const BatchDeleteCatalogObjectsFromExternalIds = async (externalIds: KeyValue[])
   const squareKV = externalIds.filter(x => x.key.startsWith(WARIO_SQUARE_ID_METADATA_KEY));
   const squareKeys = squareKV.map(x => x.key.substring(WARIO_SQUARE_ID_METADATA_KEY.length));
   const squareValues = squareKV.map(x => x.value);
-  logger.debug(`Removing ${squareKeys.join(", ")} from Square: ${squareValues.join(", ")}`);
-  return await SquareProviderInstance.BatchDeleteCatalogObjects(squareKV.map(x => x.value));
+  if (squareKV.length > 0) {
+    logger.debug(`Removing ${squareKeys.join(", ")} from Square: ${squareValues.join(", ")}`);
+    return await SquareProviderInstance.BatchDeleteCatalogObjects(squareKV.map(x => x.value));
+  }
+  return true;
 }
 
 type UpdateProductInstanceProps = {
@@ -292,13 +297,15 @@ export class CatalogProvider implements WProvider {
       this.SyncOrderInstanceFunctions()]);
 
     this.RecomputeCatalog();
-    await this.CheckAllPrinterGroupsSquareIdsAndFixIfNeeded();
-    await this.CheckAllModifierOptionsHaveSquareIdsAndFixIfNeeded();
-    await this.CheckAllProductsHaveSquareIdsAndFixIfNeeded();
 
-    await this.SyncOptions();
-    await this.SyncProducts();
-    this.RecomputeCatalog();
+    if (!SUPPRESS_SQUARE_SYNC) {
+      await this.CheckAllPrinterGroupsSquareIdsAndFixIfNeeded();
+      await this.CheckAllModifierOptionsHaveSquareIdsAndFixIfNeeded();
+      await this.CheckAllProductsHaveSquareIdsAndFixIfNeeded();
+      await this.SyncOptions();
+      await this.SyncProducts();
+      this.RecomputeCatalog();    
+    }
 
     logger.info(`Finished Bootstrap of CatalogProvider`);
   };
