@@ -382,12 +382,11 @@ const CreateOrderEvent = async (
   const payment_section = "\n" + GeneratePaymentSection(totals, order.discounts, order.payments, false);
   const delivery_section = GenerateDeliverySection(order.fulfillment.deliveryInfo, false);
   const dineInSection = GenerateDineInSection(order.fulfillment.dineInInfo, false);
-  const calendar_details = `
-    ${shortcart.map((x) => `${x.category_name}:
-    ${x.products.join("\n")}`).join("\n")}
-    ${dineInSection}
-    ph: ${order.customerInfo.mobileNum}
-    ${special_instructions_section}${delivery_section}${payment_section}`;
+  const calendar_details = 
+`${shortcart.map((x) => `${x.category_name}:\n${x.products.join("\n")}`).join("\n")}
+${dineInSection}
+ph: ${order.customerInfo.mobileNum}
+${special_instructions_section}${delivery_section}${payment_section}`;
 
   return await GoogleProviderInstance.CreateCalendarEvent({
     summary: calendar_event_title,
