@@ -229,19 +229,44 @@ export class CatalogProvider implements WProvider {
 
   CheckAllPrinterGroupsSquareIdsAndFixIfNeeded = async () => {
     const batches = Object.values(this.#printerGroups)
-      .filter(pg => GetSquareIdIndexFromExternalIds(pg.externalIDs, 'CATEGORY') === -1)
+      .filter(pg => GetSquareIdIndexFromExternalIds(pg.externalIDs, 'CATEGORY') === -1 || 
+      GetSquareIdIndexFromExternalIds(pg.externalIDs, 'ITEM') === -1 || 
+      GetSquareIdIndexFromExternalIds(pg.externalIDs, 'ITEM_VARIATION') === -1)
       .map(pg => ({ id: pg.id, printerGroup: {} } as UpdatePrinterGroupProps));
     return batches.length > 0 ? await this.BatchUpdatePrinterGroup(batches) : null;
   }
 
   CheckAllModifierOptionsHaveSquareIdsAndFixIfNeeded = async () => {
-    const batches = this.#options
+    const squareCatalogObjectIds = this.#options
+      .map(opt => GetSquareExternalIds(opt.externalIDs).map(x=>x.value)).flat();
+    const catalogObjectResponse = await SquareProviderInstance.BatchRetrieveCatalogObjects(squareCatalogObjectIds, false);
+    if (catalogObjectResponse.success) {
+      const foundObjects = catalogObjectResponse.result.objects!;
+      const missingSquareCatalogObjectBatches = this.#options
+        .filter(x=>GetSquareExternalIds(x.externalIDs).reduce((acc, kv)=> acc || foundObjects.findIndex(o=>o.id === kv.value) === -1, false))
+        .map(x => ({ id: x.id, modifierOption: { externalIDs: x.externalIDs.filter(kv =>!kv.key.startsWith(WARIO_SQUARE_ID_METADATA_KEY))} } as UpdateModifierOptionProps))
+      return missingSquareCatalogObjectBatches.length > 0 ? await this.BatchUpdateModifierOption(missingSquareCatalogObjectBatches, true) : null;
+    }
+    const missingSquareIdBatches = this.#options
       .filter(opt => GetSquareIdIndexFromExternalIds(opt.externalIDs, 'MODIFIER_LIST') === -1)
       .map(opt => ({ id: opt.id, modifierOption: {} } as UpdateModifierOptionProps));
-    return batches.length > 0 ? await this.BatchUpdateModifierOption(batches, true) : null;
+    return missingSquareIdBatches.length > 0 ? await this.BatchUpdateModifierOption(missingSquareIdBatches, true) : null;
   }
 
   CheckAllProductsHaveSquareIdsAndFixIfNeeded = async () => {
+    const squareCatalogObjectIds = Object.values(this.#catalog.products)
+    .map(p=>p.instances.map(piid => GetSquareExternalIds(this.#catalog.productInstances[piid]!.externalIDs).map(x=>x.value)).flat()).flat();
+    const catalogObjectResponse = await SquareProviderInstance.BatchRetrieveCatalogObjects(squareCatalogObjectIds, false);
+    if (catalogObjectResponse.success) {
+      const foundObjects = catalogObjectResponse.result.objects!;
+      const missingSquareCatalogObjectBatches = Object.values(this.#catalog.products)
+      .map(p=>p.instances
+        .filter(x=>GetSquareExternalIds(this.#catalog.productInstances[x]!.externalIDs).reduce((acc, kv)=> acc || foundObjects.findIndex(o=>o.id === kv.value) === -1, false))
+        .map(piid => ({ piid, product: { modifiers: p.product.modifiers, price: p.product.price }, productInstance: { externalIDs: this.#catalog.productInstances[piid]!.externalIDs.filter(kv =>!kv.key.startsWith(WARIO_SQUARE_ID_METADATA_KEY)) } } as UpdateProductInstanceProps)))
+        .flat();
+        
+      return missingSquareCatalogObjectBatches.length > 0 ? await this.BatchUpdateProductInstance(missingSquareCatalogObjectBatches, true) : null;
+    }
     const batches = Object.values(this.#catalog.products)
       .map(p => p.instances
         .filter(piid => GetSquareIdIndexFromExternalIds(this.#catalog.productInstances[piid]!.externalIDs, "ITEM") === -1)
