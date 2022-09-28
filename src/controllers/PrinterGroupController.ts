@@ -34,10 +34,16 @@ export class PrinterGroupController implements IExpressController {
   }
 
   private initializeRoutes() {
+    this.router.get(`${this.path}`, CheckJWT, ScopeWriteCatalog, this.getPrinterGroups);
     this.router.post(`${this.path}`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(PrinterGroupValidationChain), this.postPrinterGroup);
     this.router.patch(`${this.path}/:catid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(EditPrinterGroupValidationChain), this.patchPrinterGroup);
     this.router.delete(`${this.path}/:catid`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware(PrinterGroupByIdValidationChain), this.deletePrinterGroup);
   };
+
+  private getPrinterGroups = async (_: Request, res: Response, __: NextFunction) => {
+    return res.status(200).json(Object.values(CatalogProviderInstance.PrinterGroups));
+  };
+
   private postPrinterGroup = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const doc = await CatalogProviderInstance.CreatePrinterGroup({

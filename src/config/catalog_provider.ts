@@ -295,7 +295,7 @@ export class CatalogProvider implements WProvider {
     });
     await doc.save();
     await this.SyncPrinterGroups();
-    return doc;
+    return doc.toObject();
   };
 
   BatchUpdatePrinterGroup = async (batches: UpdatePrinterGroupProps[]): Promise<(PrinterGroup | null)[]> => {
@@ -339,7 +339,7 @@ export class CatalogProvider implements WProvider {
       if (!doc) {
         return null;
       }
-      return doc;
+      return doc.toObject();
     }));
 
     this.SyncPrinterGroups();
@@ -370,7 +370,7 @@ export class CatalogProvider implements WProvider {
       await this.SyncProducts();
       this.RecomputeCatalogAndEmit();
     }
-    return doc;
+    return doc.toObject();
   }
 
   CreateCategory = async (category: Omit<ICategory, "id">) => {
@@ -379,7 +379,7 @@ export class CatalogProvider implements WProvider {
     await this.SyncCategories();
     this.RecomputeCatalog();
     SocketIoProviderInstance.EmitCatalog(this.#catalog);
-    return doc;
+    return doc.toObject();
   };
 
   UpdateCategory = async (category_id: string, category: Omit<ICategory, "id">) => {
@@ -443,7 +443,7 @@ export class CatalogProvider implements WProvider {
     }
     await this.SyncCategories();
     this.RecomputeCatalogAndEmit();
-    return doc;
+    return doc.toObject();
   }
 
   CreateModifierType = async (modifierType: Omit<IOptionType, "id">) => {
@@ -452,7 +452,7 @@ export class CatalogProvider implements WProvider {
     await this.SyncModifierTypes();
     // NOTE: we don't make anything in the square catalog for just the modifier type
     this.RecomputeCatalogAndEmit();
-    return doc;
+    return doc.toObject();
   };
 
   UpdateModifierType = async (id: string, modifierType: Partial<Omit<IOptionType, "id">>) => {
@@ -465,7 +465,7 @@ export class CatalogProvider implements WProvider {
     // NOTE: we don't make anything in the square catalog for just the modifier type
     await this.SyncModifierTypes();
     this.RecomputeCatalogAndEmit();
-    return updated;
+    return updated.toObject();
   };
 
   DeleteModifierType = async (mt_id: string) => {
@@ -502,7 +502,7 @@ export class CatalogProvider implements WProvider {
     await this.SyncOptions();
     await this.SyncModifierTypes();
     this.RecomputeCatalogAndEmit();
-    return doc;
+    return doc.toObject();
   }
 
   CreateOption = async (modifierOption: Omit<IOption, 'id'>) => {
@@ -510,13 +510,18 @@ export class CatalogProvider implements WProvider {
     if (!Object.hasOwn(this.Catalog.modifiers, modifierOption.modifierTypeId)) {
       return null;
     }
+
+    // we need to filter these external IDs because it'll interfere with adding the new modifier to the catalog
+    const filteredExternalIds = modifierOption.externalIDs.filter(x=>!x.key.startsWith(WARIO_SQUARE_ID_METADATA_KEY));
+    const adjustedOption: Omit<IOption, 'id' | 'productId'> = { ...modifierOption, externalIDs: filteredExternalIds };
+    
     // First create the square modifier
     const modifierEntry = this.Catalog.modifiers[modifierOption.modifierTypeId];
     const upsertResponse = await SquareProviderInstance.UpsertCatalogObject(
       ModifierOptionToSquareCatalogObject(
         [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION, DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE],
         modifierEntry.modifierType.ordinal, 
-        modifierOption, 
+        adjustedOption, 
         [], 
         ""));
     if (!upsertResponse.success) {
@@ -536,13 +541,13 @@ export class CatalogProvider implements WProvider {
     }
 
     const doc = new WOptionModel({
-      ...modifierOption,
-      externalIDs: [...modifierOption.externalIDs, ...IdMappingsToExternalIds(upsertResponse.result!.idMappings, "")]
+      ...adjustedOption,
+      externalIDs: [...adjustedOption.externalIDs, ...IdMappingsToExternalIds(upsertResponse.result!.idMappings, "")]
     });
     await doc.save();
     await this.SyncOptions();
     this.RecomputeCatalogAndEmit();
-    return doc;
+    return doc.toObject();
   };
 
   UpdateModifierOption = async (props: UpdateModifierOptionProps, suppress_catalog_recomputation: boolean = false) => {
@@ -614,7 +619,6 @@ export class CatalogProvider implements WProvider {
       return batches.map(_ => null);
     }
 
-    
     const mappings = upsertResponse.result.idMappings;
 
     const updated = await Promise.all(batches.map(async (b, i) => {
@@ -628,7 +632,7 @@ export class CatalogProvider implements WProvider {
       if (!doc) {
         return null;
       }
-      return doc;
+      return doc.toObject();
     }));
 
     if (!suppress_catalog_recomputation) {
@@ -670,19 +674,23 @@ export class CatalogProvider implements WProvider {
     if (!suppress_catalog_recomputation) {
       this.RecomputeCatalogAndEmit();
     }
-    return doc;
+    return doc.toObject();
   }
 
   CreateProduct = async (product: Omit<IProduct, 'id' | 'baseProductId'>, instance: Omit<IProductInstance, 'id' | 'productId'>) => {
     if (!ValidateProductModifiersFunctionsCategories(product.modifiers, product.category_ids, this)) {
       return null;
     }
+
+    // we need to filter these external IDs because it'll interfere with adding the new product to the catalog
+    const filteredExternalIds = instance.externalIDs.filter(x=>!x.key.startsWith(WARIO_SQUARE_ID_METADATA_KEY));
+    const adjustedInstance: Omit<IProductInstance, 'id' | 'productId'> = { ...instance, externalIDs: filteredExternalIds };
     // add the product instance to the square catalog here
     const upsertResponse = await SquareProviderInstance.UpsertCatalogObject(
       ProductInstanceToSquareCatalogObject(
         [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION, DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE],
         product, 
-        instance,
+        adjustedInstance,
         product.printerGroup ? this.#printerGroups[product.printerGroup] : null,
         this.CatalogSelectors, 
         [], 
@@ -696,9 +704,9 @@ export class CatalogProvider implements WProvider {
     const savedProduct = await doc.save();
     logger.debug(`Saved new WProductModel: ${JSON.stringify(savedProduct.toObject())}`);
     const pi = new WProductInstanceModel({
-      ...instance,
+      ...adjustedInstance,
       productId: savedProduct.id,
-      externalIDs: [...instance.externalIDs, ...IdMappingsToExternalIds(upsertResponse.result.idMappings, "")]
+      externalIDs: [...adjustedInstance.externalIDs, ...IdMappingsToExternalIds(upsertResponse.result.idMappings, "")]
     });
     const piDoc = await pi.save();
     logger.debug(`Saved new product instance: ${JSON.stringify(piDoc.toObject())}`);
@@ -708,7 +716,7 @@ export class CatalogProvider implements WProvider {
     await Promise.all([this.SyncProducts(), this.SyncProductInstances()]);
 
     this.RecomputeCatalogAndEmit();
-    return piDoc;
+    return piDoc.toObject();
   };
 
   UpdateProduct = async (pid: string, product: Partial<Omit<IProduct, 'id'>>) => {
@@ -753,7 +761,7 @@ export class CatalogProvider implements WProvider {
 
     await this.SyncProducts();
     this.RecomputeCatalogAndEmit();
-    return updated;
+    return updated.toObject();
   };
 
   DeleteProduct = async (p_id: string) => {
@@ -774,16 +782,20 @@ export class CatalogProvider implements WProvider {
     }
     await this.SyncProducts();
     this.RecomputeCatalogAndEmit();
-    return doc;
+    return doc.toObject();
   }
 
-  CreateProductInstance = async (productInstance: Omit<IProductInstance, 'id'>) => {
+  CreateProductInstance = async (instance: Omit<IProductInstance, 'id'>) => {
+    // we need to filter these external IDs because it'll interfere with adding the new product to the catalog
+    const filteredExternalIds = instance.externalIDs.filter(x=>!x.key.startsWith(WARIO_SQUARE_ID_METADATA_KEY));
+    const adjustedInstance: Omit<IProductInstance, 'id'> = { ...instance, externalIDs: filteredExternalIds };
+
     // add the product instance to the square catalog here
-    const product = this.#catalog.products[productInstance.productId]!.product;
+    const product = this.#catalog.products[adjustedInstance.productId]!.product;
     const upsertResponse = await SquareProviderInstance.UpsertCatalogObject(ProductInstanceToSquareCatalogObject(
       [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION, DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE],
       product, 
-      productInstance,
+      adjustedInstance,
       product.printerGroup ? this.#printerGroups[product.printerGroup] : null,
       this.CatalogSelectors, 
       [], 
@@ -793,13 +805,13 @@ export class CatalogProvider implements WProvider {
       return null;
     }
     const doc = new WProductInstanceModel({
-      ...productInstance,
-      externalIDs: [...productInstance.externalIDs, ...IdMappingsToExternalIds(upsertResponse.result.idMappings, "")]
+      ...adjustedInstance,
+      externalIDs: [...adjustedInstance.externalIDs, ...IdMappingsToExternalIds(upsertResponse.result.idMappings, "")]
     });
     await doc.save();
     await this.SyncProductInstances();
     this.RecomputeCatalogAndEmit();
-    return doc;
+    return doc.toObject();
   };
 
   BatchUpdateProductInstance = async (batches: UpdateProductInstanceProps[], suppress_catalog_recomputation: boolean = false): Promise<(IProductInstance | null)[]> => {
@@ -844,7 +856,7 @@ export class CatalogProvider implements WProvider {
       if (!doc) {
         return null;
       }
-      return doc;
+      return doc.toObject();
     }));
 
     if (!suppress_catalog_recomputation) {
@@ -879,7 +891,7 @@ export class CatalogProvider implements WProvider {
         await this.SyncProductInstances();
         this.RecomputeCatalogAndEmit();
       }
-      return doc;
+      return doc.toObject();
     }
     return null;
   }
@@ -889,7 +901,7 @@ export class CatalogProvider implements WProvider {
     await doc.save();
     await this.SyncProductInstanceFunctions();
     this.RecomputeCatalogAndEmit();
-    return doc;
+    return doc.toObject();
   };
 
   UpdateProductInstanceFunction = async (pif_id: string, productInstanceFunction: Omit<IProductInstanceFunction, 'id'>) => {
@@ -900,7 +912,7 @@ export class CatalogProvider implements WProvider {
     }
     await this.SyncProductInstanceFunctions();
     this.RecomputeCatalogAndEmit();
-    return updated;
+    return updated.toObject();
   };
 
   DeleteProductInstanceFunction = async (pif_id: string, suppress_catalog_recomputation = false) => {
@@ -928,7 +940,7 @@ export class CatalogProvider implements WProvider {
     if (!suppress_catalog_recomputation) {
       this.RecomputeCatalogAndEmit();
     }
-    return doc;
+    return doc.toObject();
   }
 
   CreateOrderInstanceFunction = async (orderInstanceFunction: Omit<OrderInstanceFunction, 'id'>) => {
@@ -936,7 +948,7 @@ export class CatalogProvider implements WProvider {
     await doc.save();
     await this.SyncOrderInstanceFunctions();
     this.RecomputeCatalogAndEmit();
-    return doc;
+    return doc.toObject();
   };
 
   UpdateOrderInstanceFunction = async (id: string, orderInstanceFunction: Partial<Omit<OrderInstanceFunction, 'id'>>) => {
@@ -946,7 +958,7 @@ export class CatalogProvider implements WProvider {
     }
     await this.SyncOrderInstanceFunctions();
     this.RecomputeCatalogAndEmit();
-    return updated;
+    return updated.toObject();
   };
 
   DeleteOrderInstanceFunction = async (id: string, suppress_catalog_recomputation = false) => {
@@ -959,7 +971,7 @@ export class CatalogProvider implements WProvider {
     if (!suppress_catalog_recomputation) {
       this.RecomputeCatalogAndEmit();
     }
-    return doc;
+    return doc.toObject();
   }
 }
 

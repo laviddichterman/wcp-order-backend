@@ -139,7 +139,7 @@ export class ProductController implements IExpressController {
 
       const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/${newProductInstance.productId}/${newProductInstance.id}`;
       res.setHeader('Location', location);
-      return res.status(201).send({ newProductInstance });
+      return res.status(201).send({ ...newProductInstance });
     } catch (error) {
       return next(error)
     }
