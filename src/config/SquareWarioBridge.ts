@@ -127,7 +127,7 @@ export const CreateOrdersForPrintingFromCart = (
     const orderEntries: CoreCartEntry<WProduct>[] = [];
     Object.entries(cartEntriesByPrinterGroup)
       .forEach(([pgId, cartEntryList]) => {
-        if (CatalogProviderInstance.PrinterGroups[pgId]!.singleItemPerTicket || cartEntryList[cartEntryList.length - 1].categoryId === '5eb21d084f5f1946916c6baf') {
+        if (CatalogProviderInstance.PrinterGroups[pgId]!.singleItemPerTicket) {
           const { product, categoryId, quantity } = cartEntryList[cartEntryList.length - 1];
           if (quantity === 1) {
             orderEntries.push(cartEntryList.pop()!);
