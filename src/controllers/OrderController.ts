@@ -76,7 +76,7 @@ export class OrderController implements IExpressController {
     this.router.get(`${this.path}/:oId`, CheckJWT, ScopeReadOrders, expressValidationMiddleware(OrderIdValidationChain), this.getOrder);
     this.router.get(`${this.path}`, CheckJWT, ScopeReadOrders, expressValidationMiddleware(QueryOrdersValidationChain), this.getOrders);
     this.router.put(`${this.path}/unlock`, CheckJWT, ScopeWriteOrders, this.putUnlock);
-    this.router.put(`${this.path}/:oId/cancel`, CheckJWT, ScopeWriteOrders, expressValidationMiddleware(CancelOrderValidationChain), this.putCancelOrder);
+    this.router.put(`${this.path}/:oId/cancel`, CheckJWT, ScopeCancelOrders, expressValidationMiddleware(CancelOrderValidationChain), this.putCancelOrder);
     this.router.put(`${this.path}/:oId/send`, CheckJWT, ScopeWriteOrders, expressValidationMiddleware(IdempotentOrderIdPutValidationChain), this.putSendOrder);
     this.router.put(`${this.path}/:oId/confirm`, CheckJWT, ScopeWriteOrders, expressValidationMiddleware(ConfirmOrderValidationChain), this.putConfirmOrder);
     this.router.put(`${this.path}/:oId/reschedule`, CheckJWT, ScopeWriteOrders, expressValidationMiddleware(RescheduleOrderValidationChain), this.putRescheduleOrder);

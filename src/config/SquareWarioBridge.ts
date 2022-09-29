@@ -293,7 +293,7 @@ export const CreateOrderFromCart = (
     })),
     locationId,
     state: "OPEN",
-    ...(ticketName.length > 0 ? { ticketName } : {}),
+    ...(ticketName.length > 0 ? { ticketName: ticketName.slice(0, 29) } : {}),
     fulfillments: fulfillmentInfo ? [CreateFulfillment(fulfillmentInfo)] : [],
   };
 }
