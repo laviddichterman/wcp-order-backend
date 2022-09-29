@@ -5,7 +5,19 @@ import { IMoney, TenderBaseStatus, PRODUCT_LOCATION, IProduct, IProductInstance,
 import { formatRFC3339 } from 'date-fns';
 import { IS_PRODUCTION } from '../utils';
 
+// TODOS FOR TODAY: 
+// * add versioning to mongoose?
+// * send message on cancelation to relevant printer groups
+// * add note to payment or whatever so the SQ receipt makes some sense, see https://squareup.com/receipt/preview/jXnAjUa3wdk6al0EofHUg8PUZzFZY 
+// * fix UI actions on orders
+// * fix bug discovered with anna last night
+// * add fulfillment to MAIN square order, put in proposed until confirmed. 
+// * fix square catalog to remove default modifiers from item variations
+// * make single select modifier types all grouped in the same square modifier
+
+
 export const SQUARE_TAX_RATE_CATALOG_ID = IS_PRODUCTION ? "TMG7E3E5E45OXHJTBOHG2PMS" : "LOFKVY5UC3SLKPT2WANSBPZQ";
+export const SQUARE_BANKERS_ADJUSTED_TAX_RATE_CATALOG_ID = IS_PRODUCTION ? "R77FWA4SNHB4RWNY4KNNQHJD" : "HIUHEOWWVR6MB3PP7ORCUVZW"
 export const VARIABLE_PRICE_STORE_CREDIT_CATALOG_ID = IS_PRODUCTION ? "DNP5YT6QDIWTB53H46F3ECIN" : "RBYUD52HGFHPL4IG55LBHQAG";
 export const DISCOUNT_CATALOG_ID = IS_PRODUCTION ? "AKIYDPB5WJD2HURCWWZSAIF5" : 'PAMEV3WAZYEBJKFUAVQATS3K'
 
@@ -116,6 +128,7 @@ export const CreateOrderStoreCredit = (locationId: string, referenceId: string, 
 export const CreateOrdersForPrintingFromCart = (
   locationId: string,
   referenceId: string,
+  ticketName: string,
   cart: CoreCartEntry<WProduct>[],
   fulfillmentInfo: SquareOrderFulfillmentInfo): Order[] => {
 
@@ -159,13 +172,15 @@ export const CreateOrdersForPrintingFromCart = (
             currency: CURRENCY.USD,
             amount: total
           },
-          code: "FOOBAR",
-          lock: { auth: "YES", enc: "YES", iv: "YES" }
+          code: "_",
+          lock: { auth: "_", enc: "_", iv: "_" }
         },
         status: TenderBaseStatus.AUTHORIZED
       }],
       [{ amount: { currency: CURRENCY.USD, amount: 0 } }],
       cart,
+      false,
+      totalOrders > 1 ? `${i + 1} of ${totalOrders} ${ticketName}` : ticketName,
       totalOrders > 1 ? { ...fulfillmentInfo, displayName: `${fulfillmentInfo.displayName} ${i + 1} of ${totalOrders}` } : fulfillmentInfo)
   });
 }
@@ -174,6 +189,7 @@ export const CreateOrdersForPrintingFromCart = (
 export const CreateOrderForMessages = (
   locationId: string,
   referenceId: string,
+  ticketName: string,
   messages: { squareItemVariationId: string; message: string[]; }[],
   fulfillmentInfo: SquareOrderFulfillmentInfo): Order => {
   return {
@@ -194,6 +210,7 @@ export const CreateOrderForMessages = (
     taxes: [],
     locationId,
     state: "OPEN",
+    ...(ticketName.length > 0 ? { ticketName } : {}),
     fulfillments: [CreateFulfillment(fulfillmentInfo)],
   };
 
@@ -206,6 +223,8 @@ export const CreateOrderFromCart = (
   discounts: OrderLineDiscount[],
   taxes: OrderTax[],
   cart: CoreCartEntry<WProduct>[],
+  hasBankersRoundingTaxSkew: boolean,
+  ticketName: string,
   fulfillmentInfo: SquareOrderFulfillmentInfo | null): Order => {
 
   return {
@@ -265,15 +284,16 @@ export const CreateOrderFromCart = (
     ],
     pricingOptions: {
       autoApplyDiscounts: true,
-      autoApplyTaxes: true
+      autoApplyTaxes: false
     },
     taxes: taxes.map(tax => ({
-      catalogObjectId: SQUARE_TAX_RATE_CATALOG_ID,
+      catalogObjectId: hasBankersRoundingTaxSkew ? SQUARE_BANKERS_ADJUSTED_TAX_RATE_CATALOG_ID : SQUARE_TAX_RATE_CATALOG_ID,
       appliedMoney: IMoneyToBigIntMoney(tax.amount),
       scope: 'ORDER'
     })),
     locationId,
     state: "OPEN",
+    ...(ticketName.length > 0 ? { ticketName } : {}),
     fulfillments: fulfillmentInfo ? [CreateFulfillment(fulfillmentInfo)] : [],
   };
 }

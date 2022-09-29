@@ -110,6 +110,7 @@ export interface RecomputeTotalsResult {
   giftCartApplied: JSFECreditV2[];
   balanceAfterCredits: IMoney;
   tipAmount: IMoney;
+  hasBankersRoundingTaxSkew: boolean;
 }
 
 const IsNativeAreaCode = function (phone: string, area_codes: string[]) {
@@ -279,6 +280,7 @@ const RecomputeTotals = function ({ cart, creditValidations, fulfillment, order 
   const amountDiscounted = { amount: discountApplied.reduce((acc, x) => acc + x.amount_used.amount, 0), currency: CURRENCY.USD };
   const subtotalAfterDiscount = ComputeSubtotalAfterDiscount(subtotalPreDiscount, amountDiscounted);
   const taxAmount = ComputeTaxAmount(subtotalAfterDiscount, TAX_RATE);
+  const hasBankersRoundingTaxSkew = (subtotalAfterDiscount.amount * TAX_RATE) % 1 === 0.5;
   const tipBasis = ComputeTipBasis(subtotalPreDiscount, taxAmount);
   const tipMinimum = mainCategoryProductCount >= AUTOGRAT_THRESHOLD ? ComputeTipValue({ isPercentage: true, isSuggestion: true, value: .2 }, tipBasis) : { currency: CURRENCY.USD, amount: 0 };
   const tipAmount = ComputeTipValue(order.tip, tipBasis);
@@ -299,7 +301,8 @@ const RecomputeTotals = function ({ cart, creditValidations, fulfillment, order 
     total,
     giftCartApplied,
     balanceAfterCredits,
-    tipAmount
+    tipAmount,
+    hasBankersRoundingTaxSkew
   };
 }
 
@@ -370,14 +373,12 @@ const CreateExternalEmailForOrderReschedule = async (
 }
 
 const CreateOrderEvent = async (
-  fulfillmentConfig: FulfillmentConfig,
+  shorthandEventTitle: string,
   order: Pick<WOrderInstance, 'customerInfo' | 'fulfillment' | 'payments' | 'discounts' | 'specialInstructions'>,
   cart: CategorizedRebuiltCart,
   service_time_interval: Interval,
   totals: RecomputeTotalsResult) => {
   const shortcart = GenerateShortCartFromFullCart(cart);
-  const customerName = `${order.customerInfo.givenName} ${order.customerInfo.familyName}`;
-  const calendar_event_title = EventTitleStringBuilder(CatalogProviderInstance.CatalogSelectors, fulfillmentConfig, customerName, order.fulfillment.dineInInfo, cart, order.specialInstructions ?? "");
   const special_instructions_section = order.specialInstructions && order.specialInstructions.length > 0 ? `\nSpecial Instructions: ${order.specialInstructions}` : "";
   const payment_section = "\n" + GeneratePaymentSection(totals, order.discounts, order.payments, false);
   const delivery_section = GenerateDeliverySection(order.fulfillment.deliveryInfo, false);
@@ -389,7 +390,7 @@ ph: ${order.customerInfo.mobileNum}
 ${special_instructions_section}${delivery_section}${payment_section}`;
 
   return await GoogleProviderInstance.CreateCalendarEvent({
-    summary: calendar_event_title,
+    summary: shorthandEventTitle,
     location: order.fulfillment.deliveryInfo?.validation?.validated_address ?? "",
     description: calendar_details,
     start: {
@@ -439,7 +440,7 @@ export class OrderManager implements WProvider {
     const timeConstraint = isEndRangeSameDay ?
       endOfRangeAsQuery :
       { $or: [{ 'fulfillment.selectedDate': WDateUtils.formatISODate(now) }, endOfRangeAsQuery] }
-    logger.debug(`Running SendOrders job for the time constraint: ${JSON.stringify(timeConstraint)}`);
+    //logger.debug(`Running SendOrders job for the time constraint: ${JSON.stringify(timeConstraint)}`);
     await WOrderInstanceModel.updateMany({
       status: WOrderStatus.CONFIRMED,
       'locked': null,
@@ -493,7 +494,7 @@ export class OrderManager implements WProvider {
         if (!order) {
           return { status: 404, success: false, error: [{ category: 'INVALID_REQUEST_ERROR', code: 'UNEXPECTED_VALUE', detail: 'Order not found/locked' }] };
         }
-        return await onSuccess(order);
+        return await onSuccess(order.toObject());
       })
       .catch((err: any) => {
         const errorDetail = `Unable to find ${orderId}. Got error: ${JSON.stringify(err, Object.getOwnPropertyNames(err), 2)}`;
@@ -519,23 +520,22 @@ export class OrderManager implements WProvider {
     logger.debug(`Sending order ${JSON.stringify({ id: lockedOrder.id, fulfillment: lockedOrder.fulfillment, customerInfo: lockedOrder.customerInfo }, null, 2)}, lock applied.`);
     try {
       // send order to alternate location
+      const customerName = `${lockedOrder.customerInfo.givenName} ${lockedOrder.customerInfo.familyName}`;
       const fulfillmentConfig = DataProviderInstance.Fulfillments[lockedOrder.fulfillment.selectedService];
       const promisedTime = DateTimeIntervalBuilder(lockedOrder.fulfillment, fulfillmentConfig);
+      const rebuiltCart = RebuildAndSortCart(lockedOrder.cart, CatalogProviderInstance.CatalogSelectors, promisedTime.start, fulfillmentConfig.id);
+      const eventTitle = EventTitleStringBuilder(CatalogProviderInstance.CatalogSelectors, fulfillmentConfig, customerName, lockedOrder.fulfillment.dineInInfo ?? null, rebuiltCart, lockedOrder.specialInstructions ?? "")
       const messageOrders = CreateOrdersForPrintingFromCart(
         DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE,
         lockedOrder.id,
-        lockedOrder.cart.map(x => ({
-          categoryId: x.categoryId,
-          quantity: x.quantity,
-          product: CreateProductWithMetadataFromV2Dto(x.product, CatalogProviderInstance.CatalogSelectors, promisedTime.start, fulfillmentConfig.id)
-        }
-        )),
+        eventTitle,
+        Object.values(rebuiltCart).flat(),
         {
           displayName: `${lockedOrder.customerInfo.givenName} ${lockedOrder.customerInfo.familyName}`,
           emailAddress: lockedOrder.customerInfo.email,
           phoneNumber: lockedOrder.customerInfo.mobileNum,
-          pickupAt: promisedTime.start
-
+          pickupAt: promisedTime.start,
+          note: `${eventTitle}${lockedOrder.specialInstructions ? `\n${lockedOrder.specialInstructions}`: ""}`
         })
       for (let i = 0; i < messageOrders.length; ++i) {
         await SquareProviderInstance.SendMessageOrder(messageOrders[i])
@@ -687,20 +687,18 @@ export class OrderManager implements WProvider {
    * @returns 
    */
   private AdjustLockedOrderTime = async (lockedOrder: WOrderInstance, newTime: FulfillmentTime, emailCustomer: boolean, additionalMessage: string): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
-    const promisedTime = WDateUtils.ComputeServiceDateTime(newTime);
-    const oldPromisedTime = WDateUtils.ComputeServiceDateTime(lockedOrder.fulfillment);
-    logger.info(`Adjusting order in status: ${lockedOrder.status} with fulfillment status ${lockedOrder.fulfillment.status} to new time of ${format(promisedTime, WDateUtils.ISODateTimeNoOffset)}`);
-
     const fulfillmentConfig = DataProviderInstance.Fulfillments[lockedOrder.fulfillment.selectedService];
-
+    const promisedTime = DateTimeIntervalBuilder(lockedOrder.fulfillment, fulfillmentConfig);
+    const oldPromisedTime = WDateUtils.ComputeServiceDateTime(lockedOrder.fulfillment);
+    logger.info(`Adjusting order in status: ${lockedOrder.status} with fulfillment status ${lockedOrder.fulfillment.status} to new time of ${format(promisedTime.start, WDateUtils.ISODateTimeNoOffset)}`);
+    const customerName = `${lockedOrder.customerInfo.givenName} ${lockedOrder.customerInfo.familyName}`;    
+    const rebuiltCart = RebuildAndSortCart(lockedOrder.cart, CatalogProviderInstance.CatalogSelectors, promisedTime.start, fulfillmentConfig.id);
+    const eventTitle = EventTitleStringBuilder(CatalogProviderInstance.CatalogSelectors, fulfillmentConfig, customerName, lockedOrder.fulfillment.dineInInfo ?? null, rebuiltCart, lockedOrder.specialInstructions ?? "")
+    const flatCart = Object.values(rebuiltCart).flat();
     // if the order has SENT fulfillment, we need to notify all relevant printer groups of the new time
     if (lockedOrder.fulfillment.status === WFulfillmentStatus.SENT) {
       // get mapping from printerGroupId to list CoreCartEntry<WProduct> being adjusted for that pgId
-      const messages = Object.entries(CartByPrinterGroup(lockedOrder.cart.map(x => ({
-        categoryId: x.categoryId,
-        quantity: x.quantity,
-        product: CreateProductWithMetadataFromV2Dto(x.product, CatalogProviderInstance.CatalogSelectors, promisedTime, fulfillmentConfig.id)
-      })))).map(([pgId, entries]) => ({
+      const messages = Object.entries(CartByPrinterGroup(flatCart)).map(([pgId, entries]) => ({
         squareItemVariationId: GetSquareIdFromExternalIds(CatalogProviderInstance.PrinterGroups[pgId]!.externalIDs, 'ITEM_VARIATION')!,
         message: entries.map(x => `${x.quantity}x:${x.product.m.shortname}`)
       }))
@@ -708,13 +706,14 @@ export class OrderManager implements WProvider {
       const messageOrder = CreateOrderForMessages(
         DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE,
         lockedOrder.id,
+        eventTitle,
         messages,
         {
-          displayName: `RESCHEDULE ${lockedOrder.customerInfo.givenName} ${lockedOrder.customerInfo.familyName}`,
+          displayName: `RESCHEDULE ${customerName}`,
           emailAddress: lockedOrder.customerInfo.email,
           phoneNumber: lockedOrder.customerInfo.mobileNum,
           pickupAt: oldPromisedTime,
-          note: `RESCHEDULED TO ${newTime.selectedDate} @ ${WDateUtils.MinutesToPrintTime(newTime.selectedTime)}`
+          note: `RESCHEDULED TO ${newTime.selectedDate} @ ${WDateUtils.MinutesToPrintTime(newTime.selectedTime)}${additionalMessage ? `\n${additionalMessage}` : ""}`
         });
       await SquareProviderInstance.SendMessageOrder(messageOrder);
     }
@@ -844,8 +843,8 @@ export class OrderManager implements WProvider {
     const STORE_NAME = DataProviderInstance.KeyValueConfig.STORE_NAME;
     const referenceId = requestTime.toString(36).toUpperCase();
     const dateTimeInterval = DateTimeIntervalBuilder(createOrderRequest.fulfillment, fulfillmentConfig);
-    const customer_name = [createOrderRequest.customerInfo.givenName, createOrderRequest.customerInfo.familyName].join(" ");
-    const service_title = ServiceTitleBuilder(fulfillmentConfig.displayName, createOrderRequest.fulfillment, customer_name, dateTimeInterval);
+    const customerName = [createOrderRequest.customerInfo.givenName, createOrderRequest.customerInfo.familyName].join(" ");
+    const service_title = ServiceTitleBuilder(fulfillmentConfig.displayName, createOrderRequest.fulfillment, customerName, dateTimeInterval);
     // 2. Rebuild the order from the menu/catalog
     const menu = GenerateMenu(CatalogProviderInstance.CatalogSelectors, CatalogProviderInstance.Catalog.version, dateTimeInterval.start, createOrderRequest.fulfillment.selectedService);
     const { noLongerAvailable, rebuiltCart } = RebuildOrderState(menu, createOrderRequest.cart, dateTimeInterval.start, fulfillmentConfig.id);
@@ -858,6 +857,8 @@ export class OrderManager implements WProvider {
         error: [{ category: 'INVALID_REQUEST_ERROR', code: 'GONE', detail: errorDetail }]
       };
     }
+
+    const shorthandEventTitle = EventTitleStringBuilder(CatalogProviderInstance.CatalogSelectors, fulfillmentConfig, customerName, createOrderRequest.fulfillment.dineInInfo, rebuiltCart, createOrderRequest.specialInstructions ?? "");
 
     // 3. 'let's setup the order object reference
     const orderInstance: WOrderInstancePartial = {
@@ -1003,13 +1004,16 @@ export class OrderManager implements WProvider {
           referenceId,
           orderInstanceBeforeCharging.discounts, orderInstanceBeforeCharging.taxes,
           Object.values(rebuiltCart).flat(),
+          recomputedTotals.hasBankersRoundingTaxSkew,
+          shorthandEventTitle,
           {
-            displayName: customer_name,
+            displayName: customerName,
             emailAddress: orderInstanceBeforeCharging.customerInfo.email,
             phoneNumber: orderInstanceBeforeCharging.customerInfo.mobileNum,
-            pickupAt: dateTimeInterval.start
-
-          }));
+            pickupAt: dateTimeInterval.start,
+            note: shorthandEventTitle
+          }
+          ));
       if (squareOrderResponse.success === true) {
         squareOrder = squareOrderResponse.result.order!;
         const squareOrderId = squareOrder!.id!;
@@ -1081,7 +1085,7 @@ export class OrderManager implements WProvider {
         // 6. create calendar event
         try {
           return await CreateOrderEvent(
-            fulfillmentConfig,
+            shorthandEventTitle,
             completedOrderInstance,
             rebuiltCart,
             dateTimeInterval,

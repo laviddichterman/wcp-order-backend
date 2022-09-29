@@ -192,7 +192,7 @@ export class SquareProvider implements WProvider {
             } : {
               t: PaymentMethod.CreditCard,
               createdAt,
-              amount: BigIntMoneyToIntMoney({ currency: result.payment.amountMoney?.currency, amount: result.payment.amountMoney!.amount! + result.payment.tipMoney!.amount! }),
+              amount: BigIntMoneyToIntMoney(result.payment!.totalMoney!),
               tipAmount: tipMoney,
               status: paymentStatus,
               payment: {
