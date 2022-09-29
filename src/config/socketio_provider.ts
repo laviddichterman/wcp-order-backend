@@ -36,10 +36,10 @@ export class SocketIoProvider implements WProvider {
     return this.EmitCatalogTo(this.socketRO, catalog);
   }
   EmitOrderTo = (dest: Socket | Namespace, order: WOrderInstance) => {
-    return this.socketAuth.emit('AUTH_ORDERS', order);
+    //return this.socketAuth.emit('AUTH_ORDERS', order);
   }
   EmitOrder = (order: WOrderInstance) => {
-    return this.EmitOrderTo(this.socketAuth, order);
+    //return this.EmitOrderTo(this.socketAuth, order);
   }
 
   Bootstrap = (app: WApp) => {
