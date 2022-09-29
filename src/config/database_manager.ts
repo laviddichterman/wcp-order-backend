@@ -414,7 +414,7 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
         logger.debug(`Updated ${updateResponse.modifiedCount} IOption with disabled allowallowHeavyExtra, allowLite, and allowOTS.`);
       }
       else {
-        logger.warn("No options had allowallowHeavyExtra, allowLite, and allowOTS disabled");
+        logger.warn("No options had allowHeavy allow  Extra, allowLite, and allowOTS disabled");
       }
     }
   }],
@@ -471,6 +471,10 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
   "0.5.20": [{ major: 0, minor: 5, patch: 21 }, async () => {
   }],
   "0.5.21": [{ major: 0, minor: 5, patch: 22 }, async () => {
+  }],
+  "0.5.22": [{ major: 0, minor: 5, patch: 23 }, async () => {
+  }],
+  "0.5.23": [{ major: 0, minor: 5, patch: 24 }, async () => {
   }],
 }
 
