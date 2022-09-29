@@ -67,7 +67,7 @@ export const CreateFulfillment = (info: SquareOrderFulfillmentInfo): OrderFulfil
         phoneNumber: info.phoneNumber
       },
       pickupAt: formatRFC3339(info.pickupAt),
-      ...(info.note ? { note: info.note } : {})
+      ...(info.note ? { note: info.note.slice(0, 499) } : {})
     },
   };
 }
