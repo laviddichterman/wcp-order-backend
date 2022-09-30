@@ -190,7 +190,7 @@ export class OrderController implements IExpressController {
       const orderId = req.params.oId;
       const idempotencyKey = req.get('idempotency-key')!;
 
-      const response = await OrderManagerInstance.SendOrder(orderId, idempotencyKey);
+      const response = await OrderManagerInstance.SendOrder(idempotencyKey, orderId);
       if (response) { 
         res.status(200).json(response);
       } else {
