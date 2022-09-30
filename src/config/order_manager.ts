@@ -383,8 +383,8 @@ const CreateOrderEvent = async (
   const payment_section = "\n" + GeneratePaymentSection(totals, order.discounts, order.payments, false);
   const delivery_section = GenerateDeliverySection(order.fulfillment.deliveryInfo, false);
   const dineInSection = GenerateDineInSection(order.fulfillment.dineInInfo, false);
-  const calendar_details = 
-`${shortcart.map((x) => `${x.category_name}:\n${x.products.join("\n")}`).join("\n")}
+  const calendar_details =
+    `${shortcart.map((x) => `${x.category_name}:\n${x.products.join("\n")}`).join("\n")}
 ${dineInSection}
 ph: ${order.customerInfo.mobileNum}
 ${special_instructions_section}${delivery_section}${payment_section}`;
@@ -535,7 +535,7 @@ export class OrderManager implements WProvider {
           emailAddress: lockedOrder.customerInfo.email,
           phoneNumber: lockedOrder.customerInfo.mobileNum,
           pickupAt: promisedTime.start,
-          note: `${eventTitle}${lockedOrder.specialInstructions ? `\n${lockedOrder.specialInstructions}`: ""}`
+          note: `${eventTitle}${lockedOrder.specialInstructions ? `\n${lockedOrder.specialInstructions}` : ""}`
         })
       for (let i = 0; i < messageOrders.length; ++i) {
         await SquareProviderInstance.SendMessageOrder(messageOrders[i])
@@ -632,6 +632,36 @@ export class OrderManager implements WProvider {
         // is this an error condition?
       }
 
+      // * send message on cancelation to relevant printer groups
+      if (lockedOrder.fulfillment.status === WFulfillmentStatus.SENT || lockedOrder.fulfillment.status === WFulfillmentStatus.PROCESSING) {
+        const fulfillmentConfig = DataProviderInstance.Fulfillments[lockedOrder.fulfillment.selectedService];
+        const promisedTime = DateTimeIntervalBuilder(lockedOrder.fulfillment, fulfillmentConfig);
+        const oldPromisedTime = WDateUtils.ComputeServiceDateTime(lockedOrder.fulfillment);
+        const customerName = `${lockedOrder.customerInfo.givenName} ${lockedOrder.customerInfo.familyName}`;
+        const rebuiltCart = RebuildAndSortCart(lockedOrder.cart, CatalogProviderInstance.CatalogSelectors, promisedTime.start, fulfillmentConfig.id);
+        const eventTitle = EventTitleStringBuilder(CatalogProviderInstance.CatalogSelectors, fulfillmentConfig, customerName, lockedOrder.fulfillment.dineInInfo ?? null, rebuiltCart, lockedOrder.specialInstructions ?? "")
+        const flatCart = Object.values(rebuiltCart).flat();
+        // get mapping from printerGroupId to list CoreCartEntry<WProduct> being adjusted for that pgId
+        const messages = Object.entries(CartByPrinterGroup(flatCart)).map(([pgId, entries]) => ({
+          squareItemVariationId: GetSquareIdFromExternalIds(CatalogProviderInstance.PrinterGroups[pgId]!.externalIDs, 'ITEM_VARIATION')!,
+          message: entries.map(x => `${x.quantity}x:${x.product.m.shortname}`)
+        }))
+        // get all dummy message item variations for the printerGroups
+        const messageOrder = CreateOrderForMessages(
+          DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE,
+          lockedOrder.id,
+          eventTitle,
+          messages,
+          {
+            displayName: `CANCEL ${customerName}`,
+            emailAddress: lockedOrder.customerInfo.email,
+            phoneNumber: lockedOrder.customerInfo.mobileNum,
+            pickupAt: oldPromisedTime,
+            note: `CANCEL ORDER`
+          });
+        await SquareProviderInstance.SendMessageOrder(messageOrder);
+      }
+
       // send email if we're supposed to
       if (emailCustomer) {
         await CreateExternalCancelationEmail(lockedOrder, reason);
@@ -647,7 +677,9 @@ export class OrderManager implements WProvider {
       return await WOrderInstanceModel.findOneAndUpdate(
         { locked: lockedOrder.locked, _id: lockedOrder.id },
         {
-          locked: null, status: WOrderStatus.CANCELED
+          locked: null, 
+          status: WOrderStatus.CANCELED,
+          'fulfillment.status': WFulfillmentStatus.CANCELED
           // TODO: need to add refunds to the order too?
         },
         { new: true })
@@ -691,7 +723,7 @@ export class OrderManager implements WProvider {
     const promisedTime = DateTimeIntervalBuilder(lockedOrder.fulfillment, fulfillmentConfig);
     const oldPromisedTime = WDateUtils.ComputeServiceDateTime(lockedOrder.fulfillment);
     logger.info(`Adjusting order in status: ${lockedOrder.status} with fulfillment status ${lockedOrder.fulfillment.status} to new time of ${format(promisedTime.start, WDateUtils.ISODateTimeNoOffset)}`);
-    const customerName = `${lockedOrder.customerInfo.givenName} ${lockedOrder.customerInfo.familyName}`;    
+    const customerName = `${lockedOrder.customerInfo.givenName} ${lockedOrder.customerInfo.familyName}`;
     const rebuiltCart = RebuildAndSortCart(lockedOrder.cart, CatalogProviderInstance.CatalogSelectors, promisedTime.start, fulfillmentConfig.id);
     const eventTitle = EventTitleStringBuilder(CatalogProviderInstance.CatalogSelectors, fulfillmentConfig, customerName, lockedOrder.fulfillment.dineInInfo ?? null, rebuiltCart, lockedOrder.specialInstructions ?? "")
     const flatCart = Object.values(rebuiltCart).flat();
@@ -864,7 +896,7 @@ export class OrderManager implements WProvider {
     const orderInstance: WOrderInstancePartial = {
       cart: createOrderRequest.cart,
       customerInfo: createOrderRequest.customerInfo,
-      fulfillment: { 
+      fulfillment: {
         dineInInfo: createOrderRequest.fulfillment.dineInInfo ?? null,
         deliveryInfo: createOrderRequest.fulfillment.deliveryInfo ?? null,
         selectedService: createOrderRequest.fulfillment.selectedService,
@@ -1013,7 +1045,7 @@ export class OrderManager implements WProvider {
             pickupAt: dateTimeInterval.start,
             note: shorthandEventTitle
           }
-          ));
+        ));
       if (squareOrderResponse.success === true) {
         squareOrder = squareOrderResponse.result.order!;
         const squareOrderId = squareOrder!.id!;
