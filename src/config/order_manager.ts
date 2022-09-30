@@ -71,6 +71,7 @@ import { SocketIoProviderInstance } from "./socketio_provider";
 import { CreateOrderFromCart, CreateOrderForMessages, CreateOrdersForPrintingFromCart, CartByPrinterGroup, GetSquareIdFromExternalIds } from "./SquareWarioBridge";
 import { FilterQuery } from "mongoose";
 import { WOrderInstanceFunctionModel } from "models/query/order/WOrderInstanceFunction";
+import { zonedTimeToUtc } from "date-fns-tz";
 type CrudFunctionResponseWithStatusCode = (order: WOrderInstance) => ResponseWithStatusCode<CrudOrderResponse>;
 const WCP = "Windy City Pie";
 
@@ -428,11 +429,11 @@ export class OrderManager implements WProvider {
   }
 
   /**
-   * Finds UNLOCKED orders due within the next 5 hours with proposed fulfillment status and sends them, setting the fulfillment status to SENT
+   * Finds UNLOCKED orders due within the next 3 hours with proposed fulfillment status and sends them, setting the fulfillment status to SENT
    */
   private SendOrders = async () => {
     const idempotencyKey = crypto.randomBytes(22).toString('hex');
-    const now = Date.now();
+    const now = zonedTimeToUtc(Date.now(), process.env.TZ!)
     const endOfRange = addHours(now, 3);
     const isEndRangeSameDay = isSameDay(now, endOfRange);
     const endOfRangeAsFT = WDateUtils.ComputeFulfillmentTime(endOfRange);
@@ -570,7 +571,7 @@ export class OrderManager implements WProvider {
 
   public SendOrder = async (idempotencyKey: string, orderId: string): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
     return await this.LockAndActOnOrder(idempotencyKey, orderId,
-      { status: { $in: [WOrderStatus.OPEN, WOrderStatus.CONFIRMED] } },
+      { status: { $nin: [WOrderStatus.CANCELED] } },
       this.SendLockedOrder
     );
   }
