@@ -92,7 +92,7 @@ export class ProductInstanceFunctionController implements IExpressController {
         logger.info(`Unable to delete ProductInstanceFunction: ${req.params.fxnid}`);
         return res.status(404).send(`Unable to delete ProductInstanceFunction: ${req.params.fxnid}`);
       }
-      logger.info(`Successfully deleted ${doc}`);
+      logger.info(`Successfully deleted ${JSON.stringify(doc)}`);
       return res.status(200).send(doc);
     } catch (error) {
       return next(error)

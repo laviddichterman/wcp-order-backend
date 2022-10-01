@@ -57,6 +57,9 @@ const ModifierOptionValidationChain = [
   body('metadata.flavor_factor').isFloat({ min: 0 }),
   body('metadata.bake_factor').isFloat({ min: 0 }),
   body('metadata.can_split').toBoolean(true),
+  body('metadata.allowHeavy').toBoolean(true),
+  body('metadata.allowLite').toBoolean(true),
+  body('metadata.allowOTS').toBoolean(true),
   body('displayFlags.omit_from_shortname').toBoolean(true),
   body('displayFlags.omit_from_name').toBoolean(true),
 ];
@@ -83,6 +86,7 @@ export class ModifierController implements IExpressController {
     this.router.patch(`${this.path}/:mtid/:moid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(EditModifierOptionValidationChain), this.patchModifierOption);
     this.router.delete(`${this.path}/:mtid/:moid`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware([...ModifierTypeByIdValidationChain, ...ModifierOptionByIdValidationChain]), this.deleteModifierOption);
   };
+  
   private postModifierType = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const doc = await CatalogProviderInstance.CreateModifierType({
@@ -134,7 +138,7 @@ export class ModifierController implements IExpressController {
         logger.info(`Unable to delete Modifier Type: ${req.params.mt_id}`);
         return res.status(404).send(`Unable to delete Modifier Type: ${req.params.mt_id}`);
       }
-      logger.info(`Successfully deleted ${doc}`);
+      logger.info(`Successfully deleted ${JSON.stringify(doc)}`);
       return res.status(200).send(doc);
     } catch (error) {
       return next(error)
@@ -170,27 +174,31 @@ export class ModifierController implements IExpressController {
 
   private patchModifierOption = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const doc = await CatalogProviderInstance.UpdateModifierOption({
-        id: req.params.moid,
-        modifierOption: {
-          displayName: req.body.displayName,
-          description: req.body.description,
-          price: req.body.price,
-          shortcode: req.body.shortcode,
-          disabled: req.body.disabled ? req.body.disabled : null,
-          externalIDs: req.body.externalIDs ?? [],
-          ordinal: req.body.ordinal,
-          metadata: req.body.metadata,
-          enable: req.body.enable,
-          displayFlags: req.body.displayFlags,
+      const modifierTypeEntry = CatalogProviderInstance.Catalog.modifiers[req.params.mtid];
+      if (modifierTypeEntry) {
+        const doc = await CatalogProviderInstance.UpdateModifierOption({
+          id: req.params.moid,
+          modifierType: modifierTypeEntry.modifierType,
+          modifierOption: {
+            displayName: req.body.displayName,
+            description: req.body.description,
+            price: req.body.price,
+            shortcode: req.body.shortcode,
+            disabled: req.body.disabled ? req.body.disabled : null,
+            externalIDs: req.body.externalIDs ?? [],
+            ordinal: req.body.ordinal,
+            metadata: req.body.metadata,
+            enable: req.body.enable,
+            displayFlags: req.body.displayFlags,
+          }
+        });
+        if (doc) {
+          logger.info(`Successfully updated ${JSON.stringify(doc)}`);
+          return res.status(200).send(doc);
         }
-      });
-      if (!doc) {
-        logger.info(`Unable to update ModifierOption: ${req.params.moid}`);
-        return res.status(404).send(`Unable to update ModifierOption: ${req.params.moid}`);;
       }
-      logger.info(`Successfully updated ${JSON.stringify(doc)}`);
-      return res.status(200).send(doc);
+      logger.info(`Unable to update ModifierOption: ${req.params.moid}`);
+      return res.status(404).send(`Unable to update ModifierOption: ${req.params.moid}`);;
     } catch (error) {
       return next(error)
     }
@@ -203,7 +211,7 @@ export class ModifierController implements IExpressController {
         logger.info(`Unable to delete Modifier Option: ${req.params.moid}`);
         return res.status(404).send(`Unable to delete Modifier Option: ${req.params.moid}`);
       }
-      logger.info(`Successfully deleted ${doc}`);
+      logger.info(`Successfully deleted ${JSON.stringify(doc)}`);
       return res.status(200).send(doc);
     } catch (error) {
       return next(error)
