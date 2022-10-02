@@ -1,20 +1,17 @@
-import { OrderLineItem, Money, OrderLineItemModifier, Order, CatalogObject, CatalogIdMapping, OrderFulfillment } from 'square';
+import { OrderLineItem, Money, OrderLineItemModifier, Order, CatalogObject, CatalogIdMapping, OrderFulfillment, CatalogItemModifierListInfo } from 'square';
 import logger from '../logging';
 import { CatalogProviderInstance } from './catalog_provider';
-import { IMoney, TenderBaseStatus, PRODUCT_LOCATION, IProduct, IProductInstance, KeyValue, ICatalogSelectors, OptionPlacement, OptionQualifier, IOption, IOptionInstance, PrinterGroup, CURRENCY, CoreCartEntry, WProduct, OrderLineDiscount, OrderTax, DiscountMethod } from '@wcp/wcpshared';
+import { IMoney, TenderBaseStatus, PRODUCT_LOCATION, IProduct, IProductInstance, KeyValue, ICatalogSelectors, OptionPlacement, OptionQualifier, IOption, IOptionInstance, PrinterGroup, CURRENCY, CoreCartEntry, WProduct, OrderLineDiscount, OrderTax, DiscountMethod, IOptionType, ProductModifierEntry } from '@wcp/wcpshared';
 import { formatRFC3339 } from 'date-fns';
 import { IS_PRODUCTION } from '../utils';
 
 // TODOS FOR TODAY: 
 // * add versioning to mongoose?
-// * send message on cancelation to relevant printer groups
 // * add note to payment or whatever so the SQ receipt makes some sense, see https://squareup.com/receipt/preview/jXnAjUa3wdk6al0EofHUg8PUZzFZY 
 // * fix UI actions on orders
 // * fix bug discovered with anna last night
 // * add fulfillment to MAIN square order, put in proposed until confirmed. 
 // * fix square catalog to remove default modifiers from item variations
-// * make single select modifier types all grouped in the same square modifier
-
 
 export const SQUARE_TAX_RATE_CATALOG_ID = IS_PRODUCTION ? "TMG7E3E5E45OXHJTBOHG2PMS" : "LOFKVY5UC3SLKPT2WANSBPZQ";
 export const SQUARE_BANKERS_ADJUSTED_TAX_RATE_CATALOG_ID = IS_PRODUCTION ? "R77FWA4SNHB4RWNY4KNNQHJD" : "HIUHEOWWVR6MB3PP7ORCUVZW"
@@ -62,7 +59,7 @@ export const CreateFulfillment = (info: SquareOrderFulfillmentInfo): OrderFulfil
     pickupDetails: {
       scheduleType: 'SCHEDULED',
       recipient: {
-        displayName: info.displayName,
+        displayName: info.displayName.slice(0, 254),
         emailAddress: info.emailAddress,
         phoneNumber: info.phoneNumber
       },
@@ -95,7 +92,7 @@ const OptionInstanceToSquareIdSpecifier = (optionInstance: IOptionInstance) => {
  * @returns 
  */
 export const IdMappingsToExternalIds = (mappings: CatalogIdMapping[] | undefined, batch: string): KeyValue[] =>
-  mappings?.filter(x => x.clientObjectId!.startsWith(`#${batch}`)).map(x => ({ key: `${WARIO_SQUARE_ID_METADATA_KEY}${x.clientObjectId!.substring(1 + batch.length)}`, value: x.objectId! })) ?? [];
+  mappings?.filter(x => x.clientObjectId!.startsWith(`#${batch}_`)).map(x => ({ key: `${WARIO_SQUARE_ID_METADATA_KEY}${x.clientObjectId!.substring(2 + batch.length)}`, value: x.objectId! })) ?? [];
 
 export const MapPaymentStatus = (sqStatus: string) => {
   switch (sqStatus) {
@@ -158,7 +155,6 @@ export const CreateOrdersForPrintingFromCart = (
       });
     carts.push(orderEntries);
   }
-  const totalOrders = carts.length;
   return carts.map((cart, i) => {
     const total = cart.reduce((acc, x) => acc + (x.product.m.price.amount * x.quantity), 0);
     return CreateOrderFromCart(
@@ -180,8 +176,8 @@ export const CreateOrdersForPrintingFromCart = (
       [{ amount: { currency: CURRENCY.USD, amount: 0 } }],
       cart,
       false,
-      totalOrders > 1 ? `${i + 1} of ${totalOrders} ${ticketName}` : ticketName,
-      totalOrders > 1 ? { ...fulfillmentInfo, displayName: `${fulfillmentInfo.displayName} ${i + 1} of ${totalOrders}` } : fulfillmentInfo)
+      ticketName,
+      fulfillmentInfo)
   });
 }
 
@@ -215,7 +211,21 @@ export const CreateOrderForMessages = (
   };
 
 }
-
+const WProductModifiersToSquareModifiers = (productModifiers: ProductModifierEntry[]): OrderLineItemModifier[] => {
+  const acc: OrderLineItemModifier[] = [];
+  productModifiers.flatMap(mod => mod.options.map((option) => {
+    const catalogOption = CatalogProviderInstance.Catalog.options[option.optionId];
+    const squareModifierId = GetSquareIdFromExternalIds(catalogOption.externalIDs, OptionInstanceToSquareIdSpecifier(option));
+    return (squareModifierId === null ? {
+      basePriceMoney: IMoneyToBigIntMoney(catalogOption.price),
+      name: catalogOption.displayName
+    } : {
+      catalogObjectId: squareModifierId,
+      quantity: "1"
+    }) as OrderLineItemModifier;
+  }))
+  return acc;
+}
 
 export const CreateOrderFromCart = (
   locationId: string,
@@ -252,19 +262,10 @@ export const CreateOrderFromCart = (
           basePriceMoney: IMoneyToBigIntMoney(x.product.p.PRODUCT_CLASS.price)
         } : {
           catalogObjectId: squareItemVariationId,
+          note: x.product.m.shortname
         }),
         itemType: "ITEM",
-        modifiers: x.product.p.modifiers.flatMap(mod => mod.options.map(option => {
-          const catalogOption = CatalogProviderInstance.Catalog.options[option.optionId];
-          const squareModifierId = GetSquareIdFromExternalIds(catalogOption.externalIDs, OptionInstanceToSquareIdSpecifier(option));
-          return (squareModifierId === null ? {
-            basePriceMoney: IMoneyToBigIntMoney(catalogOption.price),
-            name: catalogOption.displayName
-          } : {
-            catalogObjectId: squareModifierId,
-            quantity: "1"
-          }) as OrderLineItemModifier;
-        }))
+        modifiers: WProductModifiersToSquareModifiers(x.product.p.modifiers)
       } as OrderLineItem;
     }),
     discounts: [...discounts.map(discount => ({
@@ -304,11 +305,11 @@ export const CreateOrderFromCart = (
  */
 
 export const PrinterGroupToSquareCatalogObjectPlusDummyProduct = (locationIds: string[], printerGroup: Omit<PrinterGroup, 'id'>, currentObjects: Pick<CatalogObject, 'id' | 'version'>[], batch: string): CatalogObject[] => {
-  const squareCategoryId = GetSquareIdFromExternalIds(printerGroup.externalIDs, 'CATEGORY') ?? `#${batch}CATEGORY`;
+  const squareCategoryId = GetSquareIdFromExternalIds(printerGroup.externalIDs, 'CATEGORY') ?? `#${batch}_CATEGORY`;
   const versionCategoryId = currentObjects.find(x => x.id === squareCategoryId)?.version ?? null;
-  const squareItemId = GetSquareIdFromExternalIds(printerGroup.externalIDs, 'ITEM') ?? `#${batch}ITEM`;
+  const squareItemId = GetSquareIdFromExternalIds(printerGroup.externalIDs, 'ITEM') ?? `#${batch}_ITEM`;
   const versionItem = currentObjects.find(x => x.id === squareItemId)?.version ?? null;
-  const squareItemVariationId = GetSquareIdFromExternalIds(printerGroup.externalIDs, 'ITEM_VARIATION') ?? `#${batch}ITEM_VARIATION`;
+  const squareItemVariationId = GetSquareIdFromExternalIds(printerGroup.externalIDs, 'ITEM_VARIATION') ?? `#${batch}_ITEM_VARIATION`;
   const versionItemVariation = currentObjects.find(x => x.id === squareItemVariationId)?.version ?? null;
 
   return [{
@@ -371,10 +372,61 @@ export const ProductInstanceToSquareCatalogObject = (locationIds: string[],
   // TODO: MODIFIERS THAT ARE SINGLE SELECT (and therefore cannot be split) should all live in the same MODIFIER LIST in square, similar to how they are in WARIO
   // TODO: when we transition off the square POS, if we're still using the finance or employee management or whatever, we'll need to pull pre-selected modifiers off of the ITEM_VARIATIONs for a product instance
   // 
-  const squareItemId = GetSquareIdFromExternalIds(productInstance.externalIDs, 'ITEM') ?? `#${batch}ITEM`;
+  const squareItemId = GetSquareIdFromExternalIds(productInstance.externalIDs, 'ITEM') ?? `#${batch}_ITEM`;
   const versionItem = currentObjects.find(x => x.id === squareItemId)?.version ?? null;
-  const squareItemVariationId = GetSquareIdFromExternalIds(productInstance.externalIDs, 'ITEM_VARIATION') ?? `#${batch}ITEM_VARIATION`;
+  const squareItemVariationId = GetSquareIdFromExternalIds(productInstance.externalIDs, 'ITEM_VARIATION') ?? `#${batch}_ITEM_VARIATION`;
   const versionItemVariation = currentObjects.find(x => x.id === squareItemVariationId)?.version ?? null;
+  let instancePriceWithoutSingleSelectModifiers = product.price.amount;
+  const modifierListInfo: CatalogItemModifierListInfo[] = [];
+  product.modifiers.forEach(mtspec => {
+    const modifierEntry = catalogSelectors.modifierEntry(mtspec.mtid)!;
+    const selectedOptionsForModifierType = productInstance.modifiers.find(x => x.modifierTypeId === mtspec.mtid)?.options ?? [];
+    if (modifierEntry.modifierType.min_selected === 1 && modifierEntry.modifierType.max_selected === 1) {
+      // single select modifiers get added to the square product
+      const squareModifierListId = GetSquareIdFromExternalIds(modifierEntry.modifierType.externalIDs, 'MODIFIER_LIST')!;
+      if (squareModifierListId === null) {
+        logger.error(`Missing MODIFIER_LIST in ${JSON.stringify(modifierEntry.modifierType.externalIDs)}`);
+        return;
+      }
+      if (selectedOptionsForModifierType.length > 1) {
+        logger.error(`Mutiple selected modifier options ${JSON.stringify(selectedOptionsForModifierType)} found for single select modifier ${JSON.stringify(mtspec)}`)
+        return;
+      }
+      modifierListInfo.push({
+        modifierListId: squareModifierListId!,
+        minSelectedModifiers: 1,
+        maxSelectedModifiers: 1,
+        ...(selectedOptionsForModifierType.length > 0 ? {
+          modifierOverrides: selectedOptionsForModifierType.map((optionInstance) => ({
+            modifierId: GetSquareIdFromExternalIds(catalogSelectors.option(optionInstance.optionId)!.externalIDs, OptionInstanceToSquareIdSpecifier(optionInstance))!,
+            onByDefault: true
+          }))
+        } : {})
+      })
+    } else {
+      // multi select modifiers, if pre-selected get added to the built in price
+      // if unselected, we add them to the product modifier list
+      modifierEntry.options.forEach(oId => {
+        const option = catalogSelectors.option(oId)!;
+        const optionInstance = selectedOptionsForModifierType.find(x => x.optionId === option.id) ?? null;
+        const squareModifierListId = GetSquareIdFromExternalIds(option.externalIDs, 'MODIFIER_LIST')!;
+        if (squareModifierListId === null) {
+          logger.error(`Missing MODIFIER_LIST in ${JSON.stringify(option.externalIDs)}`);
+          return;
+        }
+        if (optionInstance && optionInstance.placement !== OptionPlacement.NONE) {
+          instancePriceWithoutSingleSelectModifiers += optionInstance.qualifier === OptionQualifier.HEAVY ? option.price.amount * 2 : option.price.amount;
+        } else {
+          modifierListInfo.push({
+            modifierListId: squareModifierListId!,
+            minSelectedModifiers: 0,
+            maxSelectedModifiers: 1,
+          })
+        }
+      })
+    }
+  });
+
   return {
     id: squareItemId,
     type: 'ITEM',
@@ -392,29 +444,7 @@ export const ProductInstanceToSquareCatalogObject = (locationIds: string[],
       productType: "REGULAR",
       taxIds: [SQUARE_TAX_RATE_CATALOG_ID],
       skipModifierScreen: productInstance.displayFlags.order.skip_customization,
-      modifierListInfo: product.modifiers.map(mtspec => {
-        const modifierEntry = catalogSelectors.modifierEntry(mtspec.mtid);
-        const selectedOptionsForModifierType = productInstance.modifiers.find(x => x.modifierTypeId === mtspec.mtid)?.options ?? [];
-        return modifierEntry!.options.map(oId => {
-          const option = catalogSelectors.option(oId)!;
-          const optionInstance = selectedOptionsForModifierType.find(x => x.optionId === option.id) ?? null;
-          const squareModifierListId = GetSquareIdFromExternalIds(option.externalIDs, 'MODIFIER_LIST')!;
-          if (squareModifierListId === null) {
-            logger.error(`Missing MODIFIER_LIST in ${option.externalIDs}`);
-          }
-          return {
-            modifierListId: squareModifierListId!,
-            minSelectedModifiers: 0,
-            maxSelectedModifiers: 1,
-            ...(optionInstance ? {
-              modifierOverrides: [{
-                modifierId: GetSquareIdFromExternalIds(option.externalIDs, OptionInstanceToSquareIdSpecifier(optionInstance))!,
-                onByDefault: true
-              }]
-            } : {})
-          }
-        })
-      }).flat(),
+      modifierListInfo,
       variations: [{
         id: squareItemVariationId,
         type: 'ITEM_VARIATION',
@@ -425,7 +455,7 @@ export const ProductInstanceToSquareCatalogObject = (locationIds: string[],
           itemId: squareItemId,
           name: productInstance.displayName,
           pricingType: 'FIXED_PRICING',
-          priceMoney: IMoneyToBigIntMoney(product.price),
+          priceMoney: IMoneyToBigIntMoney({ currency: product.price.currency, amount: instancePriceWithoutSingleSelectModifiers }),
           sellable: true,
           stockable: true,
           availableForBooking: false
@@ -436,19 +466,19 @@ export const ProductInstanceToSquareCatalogObject = (locationIds: string[],
 }
 
 export const ModifierOptionPlacementsAndQualifiersToSquareCatalogObjects = (locationIds: string[], modifierListId: string, option: Omit<IOption, 'id' | 'modifierTypeId'>, currentObjects: Pick<CatalogObject, 'id' | 'version'>[], batch: string): CatalogObject[] => {
-  const squareIdLeft = GetSquareIdFromExternalIds(option.externalIDs, 'MODIFIER_LEFT') ?? `#${batch}MODIFIER_LEFT`;
+  const squareIdLeft = GetSquareIdFromExternalIds(option.externalIDs, 'MODIFIER_LEFT') ?? `#${batch}_MODIFIER_LEFT`;
   const versionLeft = currentObjects.find(x => x.id === squareIdLeft)?.version ?? null;
-  const squareIdWhole = GetSquareIdFromExternalIds(option.externalIDs, 'MODIFIER_WHOLE') ?? `#${batch}MODIFIER_WHOLE`;
+  const squareIdWhole = GetSquareIdFromExternalIds(option.externalIDs, 'MODIFIER_WHOLE') ?? `#${batch}_MODIFIER_WHOLE`;
   const versionWhole = currentObjects.find(x => x.id === squareIdWhole)?.version ?? null;
-  const squareIdRight = GetSquareIdFromExternalIds(option.externalIDs, 'MODIFIER_RIGHT') ?? `#${batch}MODIFIER_RIGHT`;
+  const squareIdRight = GetSquareIdFromExternalIds(option.externalIDs, 'MODIFIER_RIGHT') ?? `#${batch}_MODIFIER_RIGHT`;
   const versionRight = currentObjects.find(x => x.id === squareIdRight)?.version ?? null;
-  const squareIdHeavy = GetSquareIdFromExternalIds(option.externalIDs, 'MODIFIER_HEAVY') ?? `#${batch}MODIFIER_HEAVY`;
+  const squareIdHeavy = GetSquareIdFromExternalIds(option.externalIDs, 'MODIFIER_HEAVY') ?? `#${batch}_MODIFIER_HEAVY`;
   const versionHeavy = currentObjects.find(x => x.id === squareIdHeavy)?.version ?? null;
-  const squareIdLite = GetSquareIdFromExternalIds(option.externalIDs, 'MODIFIER_LITE') ?? `#${batch}MODIFIER_LITE`;
+  const squareIdLite = GetSquareIdFromExternalIds(option.externalIDs, 'MODIFIER_LITE') ?? `#${batch}_MODIFIER_LITE`;
   const versionLite = currentObjects.find(x => x.id === squareIdLite)?.version ?? null;
-  const squareIdOts = GetSquareIdFromExternalIds(option.externalIDs, 'MODIFIER_OTS') ?? `#${batch}MODIFIER_OTS`;
+  const squareIdOts = GetSquareIdFromExternalIds(option.externalIDs, 'MODIFIER_OTS') ?? `#${batch}_MODIFIER_OTS`;
   const versionOts = currentObjects.find(x => x.id === squareIdOts)?.version ?? null;
-  const modifierLite = option.metadata.allowLite ? [{
+  const modifierLite: CatalogObject[] = option.metadata.allowLite ? [{
     id: squareIdLite,
     type: 'MODIFIER',
     presentAtAllLocations: false,
@@ -456,12 +486,12 @@ export const ModifierOptionPlacementsAndQualifiersToSquareCatalogObjects = (loca
     ...(versionLite !== null ? { version: versionLite } : {}),
     modifierData: {
       name: `LITE ${option.displayName}`,
-      ordinal: 4,
+      ordinal: (option.ordinal * 6) + 4,
       modifierListId: modifierListId,
       priceMoney: IMoneyToBigIntMoney(option.price),
     }
   }] : [];
-  const modifierHeavy = option.metadata.allowHeavy ? [{
+  const modifierHeavy: CatalogObject[] = option.metadata.allowHeavy ? [{
     id: squareIdHeavy,
     type: 'MODIFIER',
     presentAtAllLocations: false,
@@ -469,12 +499,12 @@ export const ModifierOptionPlacementsAndQualifiersToSquareCatalogObjects = (loca
     ...(versionHeavy !== null ? { version: versionHeavy } : {}),
     modifierData: {
       name: `HEAVY ${option.displayName}`,
-      ordinal: 5,
+      ordinal: (option.ordinal * 6) + 5,
       modifierListId: modifierListId,
       priceMoney: IMoneyToBigIntMoney({ currency: option.price.currency, amount: option.price.amount * 2 }),
     }
   }] : [];
-  const modifierOts = option.metadata.allowOTS ? [{
+  const modifierOts: CatalogObject[] = option.metadata.allowOTS ? [{
     id: squareIdOts,
     type: 'MODIFIER',
     presentAtAllLocations: false,
@@ -482,20 +512,21 @@ export const ModifierOptionPlacementsAndQualifiersToSquareCatalogObjects = (loca
     ...(versionOts !== null ? { version: versionOts } : {}),
     modifierData: {
       name: `OTS ${option.displayName}`,
-      ordinal: 6,
+      ordinal: (option.ordinal * 6) + 6,
       modifierListId: modifierListId,
       priceMoney: IMoneyToBigIntMoney(option.price),
     }
   }] : [];
-  const modifiersSplit = option.metadata.can_split ? [{
+  const modifiersSplit: CatalogObject[] = option.metadata.can_split ? [{
     id: squareIdLeft,
     type: 'MODIFIER',
+
     presentAtAllLocations: false,
     presentAtLocationIds: locationIds,
     ...(versionLeft !== null ? { version: versionLeft } : {}),
     modifierData: {
       name: `L) ${option.displayName}`,
-      ordinal: 1,
+      ordinal: (option.ordinal * 6) + 1,
       modifierListId: modifierListId,
       priceMoney: IMoneyToBigIntMoney(option.price),
     }
@@ -507,29 +538,35 @@ export const ModifierOptionPlacementsAndQualifiersToSquareCatalogObjects = (loca
     ...(versionRight !== null ? { version: versionRight } : {}),
     modifierData: {
       name: `R) ${option.displayName}`,
-      ordinal: 3,
+      ordinal: (option.ordinal * 6) + 3,
       modifierListId: modifierListId,
       priceMoney: IMoneyToBigIntMoney(option.price),
     }
   }] : []
-  const modifierWhole = {
+  const modifierWhole: CatalogObject = {
     id: squareIdWhole,
     type: 'MODIFIER',
+
     presentAtAllLocations: false,
     presentAtLocationIds: locationIds,
     ...(versionWhole !== null ? { version: versionWhole } : {}),
     modifierData: {
       name: option.displayName,
-      ordinal: 2,
+      ordinal: (option.ordinal * 6) + 2,
       modifierListId: modifierListId,
       priceMoney: IMoneyToBigIntMoney(option.price),
     }
   };
-  return [...modifiersSplit, modifierWhole, ...modifierHeavy, ...modifierLite, ...modifierOts].sort((a, b) => a.modifierData.ordinal - b.modifierData.ordinal);
+  return [...modifiersSplit, modifierWhole, ...modifierHeavy, ...modifierLite, ...modifierOts].sort((a, b) => a.modifierData!.ordinal! - b.modifierData!.ordinal!);
 }
 
-export const ModifierOptionToSquareCatalogObject = (locationIds: string[], modifierTypeOrdinal: number, option: Omit<IOption, 'id' | 'modifierTypeId'>, currentObjects: Pick<CatalogObject, 'id' | 'version'>[], batch: string): CatalogObject => {
-  const modifierListId = GetSquareIdFromExternalIds(option.externalIDs, 'MODIFIER_LIST') ?? `#${batch}MODIFIER_LIST`;
+export const ModifierOptionToSquareCatalogObject = (
+  locationIds: string[],
+  modifierTypeOrdinal: number,
+  option: Omit<IOption, 'id' | 'modifierTypeId'>,
+  currentObjects: Pick<CatalogObject, 'id' | 'version'>[],
+  batch: string): CatalogObject => {
+  const modifierListId = GetSquareIdFromExternalIds(option.externalIDs, 'MODIFIER_LIST') ?? `#${batch}_MODIFIER_LIST`;
   const version = currentObjects.find(x => x.id === modifierListId)?.version ?? null;
   return {
     id: modifierListId,
@@ -540,8 +577,31 @@ export const ModifierOptionToSquareCatalogObject = (locationIds: string[], modif
     modifierListData: {
       name: option.displayName,
       ordinal: modifierTypeOrdinal * 1024 + option.ordinal,
-      selectionType: 'MULTIPLE', // this is just because square doesn't have a concept of "at most one" on the modifier list level
+      selectionType: 'SINGLE',
       modifiers: ModifierOptionPlacementsAndQualifiersToSquareCatalogObjects(locationIds, modifierListId, option, currentObjects, batch)
+    }
+  }
+};
+
+export const SingleSelectModifierTypeToSquareCatalogObject = (
+  locationIds: string[],
+  modifierType: Pick<IOptionType, 'name' | 'displayName' | 'ordinal' | 'externalIDs'>,
+  options: Omit<IOption, 'id' | 'modifierTypeId'>[],
+  currentObjects: Pick<CatalogObject, 'id' | 'version'>[],
+  batch: string): CatalogObject => {
+  const modifierListId = GetSquareIdFromExternalIds(modifierType.externalIDs, 'MODIFIER_LIST') ?? `#${batch}_MODIFIER_LIST`;
+  const version = currentObjects.find(x => x.id === modifierListId)?.version ?? null;
+  return {
+    id: modifierListId,
+    ...(version !== null ? { version } : {}),
+    type: 'MODIFIER_LIST',
+    presentAtAllLocations: false,
+    presentAtLocationIds: locationIds,
+    modifierListData: {
+      name: modifierType.displayName ?? modifierType.name,
+      ordinal: modifierType.ordinal * 1024,
+      selectionType: 'SINGLE',
+      modifiers: options.map((o, i) => ModifierOptionPlacementsAndQualifiersToSquareCatalogObjects(locationIds, modifierListId, o, currentObjects, `${batch}S${('000' + i).slice(-3)}S`)).flat()
     }
   };
 }

@@ -86,7 +86,7 @@ export class ModifierController implements IExpressController {
     this.router.patch(`${this.path}/:mtid/:moid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(EditModifierOptionValidationChain), this.patchModifierOption);
     this.router.delete(`${this.path}/:mtid/:moid`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware([...ModifierTypeByIdValidationChain, ...ModifierOptionByIdValidationChain]), this.deleteModifierOption);
   };
-  
+
   private postModifierType = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const doc = await CatalogProviderInstance.CreateModifierType({
@@ -108,9 +108,9 @@ export class ModifierController implements IExpressController {
 
   private patchModifierType = async (request: Request, response: Response, next: NextFunction) => {
     try {
-      const doc = await CatalogProviderInstance.UpdateModifierType(
-        request.params.mtid,
-        {
+      const doc = await CatalogProviderInstance.UpdateModifierType({
+        id: request.params.mtid,
+        modifierType: {
           name: request.body.name,
           displayName: request.body.displayName,
           ordinal: request.body.ordinal,
@@ -119,7 +119,7 @@ export class ModifierController implements IExpressController {
           externalIDs: request.body.externalIDs,
           displayFlags: request.body.displayFlags,
         }
-      );
+      });
       if (!doc) {
         logger.info(`Unable to update ModifierType: ${request.params.mtid}`);
         return response.status(404).send(`Unable to update ModifierType: ${request.params.mtid}`);;
