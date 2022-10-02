@@ -757,7 +757,7 @@ export class OrderManager implements WProvider {
         eventTitle,
         messages,
         {
-          displayName: `RESCHEDULE ${customerName}`,
+          displayName: `RESCHEDULE ${eventTitle}`,
           emailAddress: lockedOrder.customerInfo.email,
           phoneNumber: lockedOrder.customerInfo.mobileNum,
           pickupAt: oldPromisedTime,

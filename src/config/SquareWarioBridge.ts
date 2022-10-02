@@ -156,7 +156,6 @@ export const CreateOrdersForPrintingFromCart = (
     carts.push(orderEntries);
   }
   return carts.map((cart, i) => {
-    const total = cart.reduce((acc, x) => acc + (x.product.m.price.amount * x.quantity), 0);
     return CreateOrderFromCart(
       locationId,
       referenceId,
@@ -166,7 +165,7 @@ export const CreateOrdersForPrintingFromCart = (
         discount: {
           amount: {
             currency: CURRENCY.USD,
-            amount: total
+            amount: cart.reduce((acc, x) => acc + (x.product.m.price.amount * x.quantity), 0)
           },
           code: "_",
           lock: { auth: "_", enc: "_", iv: "_" }
@@ -211,19 +210,27 @@ export const CreateOrderForMessages = (
   };
 
 }
-const WProductModifiersToSquareModifiers = (productModifiers: ProductModifierEntry[]): OrderLineItemModifier[] => {
+const WProductModifiersToSquareModifiers = (product: WProduct): OrderLineItemModifier[] => {
   const acc: OrderLineItemModifier[] = [];
-  productModifiers.flatMap(mod => mod.options.map((option) => {
-    const catalogOption = CatalogProviderInstance.Catalog.options[option.optionId];
-    const squareModifierId = GetSquareIdFromExternalIds(catalogOption.externalIDs, OptionInstanceToSquareIdSpecifier(option));
-    return (squareModifierId === null ? {
-      basePriceMoney: IMoneyToBigIntMoney(catalogOption.price),
-      name: catalogOption.displayName
-    } : {
-      catalogObjectId: squareModifierId,
-      quantity: "1"
-    }) as OrderLineItemModifier;
-  }))
+  // NOTE: only supports whole pizzas, needs work to support split pizzas
+  product.p.modifiers.forEach(mod => {
+    const modifierTypeEntry = CatalogProviderInstance.Catalog.modifiers[mod.modifierTypeId]!;
+    const baseProductInstanceSelectedOptionsForModifierType = CatalogProviderInstance.Catalog.productInstances[product.m.pi[0]].modifiers.find(x => x.modifierTypeId === mod.modifierTypeId)?.options ?? [];
+    mod.options.forEach((option) => {
+      const catalogOption = CatalogProviderInstance.Catalog.options[option.optionId];
+      const squareModifierId = GetSquareIdFromExternalIds(catalogOption.externalIDs, OptionInstanceToSquareIdSpecifier(option));
+      if ((modifierTypeEntry.modifierType.min_selected === 1 && modifierTypeEntry.modifierType.max_selected === 1) ||
+        baseProductInstanceSelectedOptionsForModifierType.findIndex(x => x.optionId === option.optionId && x.placement === option.placement && x.qualifier === option.qualifier) !== -1) {
+        acc.push(squareModifierId === null ? {
+          basePriceMoney: IMoneyToBigIntMoney(catalogOption.price),
+          name: catalogOption.displayName
+        } : {
+          catalogObjectId: squareModifierId,
+          quantity: "1"
+        });
+      }
+    });
+  });
   return acc;
 }
 
@@ -265,7 +272,7 @@ export const CreateOrderFromCart = (
           note: x.product.m.shortname
         }),
         itemType: "ITEM",
-        modifiers: WProductModifiersToSquareModifiers(x.product.p.modifiers)
+        modifiers: WProductModifiersToSquareModifiers(x.product)
       } as OrderLineItem;
     }),
     discounts: [...discounts.map(discount => ({
