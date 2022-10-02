@@ -220,7 +220,7 @@ const WProductModifiersToSquareModifiers = (product: WProduct): OrderLineItemMod
       const catalogOption = CatalogProviderInstance.Catalog.options[option.optionId];
       const squareModifierId = GetSquareIdFromExternalIds(catalogOption.externalIDs, OptionInstanceToSquareIdSpecifier(option));
       if ((modifierTypeEntry.modifierType.min_selected === 1 && modifierTypeEntry.modifierType.max_selected === 1) ||
-        baseProductInstanceSelectedOptionsForModifierType.findIndex(x => x.optionId === option.optionId && x.placement === option.placement && x.qualifier === option.qualifier) !== -1) {
+        baseProductInstanceSelectedOptionsForModifierType.findIndex(x => x.optionId === option.optionId && x.placement === option.placement && x.qualifier === option.qualifier) === -1) {
         acc.push(squareModifierId === null ? {
           basePriceMoney: IMoneyToBigIntMoney(catalogOption.price),
           name: catalogOption.displayName
@@ -261,7 +261,7 @@ export const CreateOrderFromCart = (
       //   // TODO: need to create a split product item that just bypasses square's lack of support here
 
       // }
-      return {
+      const retVal: OrderLineItem = {
         quantity: x.quantity.toString(10),
         ...(squareItemVariationId === null ? {
           name: x.product.m.name,
@@ -273,7 +273,8 @@ export const CreateOrderFromCart = (
         }),
         itemType: "ITEM",
         modifiers: WProductModifiersToSquareModifiers(x.product)
-      } as OrderLineItem;
+      };
+      return retVal;
     }),
     discounts: [...discounts.map(discount => ({
       type: 'VARIABLE_AMOUNT',
@@ -605,7 +606,7 @@ export const SingleSelectModifierTypeToSquareCatalogObject = (
     presentAtAllLocations: false,
     presentAtLocationIds: locationIds,
     modifierListData: {
-      name: modifierType.displayName ?? modifierType.name,
+      name: modifierType.displayName?.length > 0 ? modifierType.displayName : modifierType.name,
       ordinal: modifierType.ordinal * 1024,
       selectionType: 'SINGLE',
       modifiers: options.map((o, i) => ModifierOptionPlacementsAndQualifiersToSquareCatalogObjects(locationIds, modifierListId, o, currentObjects, `${batch}S${('000' + i).slice(-3)}S`)).flat()
