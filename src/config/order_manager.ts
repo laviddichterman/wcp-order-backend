@@ -766,19 +766,6 @@ export class OrderManager implements WProvider {
       await SquareProviderInstance.SendMessageOrder(messageOrder);
     }
 
-    // const updateSquareOrderResponse = await SquareProviderInstance.OrderUpdate(
-    //   DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
-    //   squareOrderId,
-    //   squareOrder.version!, {
-    //   fulfillments: squareOrder.fulfillments?.map(x => ({ uid: x.uid, pickupDetails: { pickupAt: formatRFC3339(promisedTime) } })) ?? [],
-    // }, []);
-    // if (!updateSquareOrderResponse.success) {
-    //   // failed to update square order fulfillment
-
-    //   logger.error(``)
-    // }
-
-
     // adjust calendar event
     const gCalEventId = lockedOrder.metadata.find(x => x.key === 'GCALEVENT')?.value;
     if (gCalEventId) {
@@ -1058,13 +1045,7 @@ export class OrderManager implements WProvider {
           Object.values(rebuiltCart).flat(),
           recomputedTotals.hasBankersRoundingTaxSkew,
           shorthandEventTitle,
-          {
-            displayName: customerName,
-            emailAddress: orderInstanceBeforeCharging.customerInfo.email,
-            phoneNumber: orderInstanceBeforeCharging.customerInfo.mobileNum,
-            pickupAt: dateTimeInterval.start,
-            note: shorthandEventTitle
-          }
+          null
         ));
       if (squareOrderResponse.success === true) {
         squareOrder = squareOrderResponse.result.order!;

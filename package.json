@@ -1,6 +1,6 @@
 {
   "name": "@wcp/wcp-order-backend",
-  "version": "0.5.31",
+  "version": "0.5.32",
   "main": "dist/src/server.js",
   "files": [
     "dist",
@@ -59,7 +59,7 @@
     "jwks-rsa": "^2.1.4",
     "lodash": "^4.17.21",
     "mjml": "^4.13.0",
-    "mongoose": "6.6.3",
+    "mongoose": "6.6.4",
     "nodemailer": "^6.8.0",
     "qrcode": "^1.5.1",
     "reflect-metadata": "^0.1.13",
@@ -80,8 +80,8 @@
     "@types/qrcode": "^1.5.0",
     "@types/validator": "^13.7.7",
     "@types/voucher-code-generator": "^1.1.1",
-    "@typescript-eslint/eslint-plugin": "^5.38.1",
-    "@typescript-eslint/parser": "^5.38.1",
+    "@typescript-eslint/eslint-plugin": "^5.39.0",
+    "@typescript-eslint/parser": "^5.39.0",
     "chai": "^4.3.6",
     "eslint": "^8.24.0",
     "eslint-config-airbnb-base": "^15.0.0",

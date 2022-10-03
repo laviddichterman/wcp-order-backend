@@ -487,7 +487,10 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
   "0.5.28": [{ major: 0, minor: 5, patch: 29 }, async () => {
   }],
   "0.5.29": [{ major: 0, minor: 5, patch: 30 }, async () => {
-    // any split options or OTS enabled, if the modifier type is single select, disable split and ots
+  }],
+  "0.5.30": [{ major: 0, minor: 5, patch: 31 }, async () => {
+  }],
+  "0.5.31": [{ major: 0, minor: 5, patch: 32 }, async () => {
   }],
 }
 

@@ -34,7 +34,7 @@ import logger from '../logging';
 import { chunk } from 'lodash';
 import { WProvider } from "../types/WProvider";
 import { SquareProviderInstance } from "./square";
-import { ModifierOptionPlacementsAndQualifiersToSquareCatalogObjects, GetSquareExternalIds, GetSquareIdIndexFromExternalIds, IdMappingsToExternalIds, ModifierOptionToSquareCatalogObject, PrinterGroupToSquareCatalogObjectPlusDummyProduct, ProductInstanceToSquareCatalogObject, SingleSelectModifierTypeToSquareCatalogObject, WARIO_SQUARE_ID_METADATA_KEY, GetSquareIdFromExternalIds } from "./SquareWarioBridge";
+import { GetSquareExternalIds, GetSquareIdIndexFromExternalIds, IdMappingsToExternalIds, ModifierOptionToSquareCatalogObject, PrinterGroupToSquareCatalogObjectPlusDummyProduct, ProductInstanceToSquareCatalogObject, SingleSelectModifierTypeToSquareCatalogObject, WARIO_SQUARE_ID_METADATA_KEY } from "./SquareWarioBridge";
 import { CatalogIdMapping, CatalogObject } from "square";
 
 const SQUARE_BATCH_CHUNK_SIZE = process.env.WARIO_SQUARE_BATCH_CHUNK_SIZE ? parseInt(process.env.WARIO_SQUARE_BATCH_CHUNK_SIZE) : 100;
@@ -250,6 +250,7 @@ export class CatalogProvider implements WProvider {
   }
 
   private CheckAllModifierTypesHaveSquareIdsAndFixIfNeeded = async () => {
+    const updatedModifierTypeIds: string[] = [];
     const squareCatalogObjectIds = Object.values(this.Catalog.modifiers)
       .map(modifierTypeEntry => GetSquareExternalIds(modifierTypeEntry.modifierType.externalIDs).map(x => x.value)).flat();
     if (squareCatalogObjectIds.length > 0) {
@@ -266,7 +267,7 @@ export class CatalogProvider implements WProvider {
             modifierType: { externalIDs: x.modifierType.externalIDs.filter(kv => !kv.key.startsWith(WARIO_SQUARE_ID_METADATA_KEY)) }
           }))
         if (missingSquareCatalogObjectBatches.length > 0) {
-          await this.BatchUpdateModifierType(missingSquareCatalogObjectBatches, true);
+          updatedModifierTypeIds.push(...(await this.BatchUpdateModifierType(missingSquareCatalogObjectBatches, true)).filter(x=>x !== null).map(x=>x!.id));
         }
       }
     }
@@ -277,8 +278,9 @@ export class CatalogProvider implements WProvider {
         GetSquareIdIndexFromExternalIds(x.modifierType.externalIDs, 'MODIFIER_LIST') === -1)
       .map(x => ({ id: x.modifierType.id, modifierType: {} }));
     if (missingSquareIdBatches.length > 0) {
-      await this.BatchUpdateModifierType(missingSquareIdBatches, true);
+      updatedModifierTypeIds.push(...(await this.BatchUpdateModifierType(missingSquareIdBatches, true)).filter(x=>x !== null).map(x=>x!.id))
     }
+    return updatedModifierTypeIds;
   }
 
   private CheckAllModifierOptionsHaveSquareIdsAndFixIfNeeded = async () => {
@@ -362,9 +364,14 @@ export class CatalogProvider implements WProvider {
       logger.warn("Suppressing Square Catalog Sync at launch. Catalog skew may result.")
     } else {
       await this.CheckAllPrinterGroupsSquareIdsAndFixIfNeeded();
-      await this.CheckAllModifierTypesHaveSquareIdsAndFixIfNeeded();
+      const modifierTypeIdsUpdated = await this.CheckAllModifierTypesHaveSquareIdsAndFixIfNeeded();
       await this.CheckAllModifierOptionsHaveSquareIdsAndFixIfNeeded();
       await this.CheckAllProductsHaveSquareIdsAndFixIfNeeded();
+      if (modifierTypeIdsUpdated.length > 0) {
+        logger.info(`Going back and updating product instances impacted by earlier CheckAllModifierTypesHaveSquareIdsAndFixIfNeeded call, for ${modifierTypeIdsUpdated.length} modifier types`)
+        await this.UpdateProductsReferencingModifierTypeId(modifierTypeIdsUpdated);
+      }
+      
     }
 
     logger.info(`Finished Bootstrap of CatalogProvider`);
@@ -565,7 +572,13 @@ export class CatalogProvider implements WProvider {
     }
   }
 
-  BatchUpdateModifierType = async (batches: UpdateModifierTypeProps[], suppress_catalog_recomputation: boolean) => {
+  /**
+   * 
+   * @param batches 
+   * @param suppressFullRecomputation flag to turn off product instance recomputation and catalog emit. needed for bootstrapping
+   * @returns 
+   */
+  BatchUpdateModifierType = async (batches: UpdateModifierTypeProps[], suppressFullRecomputation: boolean) => {
     const externalIdsToPullFromForSquareCatalogDeletion: KeyValue[] = [];
     const externalIdsToFetchFromSquare: string[] = [];
     const batchData = batches.map((b) => {
@@ -609,12 +622,11 @@ export class CatalogProvider implements WProvider {
           externalIdsToPullFromForSquareCatalogDeletion.push(...modifierTypeSquareExternalIds,
             ...updatedOptions.map(x => x.externalIDs).flat())
 
-
           // nuke the IDs from the modifier options we be clobbering
-          updatedOptions = updatedOptions.map((x) => ({ ...x, externalIDs: x.externalIDs.filter(x => !x.key.startsWith(WARIO_SQUARE_ID_METADATA_KEY)) }));
-          externalIdsToFetchFromSquare.push(...GetSquareExternalIds([...updatedModifierType.externalIDs, ...updatedOptions.map(x => x.externalIDs).flat()]).map(x => x.value))
-
+          updatedOptions = updatedOptions.map((x) => ({ ...x, externalIDs: x.externalIDs.filter(x => !x.key.startsWith(WARIO_SQUARE_ID_METADATA_KEY)) }));          
           deepUpdate = true;
+        } else {
+          externalIdsToFetchFromSquare.push(...GetSquareExternalIds([...updatedModifierType.externalIDs, ...updatedOptions.map(x => x.externalIDs).flat()]).map(x => x.value))
         }
         updateModifierOptionsAndProducts = true;
       }
@@ -703,10 +715,11 @@ export class CatalogProvider implements WProvider {
     await this.SyncModifierTypes();
     await this.SyncOptions();
 
-    this.RecomputeCatalog();
-    await this.UpdateProductsReferencingModifierTypeId(batchData.filter(x => x.updateModifierOptionsAndProducts).map(x => x.updatedModifierType.id));
-    await this.SyncProductInstances();
-    if (!suppress_catalog_recomputation) {
+    if (!suppressFullRecomputation) {
+      this.RecomputeCatalog();
+      await this.UpdateProductsReferencingModifierTypeId(batchData.filter(x => x.updateModifierOptionsAndProducts).map(x => x.updatedModifierType.id));
+      await this.SyncProductInstances();
+  
       this.RecomputeCatalogAndEmit();
     }
     return updatedModifierTypes;
