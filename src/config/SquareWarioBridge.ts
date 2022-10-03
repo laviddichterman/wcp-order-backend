@@ -269,7 +269,6 @@ export const CreateOrderFromCart = (
           basePriceMoney: IMoneyToBigIntMoney(x.product.p.PRODUCT_CLASS.price)
         } : {
           catalogObjectId: squareItemVariationId,
-          note: x.product.m.shortname
         }),
         itemType: "ITEM",
         modifiers: WProductModifiersToSquareModifiers(x.product)
@@ -576,6 +575,7 @@ export const ModifierOptionToSquareCatalogObject = (
   batch: string): CatalogObject => {
   const modifierListId = GetSquareIdFromExternalIds(option.externalIDs, 'MODIFIER_LIST') ?? `#${batch}_MODIFIER_LIST`;
   const version = currentObjects.find(x => x.id === modifierListId)?.version ?? null;
+  const squareName = `${('0000' + (modifierTypeOrdinal*100 + option.ordinal)).slice(-4)}| ${option.displayName}`;
   return {
     id: modifierListId,
     ...(version !== null ? { version } : {}),
@@ -583,7 +583,7 @@ export const ModifierOptionToSquareCatalogObject = (
     presentAtAllLocations: false,
     presentAtLocationIds: locationIds,
     modifierListData: {
-      name: option.displayName,
+      name: squareName,
       ordinal: modifierTypeOrdinal * 1024 + option.ordinal,
       selectionType: 'SINGLE',
       modifiers: ModifierOptionPlacementsAndQualifiersToSquareCatalogObjects(locationIds, modifierListId, option, currentObjects, batch)
@@ -599,6 +599,8 @@ export const SingleSelectModifierTypeToSquareCatalogObject = (
   batch: string): CatalogObject => {
   const modifierListId = GetSquareIdFromExternalIds(modifierType.externalIDs, 'MODIFIER_LIST') ?? `#${batch}_MODIFIER_LIST`;
   const version = currentObjects.find(x => x.id === modifierListId)?.version ?? null;
+  const displayName = modifierType.displayName?.length > 0 ? modifierType.displayName : modifierType.name;
+  const squareName = `${('0000' + (modifierType.ordinal*100)).slice(-4)}| ${displayName}`;
   return {
     id: modifierListId,
     ...(version !== null ? { version } : {}),
@@ -606,7 +608,7 @@ export const SingleSelectModifierTypeToSquareCatalogObject = (
     presentAtAllLocations: false,
     presentAtLocationIds: locationIds,
     modifierListData: {
-      name: modifierType.displayName?.length > 0 ? modifierType.displayName : modifierType.name,
+      name: squareName,
       ordinal: modifierType.ordinal * 1024,
       selectionType: 'SINGLE',
       modifiers: options.map((o, i) => ModifierOptionPlacementsAndQualifiersToSquareCatalogObjects(locationIds, modifierListId, o, currentObjects, `${batch}S${('000' + i).slice(-3)}S`)).flat()

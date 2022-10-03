@@ -1,6 +1,6 @@
 {
   "name": "@wcp/wcp-order-backend",
-  "version": "0.5.30",
+  "version": "0.5.31",
   "main": "dist/src/server.js",
   "files": [
     "dist",
