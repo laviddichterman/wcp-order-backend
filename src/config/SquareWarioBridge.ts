@@ -187,6 +187,7 @@ export const CreateOrderForMessages = (
   ticketName: string,
   messages: { squareItemVariationId: string; message: string[]; }[],
   fulfillmentInfo: SquareOrderFulfillmentInfo): Order => {
+    const truncatedTicketName = ticketName.slice(0, 29)
   return {
     lineItems: messages.map(x => ({
       quantity: "1",
@@ -205,7 +206,7 @@ export const CreateOrderForMessages = (
     taxes: [],
     locationId,
     state: "OPEN",
-    ...(ticketName.length > 0 ? { ticketName } : {}),
+    ...(truncatedTicketName.length > 0 ? { ticketName: truncatedTicketName } : {}),
     fulfillments: [CreateFulfillment(fulfillmentInfo)],
   };
 
