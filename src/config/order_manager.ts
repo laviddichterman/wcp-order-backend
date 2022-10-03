@@ -534,7 +534,7 @@ export class OrderManager implements WProvider {
         eventTitle,
         Object.values(rebuiltCart).flat(),
         {
-          displayName: eventTitle,
+          displayName: `${WDateUtils.MinutesToPrintTime(lockedOrder.fulfillment.selectedTime)} ${eventTitle}`,
           emailAddress: lockedOrder.customerInfo.email,
           phoneNumber: lockedOrder.customerInfo.mobileNum,
           pickupAt: promisedTime.start,
