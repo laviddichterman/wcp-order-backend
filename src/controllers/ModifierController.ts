@@ -178,7 +178,7 @@ export class ModifierController implements IExpressController {
       if (modifierTypeEntry) {
         const doc = await CatalogProviderInstance.UpdateModifierOption({
           id: req.params.moid,
-          modifierType: modifierTypeEntry.modifierType,
+          modifierTypeId: req.params.mtid,
           modifierOption: {
             displayName: req.body.displayName,
             description: req.body.description,
