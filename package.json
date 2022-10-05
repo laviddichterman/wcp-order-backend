@@ -1,6 +1,6 @@
 {
   "name": "@wcp/wcp-order-backend",
-  "version": "0.5.36",
+  "version": "0.5.37",
   "main": "dist/src/server.js",
   "files": [
     "dist",
@@ -59,7 +59,7 @@
     "jwks-rsa": "^2.1.4",
     "lodash": "^4.17.21",
     "mjml": "^4.13.0",
-    "mongoose": "6.6.4",
+    "mongoose": "6.6.5",
     "nodemailer": "^6.8.0",
     "qrcode": "^1.5.1",
     "reflect-metadata": "^0.1.13",

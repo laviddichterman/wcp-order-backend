@@ -16,6 +16,7 @@ import mongoose, { Schema } from "mongoose";
 import { exit } from 'process';
 import { WOrderInstanceModel } from '../models/orders/WOrderInstance';
 import { parseISO } from 'date-fns';
+import { CatalogProviderInstance } from './catalog_provider';
 
 const SetVersion = async (new_version: SEMVER) => {
   return await DBVersionModel.findOneAndUpdate({}, new_version, { new: true, upsert: true });
@@ -501,6 +502,7 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
   "0.5.35": [{ major: 0, minor: 5, patch: 36 }, async () => {
   }],
   "0.5.36": [{ major: 0, minor: 5, patch: 37 }, async () => {
+    CatalogProviderInstance.RequireSquareRebuild = true;
   }],
   "0.5.37": [{ major: 0, minor: 5, patch: 38 }, async () => {
   }],

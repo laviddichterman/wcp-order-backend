@@ -119,7 +119,7 @@ export class WApp {
 
   private async runBootstrap() {
     this.hasBootstrapped = true;
-    for (let i = 0;   i < this.providers.length; ++i) {
+    for (let i = 0; i < this.providers.length; ++i) {
       await this.providers[i].Bootstrap(this);
     }
   }
