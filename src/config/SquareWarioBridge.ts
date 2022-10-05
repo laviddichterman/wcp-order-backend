@@ -440,7 +440,7 @@ export const ProductInstanceToSquareCatalogObject = (locationIds: string[],
     id: squareItemId,
     type: 'ITEM',
     presentAtAllLocations: false,
-    presentAtLocationIds: locationIds,
+    presentAtLocationIds: isBlanketDisabled ? [] : locationIds,
     ...(versionItem !== null ? { version: versionItem } : {}),
     itemData: {
       ...(printerGroup ? { categoryId: GetSquareIdFromExternalIds(printerGroup.externalIDs, 'CATEGORY')! } : {}),
