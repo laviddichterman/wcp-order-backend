@@ -402,7 +402,7 @@ export const ProductInstanceToSquareCatalogObject = (locationIds: string[],
       }
       modifierListInfo.push({
         modifierListId: squareModifierListId!,
-        minSelectedModifiers: 1,
+        minSelectedModifiers: modifierEntry.modifierType.min_selected,
         maxSelectedModifiers: 1,
         ...(selectedOptionsForModifierType.length > 0 ? {
           modifierOverrides: selectedOptionsForModifierType.map((optionInstance) => ({
