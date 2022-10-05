@@ -220,7 +220,7 @@ const WProductModifiersToSquareModifiers = (product: WProduct): OrderLineItemMod
     mod.options.forEach((option) => {
       const catalogOption = CatalogProviderInstance.Catalog.options[option.optionId];
       const squareModifierId = GetSquareIdFromExternalIds(catalogOption.externalIDs, OptionInstanceToSquareIdSpecifier(option));
-      if ((modifierTypeEntry.modifierType.min_selected === 1 && modifierTypeEntry.modifierType.max_selected === 1) ||
+      if (modifierTypeEntry.modifierType.max_selected === 1 ||
         baseProductInstanceSelectedOptionsForModifierType.findIndex(x => x.optionId === option.optionId && x.placement === option.placement && x.qualifier === option.qualifier) === -1) {
         acc.push(squareModifierId === null ? {
           basePriceMoney: IMoneyToBigIntMoney(catalogOption.price),
@@ -389,7 +389,7 @@ export const ProductInstanceToSquareCatalogObject = (locationIds: string[],
   product.modifiers.forEach(mtspec => {
     const modifierEntry = catalogSelectors.modifierEntry(mtspec.mtid)!;
     const selectedOptionsForModifierType = productInstance.modifiers.find(x => x.modifierTypeId === mtspec.mtid)?.options ?? [];
-    if (modifierEntry.modifierType.min_selected === 1 && modifierEntry.modifierType.max_selected === 1) {
+    if (modifierEntry.modifierType.max_selected === 1) {
       // single select modifiers get added to the square product
       const squareModifierListId = GetSquareIdFromExternalIds(modifierEntry.modifierType.externalIDs, 'MODIFIER_LIST')!;
       if (squareModifierListId === null) {

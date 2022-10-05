@@ -79,7 +79,7 @@ type UpdatePrinterGroupProps = {
 
 type UpdateModifierOptionProps = {
   id: string;
-  modifierType: Pick<IOptionType, 'max_selected' | 'min_selected' | 'ordinal' | 'id' | 'externalIDs'>;
+  modifierType: Pick<IOptionType, 'max_selected' | 'ordinal' | 'id' | 'externalIDs'>;
   modifierOption: Partial<Omit<IOption, 'id' | 'modifierTypeId'>>;
 };
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
@@ -279,7 +279,6 @@ export class CatalogProvider implements WProvider {
         const foundObjects = catalogObjectResponse.result.objects!;
         const missingSquareCatalogObjectBatches = Object.values(this.Catalog.modifiers)
           .filter(x =>
-            x.modifierType.min_selected === 1 &&
             x.modifierType.max_selected === 1 &&
             GetSquareExternalIds(x.modifierType.externalIDs).reduce((acc, kv) => acc || foundObjects.findIndex(o => o.id === kv.value) === -1, false))
           .map(x => ({
@@ -293,7 +292,6 @@ export class CatalogProvider implements WProvider {
     }
     const missingSquareIdBatches = Object.values(this.Catalog.modifiers)
       .filter(x =>
-        x.modifierType.min_selected === 1 &&
         x.modifierType.max_selected === 1 &&
         GetSquareIdIndexFromExternalIds(x.modifierType.externalIDs, 'MODIFIER_LIST') === -1)
       .map(x => ({ id: x.modifierType.id, modifierType: {} }));
@@ -642,8 +640,8 @@ export class CatalogProvider implements WProvider {
       let updatedOptions = existingOptions.slice();
 
       const modifierTypeSquareExternalIds = existingModifierType.externalIDs.filter(x => x.key.startsWith(WARIO_SQUARE_ID_METADATA_KEY));
-      const willBeSingleSelect = updatedModifierType.min_selected === 1 && updatedModifierType.max_selected === 1;
-      const wasSingleSelect = existingModifierType.min_selected === 1 && existingModifierType.max_selected === 1;
+      const willBeSingleSelect = updatedModifierType.max_selected === 1;
+      const wasSingleSelect = existingModifierType.max_selected === 1;
       const switchingSelectionType = ((willBeSingleSelect ? 1 : 0) ^ (wasSingleSelect ? 1 : 0)) === 1;
       const existingOptionsHave_MODIFIER_LIST = existingOptions.reduce((acc, x)=> acc && GetSquareIdIndexFromExternalIds(x.externalIDs, 'MODIFIER_LIST') !== -1, true)
       const existingOptionsHave_MODIFIER = existingOptions.reduce((acc, x)=> acc && GetSquareIdIndexFromExternalIds(x.externalIDs, 'MODIFIER') !== -1, true)
@@ -825,9 +823,9 @@ export class CatalogProvider implements WProvider {
     return doc.toObject();
   }
 
-  ValidateOption = (modifierType: Pick<IOptionType, 'max_selected' | 'min_selected'>,
+  ValidateOption = (modifierType: Pick<IOptionType, 'max_selected'>,
     modifierOption: Partial<Omit<IOption, 'id' | 'modifierTypeId'>>) => {
-    if (modifierType.min_selected === 1 && modifierType.max_selected === 1) {
+    if (modifierType.max_selected === 1) {
       return !modifierOption.metadata || (modifierOption.metadata.allowOTS === false && modifierOption.metadata.can_split === false);
     }
     return true;
@@ -905,7 +903,7 @@ export class CatalogProvider implements WProvider {
         }
       }
       // if single select, we need to pull the MODIFIER catalog objects from the entire modifier type
-      if (modifierTypeEntry.modifierType.min_selected === 1 && modifierTypeEntry.modifierType.max_selected === 1) {
+      if (modifierTypeEntry.modifierType.max_selected === 1) {
         existingSquareExternalIds.push(...(GetSquareExternalIds(modifierTypeEntry.modifierType.externalIDs).map(x=>x.value)));
         modifierTypeEntry.options.map(oId => ({ ...this.Catalog.options[oId]!, ...(oId === b.batch.id ? { ...b.batch.modifierOption, externalIDs: newExternalIdses[i] } : {}) }))
         modifierTypeEntry.options.forEach(oId => {
@@ -934,7 +932,7 @@ export class CatalogProvider implements WProvider {
     }
     const catalogObjectsForUpsert: CatalogObject[] = [];
     modifierTypesAndOptionsBatches.forEach((b, i) => {
-      if (b.batch.modifierType.min_selected === 1 && b.batch.modifierType.max_selected === 1) {
+      if (b.batch.modifierType.max_selected === 1) {
         const modifierTypeEntry = this.Catalog.modifiers[b.batch.modifierType.id]!;
         const options = modifierTypeEntry.options.map(oId => ({ ...this.Catalog.options[oId]!, ...(oId === b.batch.id ? { ...b.batch.modifierOption, externalIDs: newExternalIdses[i] } : {}) }))
         catalogObjectsForUpsert.push(SingleSelectModifierTypeToSquareCatalogObject(

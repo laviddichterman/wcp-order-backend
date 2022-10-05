@@ -7,7 +7,7 @@ import { IMoney, PaymentMethod, OrderPayment, CURRENCY, TenderBaseStatus } from 
 import { parseISO } from 'date-fns';
 import { StoreCreditPayment } from '@wcp/wcpshared';
 import { BigIntMoneyToIntMoney, IMoneyToBigIntMoney, MapPaymentStatus } from './SquareWarioBridge';
-import { IS_PRODUCTION } from '../utils';
+import { ExponentialBackoff, IS_PRODUCTION } from '../utils';
 
 type SquareProviderApiCallReturnSuccess<T> = { success: true; result: T; error: SquareError[]; };
 
@@ -63,6 +63,7 @@ export class SquareProvider implements WProvider {
         accessToken: DataProviderInstance.KeyValueConfig.SQUARE_TOKEN,
         httpClientOptions: {
           retryConfig: {
+            backoffFactor: 3,
             maxNumberOfRetries: 5
           }
         }
