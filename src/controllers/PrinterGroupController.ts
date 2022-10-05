@@ -25,6 +25,13 @@ const EditPrinterGroupValidationChain = [
   ...PrinterGroupValidationChain
 ]
 
+const DeleteAndReassignPrinterGroupValidationChain = [
+  ...PrinterGroupByIdValidationChain,
+  body('reassign').toBoolean(true),
+  body('printerGroup').optional({nullable: true}).trim().escape().isMongoId(),
+];
+
+
 export class PrinterGroupController implements IExpressController {
   public path = "/api/v1/menu/printergroup";
   public router = Router({ mergeParams: true });
@@ -37,7 +44,7 @@ export class PrinterGroupController implements IExpressController {
     this.router.get(`${this.path}`, CheckJWT, ScopeWriteCatalog, this.getPrinterGroups);
     this.router.post(`${this.path}`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(PrinterGroupValidationChain), this.postPrinterGroup);
     this.router.patch(`${this.path}/:pgId`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(EditPrinterGroupValidationChain), this.patchPrinterGroup);
-    this.router.delete(`${this.path}/:pgId`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware(PrinterGroupByIdValidationChain), this.deletePrinterGroup);
+    this.router.delete(`${this.path}/:pgId`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware(DeleteAndReassignPrinterGroupValidationChain), this.deletePrinterGroup);
   };
 
   private getPrinterGroups = async (_: Request, res: Response, __: NextFunction) => {
@@ -86,7 +93,12 @@ export class PrinterGroupController implements IExpressController {
 
   private deletePrinterGroup = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const doc = await CatalogProviderInstance.DeletePrinterGroup(req.params.pgId);
+      const reassign: boolean = req.body.reassign;
+      const destinationPgId: string | null = req.body.printerGroup ?? null;
+      if (reassign && !destinationPgId) {
+        return res.status(400).send('Invalid request. Destination printer group ID required if reassigning items.');
+      }
+      const doc = await CatalogProviderInstance.DeletePrinterGroup(req.params.pgId, reassign, destinationPgId);
       if (!doc) {
         logger.info(`Unable to delete PrinterGroup: ${req.params.pgId}`);
         return res.status(404).send(`Unable to delete PrinterGroup: ${req.params.pgId}`);

@@ -36,9 +36,11 @@ import { WProvider } from "../types/WProvider";
 import { SquareProviderInstance } from "./square";
 import { GetSquareExternalIds, GetSquareIdIndexFromExternalIds, IdMappingsToExternalIds, ModifierOptionToSquareCatalogObject, PrinterGroupToSquareCatalogObjectPlusDummyProduct, ProductInstanceToSquareCatalogObject, SingleSelectModifierTypeToSquareCatalogObject, WARIO_SQUARE_ID_METADATA_KEY } from "./SquareWarioBridge";
 import { CatalogIdMapping, CatalogObject } from "square";
+import { FilterQuery } from "mongoose";
 
 const SQUARE_BATCH_CHUNK_SIZE = process.env.WARIO_SQUARE_BATCH_CHUNK_SIZE ? parseInt(process.env.WARIO_SQUARE_BATCH_CHUNK_SIZE) : 25;
 const SUPPRESS_SQUARE_SYNC = process.env.WARIO_SUPPRESS_SQUARE_INIT_SYNC === '1' || process.env.WARIO_SUPPRESS_SQUARE_INIT_SYNC === 'true';
+const FORCE_SQUARE_CATALOG_REBUILD_ON_LOAD = process.env.WARIO_FORCE_SQUARE_CATALOG_REBUILD_ON_LOAD === '1' || process.env.WARIO_SUPPRESS_SQUARE_INIT_SYNC === 'true';
 
 const ValidateProductModifiersFunctionsCategories = function (modifiers: { mtid: string; enable: string | null; }[], category_ids: string[], catalog: CatalogProvider) {
   const found_all_modifiers = modifiers.map(entry =>
@@ -241,6 +243,24 @@ export class CatalogProvider implements WProvider {
   }
 
   private CheckAllPrinterGroupsSquareIdsAndFixIfNeeded = async () => {
+    const squareCatalogObjectIds = Object.values(this.#printerGroups)
+      .map(printerGroup => GetSquareExternalIds(printerGroup.externalIDs).map(x => x.value)).flat();
+    if (squareCatalogObjectIds.length > 0) {
+      const catalogObjectResponse = await SquareProviderInstance.BatchRetrieveCatalogObjects(squareCatalogObjectIds, false);
+      if (catalogObjectResponse.success) {
+        const foundObjects = catalogObjectResponse.result.objects!;
+        const missingSquareCatalogObjectBatches = Object.values(this.#printerGroups)
+          .filter(x =>
+            GetSquareExternalIds(x.externalIDs).reduce((acc, kv) => acc || foundObjects.findIndex(o => o.id === kv.value) === -1, false))
+          .map(x => ({
+            id: x.id,
+            printerGroup: { externalIDs: x.externalIDs.filter(kv => !kv.key.startsWith(WARIO_SQUARE_ID_METADATA_KEY)) }
+          }))
+        if (missingSquareCatalogObjectBatches.length > 0) {
+          await this.BatchUpdatePrinterGroup(missingSquareCatalogObjectBatches);
+        }
+      }
+    }
     const batches = Object.values(this.#printerGroups)
       .filter(pg => GetSquareIdIndexFromExternalIds(pg.externalIDs, 'CATEGORY') === -1 ||
         GetSquareIdIndexFromExternalIds(pg.externalIDs, 'ITEM') === -1 ||
@@ -267,7 +287,7 @@ export class CatalogProvider implements WProvider {
             modifierType: { externalIDs: x.modifierType.externalIDs.filter(kv => !kv.key.startsWith(WARIO_SQUARE_ID_METADATA_KEY)) }
           }))
         if (missingSquareCatalogObjectBatches.length > 0) {
-          updatedModifierTypeIds.push(...(await this.BatchUpdateModifierType(missingSquareCatalogObjectBatches, true)).filter(x=>x !== null).map(x=>x!.id));
+          updatedModifierTypeIds.push(...(await this.BatchUpdateModifierType(missingSquareCatalogObjectBatches, true, false)).filter(x=>x !== null).map(x=>x!.id));
         }
       }
     }
@@ -278,7 +298,7 @@ export class CatalogProvider implements WProvider {
         GetSquareIdIndexFromExternalIds(x.modifierType.externalIDs, 'MODIFIER_LIST') === -1)
       .map(x => ({ id: x.modifierType.id, modifierType: {} }));
     if (missingSquareIdBatches.length > 0) {
-      updatedModifierTypeIds.push(...(await this.BatchUpdateModifierType(missingSquareIdBatches, true)).filter(x=>x !== null).map(x=>x!.id))
+      updatedModifierTypeIds.push(...(await this.BatchUpdateModifierType(missingSquareIdBatches, true, false)).filter(x=>x !== null).map(x=>x!.id))
     }
     return updatedModifierTypeIds;
   }
@@ -342,6 +362,25 @@ export class CatalogProvider implements WProvider {
     }
   }
 
+  ForceSquareCatalogCompleteUpsert = async () => {
+    const printerGroupUpdates = Object.values(this.#printerGroups).map(pg => ({ id: pg.id, printerGroup: {} }));
+    await this.BatchUpdatePrinterGroup(printerGroupUpdates);
+    const modifierTypeUpdates = Object.values(this.Catalog.modifiers).map(x => ({ id: x.modifierType.id, modifierType: {} }));
+    await this.BatchUpdateModifierType(modifierTypeUpdates, true, true);
+    this.SyncModifierTypes();
+    this.SyncOptions();
+    this.SyncProductInstances();
+    this.SyncProducts();
+    this.RecomputeCatalog();
+
+    await this.UpdateProductsWithConstraint({}, {}, true);
+    this.SyncModifierTypes();
+    this.SyncOptions();
+    this.SyncProductInstances();
+    this.SyncProducts();
+    this.RecomputeCatalog();
+  }
+
   Bootstrap = async () => {
     logger.info(`Starting Bootstrap of CatalogProvider, Loading catalog from database...`);
 
@@ -371,7 +410,11 @@ export class CatalogProvider implements WProvider {
         logger.info(`Going back and updating product instances impacted by earlier CheckAllModifierTypesHaveSquareIdsAndFixIfNeeded call, for ${modifierTypeIdsUpdated.length} modifier types`)
         await this.UpdateProductsReferencingModifierTypeId(modifierTypeIdsUpdated);
       }
-      
+    }
+
+    if (FORCE_SQUARE_CATALOG_REBUILD_ON_LOAD) {
+      logger.info('Forcing Square catalog rebuild on load');
+      await this.ForceSquareCatalogCompleteUpsert();
     }
 
     logger.info(`Finished Bootstrap of CatalogProvider`);
@@ -452,7 +495,7 @@ export class CatalogProvider implements WProvider {
     return (await this.BatchUpdatePrinterGroup([props]))[0];
   };
 
-  DeletePrinterGroup = async (id: string) => {
+  DeletePrinterGroup = async (id: string, reassign: boolean, destinationPgId: string | null) => {
     logger.debug(`Removing Printer Group ${id}`);
     const doc = await PrinterGroupModel.findByIdAndDelete(id).exec();
     if (!doc) {
@@ -464,14 +507,8 @@ export class CatalogProvider implements WProvider {
 
     await this.SyncPrinterGroups();
 
-    const product_printer_group_delete = await WProductModel.updateMany(
-      { "printerGroup": doc.id },
-      { "printerGroup": null }).exec();
-    if (product_printer_group_delete.modifiedCount > 0) {
-      logger.debug(`Removed printer group from ${product_printer_group_delete.modifiedCount} Products.`);
-      await this.SyncProducts();
-      this.RecomputeCatalogAndEmit();
-    }
+    // needs to write batch update product
+    await this.UpdateProductsWithConstraint({ 'printerGroup': id }, { printerGroup: reassign ? destinationPgId : null }, false)
     return doc.toObject();
   }
 
@@ -572,13 +609,29 @@ export class CatalogProvider implements WProvider {
     }
   }
 
+  private UpdateProductsWithConstraint = async (testProduct: FilterQuery<IProduct>, updateProduct: Partial<Pick<IProduct, 'price' | 'modifiers' | 'printerGroup'>>, suppress_catalog_recomputation: boolean) => {
+    // add the modifier to all items that reference this modifier option's modifierTypeId
+    const products = await WProductModel.find(testProduct).exec();
+    const instanceUpdates = (await Promise.all(products.map(async (p) => {
+      const instances = await WProductInstanceModel.find( {productId: p.id }).exec();
+      return instances.map(i=>({ piid: i.id, product: { ...{ price: p.price, modifiers: p.modifiers, printerGroup: p.printerGroup }, ...updateProduct }, productInstance: {} }));
+    }))).flat();
+    if (instanceUpdates.length > 0) {
+      await WProductModel.updateMany(testProduct, updateProduct);
+      if (!suppress_catalog_recomputation) {
+        await this.SyncProducts();  
+      }
+      await this.BatchUpdateProductInstance(instanceUpdates, suppress_catalog_recomputation);
+    }
+  }
+
   /**
    * 
    * @param batches 
    * @param suppressFullRecomputation flag to turn off product instance recomputation and catalog emit. needed for bootstrapping
    * @returns 
    */
-  BatchUpdateModifierType = async (batches: UpdateModifierTypeProps[], suppressFullRecomputation: boolean) => {
+  BatchUpdateModifierType = async (batches: UpdateModifierTypeProps[], suppressFullRecomputation: boolean, forceDeepUpsert: boolean) => {
     const externalIdsToPullFromForSquareCatalogDeletion: KeyValue[] = [];
     const externalIdsToFetchFromSquare: string[] = [];
     const batchData = batches.map((b) => {
@@ -599,7 +652,7 @@ export class CatalogProvider implements WProvider {
       const nameAttributeIsChanging = (updatedModifierType.name !== existingModifierType.name || updatedModifierType.displayName !== existingModifierType.displayName);
       const needsNewNaming = willBeSingleSelect && nameAttributeIsChanging;
       const otsOrSplitAllowingOptions = existingOptions.filter(x => x.metadata.allowOTS || x.metadata.can_split).length > 0;
-      let deepUpdate = false;
+      let deepUpdate = false || forceDeepUpsert;
       let updateModifierOptionsAndProducts = false;
       if (willBeSingleSelect && otsOrSplitAllowingOptions) {
         const errorDetail = 'Unable to transition modifiers to single select as some modifier options have split or OTS enabled.';
@@ -625,10 +678,12 @@ export class CatalogProvider implements WProvider {
           // nuke the IDs from the modifier options we be clobbering
           updatedOptions = updatedOptions.map((x) => ({ ...x, externalIDs: x.externalIDs.filter(x => !x.key.startsWith(WARIO_SQUARE_ID_METADATA_KEY)) }));          
           deepUpdate = true;
-        } else {
-          externalIdsToFetchFromSquare.push(...GetSquareExternalIds([...updatedModifierType.externalIDs, ...updatedOptions.map(x => x.externalIDs).flat()]).map(x => x.value))
-        }
+        } 
         updateModifierOptionsAndProducts = true;
+      }
+      if (updateModifierOptionsAndProducts || deepUpdate) {
+        // because we allow overriding the deepUpdate via forceDeepUpsert, we need to get any relevant external IDs outside of where deepUpdate = true is set above.
+        externalIdsToFetchFromSquare.push(...GetSquareExternalIds([...updatedModifierType.externalIDs, ...updatedOptions.map(x => x.externalIDs).flat()]).map(x => x.value))
       }
       return {
         deepUpdate,
@@ -726,7 +781,7 @@ export class CatalogProvider implements WProvider {
   }
 
   UpdateModifierType = async (props: UpdateModifierTypeProps) => {
-    return (await this.BatchUpdateModifierType([props], false))[0];
+    return (await this.BatchUpdateModifierType([props], false, false))[0];
   };
 
   DeleteModifierType = async (mt_id: string) => {

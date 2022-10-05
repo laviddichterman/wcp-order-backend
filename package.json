@@ -1,6 +1,6 @@
 {
   "name": "@wcp/wcp-order-backend",
-  "version": "0.5.34",
+  "version": "0.5.35",
   "main": "dist/src/server.js",
   "files": [
     "dist",
@@ -75,7 +75,7 @@
     "@types/glob": "^8.0.0",
     "@types/json-bigint": "^1.0.1",
     "@types/lodash": "^4.14.186",
-    "@types/node": "^18.8.0",
+    "@types/node": "^18.8.2",
     "@types/nodemailer": "^6.4.6",
     "@types/qrcode": "^1.5.0",
     "@types/validator": "^13.7.7",
@@ -87,7 +87,7 @@
     "eslint-config-airbnb-base": "^15.0.0",
     "eslint-plugin-import": "^2.26.0",
     "mocha": "^10.0.0",
-    "supertest": "^6.2.4",
+    "supertest": "^6.3.0",
     "ts-node-dev": "^2.0.0",
     "typescript": "^4.8.4"
   },
