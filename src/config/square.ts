@@ -44,6 +44,8 @@ const SquareRequestHandler = async <T>(apiRequestMaker: () => Promise<SquareProv
       if (error instanceof ApiError) {
         return { success: false, result: null, error: error.errors as SquareError[] };
       }
+      const errorDetail = `Got unknown error: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`;
+      logger.error(errorDetail)
       return { success: false, result: null, error: [{ category: "API_ERROR", code: "INTERNAL_SERVER_ERROR", detail: 'Internal Server Error. Please reach out for assistance.' }] };
     }
   }

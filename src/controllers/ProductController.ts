@@ -217,7 +217,8 @@ export class ProductController implements IExpressController {
         product: {
           modifiers: product.modifiers, 
           price: product.price,
-          printerGroup: product.printerGroup
+          printerGroup: product.printerGroup,
+          disabled: product.disabled
         },
         productInstance: {
           description: req.body.description,

@@ -1,7 +1,7 @@
 import { OrderLineItem, Money, OrderLineItemModifier, Order, CatalogObject, CatalogIdMapping, OrderFulfillment, CatalogItemModifierListInfo } from 'square';
 import logger from '../logging';
 import { CatalogProviderInstance } from './catalog_provider';
-import { IMoney, TenderBaseStatus, PRODUCT_LOCATION, IProduct, IProductInstance, KeyValue, ICatalogSelectors, OptionPlacement, OptionQualifier, IOption, IOptionInstance, PrinterGroup, CURRENCY, CoreCartEntry, WProduct, OrderLineDiscount, OrderTax, DiscountMethod, IOptionType, ProductModifierEntry } from '@wcp/wcpshared';
+import { IMoney, TenderBaseStatus, PRODUCT_LOCATION, IProduct, IProductInstance, KeyValue, ICatalogSelectors, OptionPlacement, OptionQualifier, IOption, IOptionInstance, PrinterGroup, CURRENCY, CoreCartEntry, WProduct, OrderLineDiscount, OrderTax, DiscountMethod, IOptionType } from '@wcp/wcpshared';
 import { formatRFC3339 } from 'date-fns';
 import { IS_PRODUCTION } from '../utils';
 
@@ -367,7 +367,7 @@ export const PrinterGroupToSquareCatalogObjectPlusDummyProduct = (locationIds: s
 }
 
 export const ProductInstanceToSquareCatalogObject = (locationIds: string[],
-  product: Pick<IProduct, 'modifiers' | 'price'>,
+  product: Pick<IProduct, 'modifiers' | 'price' | 'disabled'>,
   productInstance: Omit<IProductInstance, 'id' | 'productId'>,
   printerGroup: PrinterGroup | null,
   catalogSelectors: ICatalogSelectors,
@@ -384,6 +384,7 @@ export const ProductInstanceToSquareCatalogObject = (locationIds: string[],
   const versionItem = currentObjects.find(x => x.id === squareItemId)?.version ?? null;
   const squareItemVariationId = GetSquareIdFromExternalIds(productInstance.externalIDs, 'ITEM_VARIATION') ?? `#${batch}_ITEM_VARIATION`;
   const versionItemVariation = currentObjects.find(x => x.id === squareItemVariationId)?.version ?? null;
+  const isBlanketDisabled = product.disabled && product.disabled.start > product.disabled.end;
   let instancePriceWithoutSingleSelectModifiers = product.price.amount;
   const modifierListInfo: CatalogItemModifierListInfo[] = [];
   product.modifiers.forEach(mtspec => {
@@ -457,7 +458,7 @@ export const ProductInstanceToSquareCatalogObject = (locationIds: string[],
         id: squareItemVariationId,
         type: 'ITEM_VARIATION',
         presentAtAllLocations: false,
-        presentAtLocationIds: locationIds,
+        presentAtLocationIds: isBlanketDisabled ? [] : locationIds,
         ...(versionItemVariation !== null ? { version: versionItemVariation } : {}),
         itemVariationData: {
           itemId: squareItemId,

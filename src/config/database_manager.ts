@@ -501,10 +501,15 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
   }],
   "0.5.35": [{ major: 0, minor: 5, patch: 36 }, async () => {
   }],
-  "0.5.36": [{ major: 0, minor: 5, patch: 37 }, async () => {
+  "0.5.36": [{ major: 0, minor: 5, patch: 39 }, async () => {
     CatalogProviderInstance.RequireSquareRebuild = true;
   }],
   "0.5.37": [{ major: 0, minor: 5, patch: 38 }, async () => {
+  }],
+  "0.5.38": [{ major: 0, minor: 5, patch: 39 }, async () => {
+    CatalogProviderInstance.RequireSquareRebuild = true;
+  }],
+  "0.5.39": [{ major: 0, minor: 5, patch: 40 }, async () => {
   }],
 }
 

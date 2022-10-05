@@ -63,7 +63,7 @@ const BatchDeleteCatalogObjectsFromExternalIds = async (externalIds: KeyValue[])
 
 type UpdateProductInstanceProps = {
   piid: string;
-  product: Pick<IProduct, 'price' | 'modifiers' | 'printerGroup'>;
+  product: Pick<IProduct, 'price' | 'modifiers' | 'printerGroup' | 'disabled'>;
   productInstance: Partial<Omit<IProductInstance, 'id' | 'productId'>>;
 };
 
@@ -344,7 +344,7 @@ export class CatalogProvider implements WProvider {
         const missingSquareCatalogObjectBatches = Object.values(this.#catalog.products)
           .map(p => p.instances
             .filter(x => GetSquareExternalIds(this.#catalog.productInstances[x]!.externalIDs).reduce((acc, kv) => acc || foundObjects.findIndex(o => o.id === kv.value) === -1, false))
-            .map(piid => ({ piid, product: { modifiers: p.product.modifiers, price: p.product.price, printerGroup: p.product.printerGroup }, productInstance: { externalIDs: this.#catalog.productInstances[piid]!.externalIDs.filter(kv => !kv.key.startsWith(WARIO_SQUARE_ID_METADATA_KEY)) } })))
+            .map(piid => ({ piid, product: { modifiers: p.product.modifiers, price: p.product.price, printerGroup: p.product.printerGroup, disabled: p.product.disabled }, productInstance: { externalIDs: this.#catalog.productInstances[piid]!.externalIDs.filter(kv => !kv.key.startsWith(WARIO_SQUARE_ID_METADATA_KEY)) } })))
           .flat();
         if (missingSquareCatalogObjectBatches.length > 0) {
           await this.BatchUpdateProductInstance(missingSquareCatalogObjectBatches, true);
@@ -357,7 +357,7 @@ export class CatalogProvider implements WProvider {
     const batches = Object.values(this.#catalog.products)
       .map(p => p.instances
         .filter(piid => GetSquareIdIndexFromExternalIds(this.#catalog.productInstances[piid]!.externalIDs, "ITEM") === -1)
-        .map(piid => ({ piid, product: { modifiers: p.product.modifiers, price: p.product.price, printerGroup: p.product.printerGroup }, productInstance: {} })))
+        .map(piid => ({ piid, product: { modifiers: p.product.modifiers, price: p.product.price, printerGroup: p.product.printerGroup, disabled: p.product.disabled }, productInstance: {} })))
       .flat();
     if (batches.length > 0) {
       await this.BatchUpdateProductInstance(batches, true);
@@ -604,7 +604,7 @@ export class CatalogProvider implements WProvider {
       .filter(p => p.product.modifiers.findIndex(x => modifierTypeIds.findIndex(y => y === x.mtid) !== -1) !== -1)
       .map((p) => p.instances.map(piid => ({
         piid,
-        product: { modifiers: p.product.modifiers, price: p.product.price, printerGroup: p.product.printerGroup },
+        product: { modifiers: p.product.modifiers, price: p.product.price, printerGroup: p.product.printerGroup, disabled: p.product.disabled },
         productInstance: {}
       }))).flat();
     if (productUpdates.length > 0) {
@@ -618,7 +618,7 @@ export class CatalogProvider implements WProvider {
     const products = await WProductModel.find(testProduct).exec();
     const instanceUpdates = (await Promise.all(products.map(async (p) => {
       const instances = await WProductInstanceModel.find({ productId: p.id }).exec();
-      return instances.map(i => ({ piid: i.id, product: { ...{ price: p.price, modifiers: p.modifiers, printerGroup: p.printerGroup }, ...updateProduct }, productInstance: {} }));
+      return instances.map(i => ({ piid: i.id, product: { ...{ price: p.price, modifiers: p.modifiers, printerGroup: p.printerGroup, disabled: p.disabled }, ...updateProduct }, productInstance: {} }));
     }))).flat();
     if (instanceUpdates.length > 0) {
       await WProductModel.updateMany(testProduct, updateProduct);
@@ -1085,11 +1085,12 @@ export class CatalogProvider implements WProvider {
     const batchProductInstanceUpdates = oldProductEntry.instances
       .map((piId) => this.Catalog.productInstances[piId]!)
       .filter(pi => adjustedPrice !== null ||
+        adjustedPrinterGroup ||
         addedModifierTypes ||
         pi.modifiers.filter(mod => removedModifierTypes.includes(mod.modifierTypeId)).length > 0)
       .map((pi) => ({
         piid: pi.id,
-        product: { modifiers: updated.modifiers, price: updated.price, printerGroup: updated.printerGroup },
+        product: { modifiers: updated.modifiers, price: updated.price, printerGroup: updated.printerGroup, disabled: updated.disabled },
         productInstance: {
           modifiers: pi.modifiers.filter(x => !removedModifierTypes.includes(x.modifierTypeId))
         }
