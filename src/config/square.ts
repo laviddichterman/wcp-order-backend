@@ -1,4 +1,4 @@
-import { Error as SquareError, Client, CreateOrderRequest, CreateOrderResponse, CreatePaymentRequest, Environment, UpdateOrderRequest, OrderLineItem, Money, ApiError, UpdateOrderResponse, PaymentRefund, RefundPaymentRequest, PayOrderRequest, PayOrderResponse, Payment, OrderLineItemModifier, RetrieveOrderResponse, Order, UpsertCatalogObjectRequest, BatchUpsertCatalogObjectsRequest, CatalogObjectBatch, CatalogObject, BatchUpsertCatalogObjectsResponse, UpsertCatalogObjectResponse, BatchDeleteCatalogObjectsRequest, BatchDeleteCatalogObjectsResponse, BatchRetrieveCatalogObjectsRequest, BatchRetrieveCatalogObjectsResponse } from 'square';
+import { Error as SquareError, Client, CreateOrderRequest, CreateOrderResponse, CreatePaymentRequest, Environment, UpdateOrderRequest, OrderLineItem, Money, ApiError, UpdateOrderResponse, PaymentRefund, RefundPaymentRequest, PayOrderRequest, PayOrderResponse, Payment, OrderLineItemModifier, RetrieveOrderResponse, Order, UpsertCatalogObjectRequest, BatchUpsertCatalogObjectsRequest, CatalogObjectBatch, CatalogObject, BatchUpsertCatalogObjectsResponse, UpsertCatalogObjectResponse, BatchDeleteCatalogObjectsRequest, BatchDeleteCatalogObjectsResponse, BatchRetrieveCatalogObjectsRequest, BatchRetrieveCatalogObjectsResponse, CatalogInfoResponse, CatalogInfoResponseLimits } from 'square';
 import { WProvider } from '../types/WProvider';
 import crypto from 'crypto';
 import logger from '../logging';
@@ -54,10 +54,11 @@ const SquareRequestHandler = async <T>(apiRequestMaker: () => Promise<SquareProv
 
 export class SquareProvider implements WProvider {
   #client: Client;
+  #catalogLimits: CatalogInfoResponseLimits;
   constructor() {
   }
 
-  Bootstrap = () => {
+  Bootstrap = async () => {
     logger.info(`Starting Bootstrap of SquareProvider`);
     if (DataProviderInstance.KeyValueConfig.SQUARE_TOKEN) {
       this.#client = new Client({
@@ -72,10 +73,28 @@ export class SquareProvider implements WProvider {
       });
     }
     else {
-      logger.error("Can't Bootstrap SQUARE Provider");
+      logger.error("Can't Bootstrap SQUARE Provider, failed creating client");
       return;
     }
+    const catalogInfoLimitsResponse = await this.GetCatalogInfo();
+    if (catalogInfoLimitsResponse.success) {
+      this.#catalogLimits = catalogInfoLimitsResponse.result;
+    } else {
+      logger.error("Can't Bootstrap SQUARE Provider, failed querying catalog limits");
+      return;
+    }
+
     logger.info(`Finished Bootstrap of SquareProvider`);
+  }
+
+  GetCatalogInfo = async (): Promise<SquareProviderApiCallReturnValue<CatalogInfoResponseLimits>> => {
+    const api = this.#client.catalogApi;
+    const call_fxn = async (): Promise<SquareProviderApiCallReturnSuccess<CatalogInfoResponseLimits>> => {
+      logger.info('sending Catalog Info request to Square API');
+      const { result, ...httpResponse } = await api.catalogInfo();
+      return { success: true, result: result.limits!, error: [] };
+    }
+    return await SquareRequestHandler(call_fxn);
   }
 
   CreateOrder = async (order: Order): Promise<SquareProviderApiCallReturnValue<CreateOrderResponse>> => {
@@ -87,16 +106,10 @@ export class SquareProvider implements WProvider {
       order: order
     };
     const call_fxn = async (): Promise<SquareProviderApiCallReturnSuccess<CreateOrderResponse>> => {
-      try {
-        logger.info(`sending order request: ${JSON.stringify(request_body)}`);
-        const { result, ...httpResponse } = await orders_api.createOrder(request_body);
-        return { success: true, result: result, error: [] };
-      } catch (err: any) {
-        logger.error(`Failed order request with ${JSON.stringify(err)}`);
-        throw err;
-      }
+      logger.info(`sending order request: ${JSON.stringify(request_body)}`);
+      const { result, ...httpResponse } = await orders_api.createOrder(request_body);
+      return { success: true, result: result, error: [] };
     }
-    //return await call_fxn();
     return await SquareRequestHandler(call_fxn);
   }
 
@@ -308,6 +321,7 @@ export class SquareProvider implements WProvider {
   }
 
   BatchUpsertCatalogObjects = async (objectBatches: CatalogObjectBatch[]) => {
+    // this.#catalogLimits.batchUpsertMaxTotalObjects and this.#catalogLimits.batchUpsertMaxObjectsPerBatch
     const idempotency_key = crypto.randomBytes(22).toString('hex');
     const catalogApi = this.#client.catalogApi;
     const request_body: BatchUpsertCatalogObjectsRequest = {
@@ -338,6 +352,7 @@ export class SquareProvider implements WProvider {
   }
 
   BatchRetrieveCatalogObjects = async (objectIds: string[], includeRelated: boolean) => {
+    // TODO: consume this.#catalogLimits.batchRetrieveMaxObjectIds
     const catalogApi = this.#client.catalogApi;
     const request_body: BatchRetrieveCatalogObjectsRequest = {
       objectIds,
