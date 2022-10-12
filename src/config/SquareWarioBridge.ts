@@ -459,7 +459,7 @@ export const ProductInstanceToSquareCatalogObject = (locationIds: string[],
       name: productInstance.displayName,
       productType: "REGULAR",
       taxIds: [SQUARE_TAX_RATE_CATALOG_ID],
-      skipModifierScreen: productInstance.displayFlags.order.skip_customization,
+      skipModifierScreen: product.modifiers.length === 0 || productInstance.displayFlags.order.skip_customization,
       modifierListInfo,
       variations: [{
         id: squareItemVariationId,
