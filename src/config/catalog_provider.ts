@@ -93,19 +93,13 @@ export class CatalogProvider implements WProvider {
   #catalog: ICatalog;
   #apiver: SEMVER;
   #requireSquareRebuild: boolean;
-  #squareCatalogIdsToDelete: string[];
   constructor() {
     this.#apiver = { major: 0, minor: 0, patch: 0 };
     this.#requireSquareRebuild = FORCE_SQUARE_CATALOG_REBUILD_ON_LOAD;
-    this.#squareCatalogIdsToDelete = [];
   }
 
   set RequireSquareRebuild(value: boolean) {
     this.#requireSquareRebuild = value;
-  }
-
-  set SquareCatalogIdsToDeleteOnLoad(value: string[]) {
-    this.#squareCatalogIdsToDelete = value.slice();
   }
 
   get PrinterGroups() {
@@ -384,75 +378,11 @@ export class CatalogProvider implements WProvider {
     this.RecomputeCatalog();
   }
 
-  private ObliterateItemsInSquareCatalog = async () => {
-    // get all items in the Slices category and delete them
-    const foundItems: string[] = [];
-    let cursor: string | undefined;
-    let response;
-    do {
-      response = await SquareProviderInstance.SearchCatalogItems({
-        // enabledLocationIds: [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION],
-        // categoryIds: ['PKUWESSO3UPXCJHSITZMMHAM'],
-        // categoryIds: ['N5QMDVHPD5QAR4V35BVBC2CL'] // sandbox
-        ...(cursor ? { cursor } : {})
-      });
-      if (!response.success) {
-        return;
-      }
-      foundItems.push(...(response.result.items ?? []).map(x => x.id));
-      // foundItems.push(...(response.result.items ?? []).filter(x => !x.itemData?.categoryId).map(x => x.id));
-      cursor = response.result.cursor ?? undefined;
-    }
-    while (cursor);
-    logger.info(`Deleting the following items: ${foundItems.join(", ")}`);
-    await SquareProviderInstance.BatchDeleteCatalogObjects(foundItems);
-  }
-
-  private ObliterateModifiersInSquareCatalog = async () => {
-    const foundItems: string[] = [];
-    let cursor: string | undefined;
-    let response;
-    do {
-      response = await SquareProviderInstance.ListCatalogObjects(['MODIFIER_LIST'], cursor);
-      if (!response.success) {
-        return;
-      }
-      foundItems.push(...(response.result.objects ?? []).filter(x => x.presentAtLocationIds?.includes(DataProviderInstance.KeyValueConfig.SQUARE_LOCATION)).map(x => x.id));
-      cursor = response.result.cursor ?? undefined;
-    }
-    while (cursor);
-    logger.info(`Deleting the following object IDs: ${foundItems.join(", ")}`);
-    await SquareProviderInstance.BatchDeleteCatalogObjects(foundItems);
-  }
-
-  private ObliterateCategoriesInSquareCatalog = async () => {
-    const foundItems: string[] = [];
-    let cursor: string | undefined;
-    let response;
-    do {
-      response = await SquareProviderInstance.ListCatalogObjects(['CATEGORY'], cursor);
-      if (!response.success) {
-        return;
-      }
-      foundItems.push(...(response.result.objects ?? []).map(x => x.id));
-      cursor = response.result.cursor ?? undefined;
-    }
-    while (cursor);
-    logger.info(`Deleting the following object IDs: ${foundItems.join(", ")}`);
-    await SquareProviderInstance.BatchDeleteCatalogObjects(foundItems);
-  }
-
   Bootstrap = async () => {
     logger.info(`Starting Bootstrap of CatalogProvider, Loading catalog from database...`);
 
     const newVer = await DBVersionModel.findOne().exec()!;
     this.#apiver = newVer!;
-
-    if (this.#squareCatalogIdsToDelete.length > 0) {
-      logger.warn('Migration requested square catalog object deletion.')
-      await SquareProviderInstance.BatchDeleteCatalogObjects(this.#squareCatalogIdsToDelete);
-      this.#squareCatalogIdsToDelete = [];
-    }
 
     await Promise.all([
       this.SyncPrinterGroups(),
@@ -465,15 +395,6 @@ export class CatalogProvider implements WProvider {
       this.SyncOrderInstanceFunctions()]);
 
     this.RecomputeCatalog();
-
-    // await this.ObliterateCategoriesInSquareCatalog();
-    // await this.ObliterateItemsInSquareCatalog();
-    // await this.ObliterateModifiersInSquareCatalog();
-    // await this.SyncModifierTypes();
-    // await this.SyncOptions();
-    // await this.SyncProducts();
-    // await this.SyncProductInstances();
-    // throw "WE DONE";
 
     if (SUPPRESS_SQUARE_SYNC) {
       logger.warn("Suppressing Square Catalog Sync at launch. Catalog skew may result.")

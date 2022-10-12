@@ -17,6 +17,8 @@ import { exit } from 'process';
 import { WOrderInstanceModel } from '../models/orders/WOrderInstance';
 import { parseISO } from 'date-fns';
 import { CatalogProviderInstance } from './catalog_provider';
+import { WARIO_SQUARE_ID_METADATA_KEY } from './SquareWarioBridge';
+import { SquareProviderInstance } from './square';
 
 const SetVersion = async (new_version: SEMVER) => {
   return await DBVersionModel.findOneAndUpdate({}, new_version, { new: true, upsert: true });
@@ -514,6 +516,14 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
   "0.5.40": [{ major: 0, minor: 5, patch: 41 }, async () => {
   }],
   "0.5.41": [{ major: 0, minor: 5, patch: 42 }, async () => {
+  }],
+  "0.5.42": [{ major: 0, minor: 5, patch: 43 }, async () => {
+    const allOptionsUpdate = await WOptionModelActual.updateMany({}, { $pull: { 'externalIDs': {key: {$regex: `^${WARIO_SQUARE_ID_METADATA_KEY}.*` } } } })
+    logger.info(`Updated options: ${JSON.stringify(allOptionsUpdate)}`);
+    const allModifierTypeUpdate = await WOptionTypeModelActual.updateMany({}, { $pull: { 'externalIDs': {key: {$regex: `^${WARIO_SQUARE_ID_METADATA_KEY}.*` } } } })
+    logger.info(`Updated modifier types: ${JSON.stringify(allModifierTypeUpdate)}`);
+    SquareProviderInstance.ObliterateModifiersOnLoad = true;
+    CatalogProviderInstance.RequireSquareRebuild = true;
   }],
 }
 

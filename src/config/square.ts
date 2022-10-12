@@ -85,8 +85,20 @@ const SQUARE_RETRY_CONFIG: RetryConfiguration = {
 export class SquareProvider implements WProvider {
   #client: Client;
   #catalogLimits: Required<CatalogInfoResponseLimits>;
+  #catalogIdsToDelete: string[];
+  #obliterateModifiersOnLoad: boolean;
   constructor() {
     this.#catalogLimits = DEFAULT_LIMITS;
+    this.#catalogIdsToDelete = [];
+    this.#obliterateModifiersOnLoad = false;
+  }
+  
+  set CatalogIdsToDeleteOnLoad(value: string[]) {
+    this.#catalogIdsToDelete = value.slice();
+  }
+
+  set ObliterateModifiersOnLoad(value: boolean) {
+    this.#obliterateModifiersOnLoad = value;
   }
 
   Bootstrap = async () => {
@@ -115,7 +127,77 @@ export class SquareProvider implements WProvider {
       return;
     }
 
+    if (this.#catalogIdsToDelete.length > 0) {
+      logger.info('Migration requested square catalog object deletion.')
+      await this.BatchDeleteCatalogObjects(this.#catalogIdsToDelete);
+      this.#catalogIdsToDelete = [];
+    }
+
+    if (this.#obliterateModifiersOnLoad) {
+      logger.info('Obliterating modifiers for this location on load');
+      await this.ObliterateModifiersInSquareCatalog();
+    }
+
     logger.info(`Finished Bootstrap of SquareProvider`);
+  }
+
+
+  private ObliterateItemsInSquareCatalog = async () => {
+    // get all items in the Slices category and delete them
+    const foundItems: string[] = [];
+    let cursor: string | undefined;
+    let response;
+    do {
+      response = await this.SearchCatalogItems({
+        enabledLocationIds: [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION],
+        // categoryIds: ['PKUWESSO3UPXCJHSITZMMHAM'],
+        // categoryIds: ['N5QMDVHPD5QAR4V35BVBC2CL'] // sandbox
+        ...(cursor ? { cursor } : {})
+      });
+      if (!response.success) {
+        return;
+      }
+      foundItems.push(...(response.result.items ?? []).map(x => x.id));
+      // foundItems.push(...(response.result.items ?? []).filter(x => !x.itemData?.categoryId).map(x => x.id));
+      cursor = response.result.cursor ?? undefined;
+    }
+    while (cursor);
+    logger.info(`Deleting the following items: ${foundItems.join(", ")}`);
+    await this.BatchDeleteCatalogObjects(foundItems);
+  }
+
+  private ObliterateModifiersInSquareCatalog = async () => {
+    const foundItems: string[] = [];
+    let cursor: string | undefined;
+    let response;
+    do {
+      response = await this.ListCatalogObjects(['MODIFIER_LIST'], cursor);
+      if (!response.success) {
+        return;
+      }
+      foundItems.push(...(response.result.objects ?? []).filter(x => x.presentAtLocationIds?.includes(DataProviderInstance.KeyValueConfig.SQUARE_LOCATION)).map(x => x.id));
+      cursor = response.result.cursor ?? undefined;
+    }
+    while (cursor);
+    logger.info(`Deleting the following object Modifier List IDs: ${foundItems.join(", ")}`);
+    await this.BatchDeleteCatalogObjects(foundItems);
+  }
+
+  private ObliterateCategoriesInSquareCatalog = async () => {
+    const foundItems: string[] = [];
+    let cursor: string | undefined;
+    let response;
+    do {
+      response = await this.ListCatalogObjects(['CATEGORY'], cursor);
+      if (!response.success) {
+        return;
+      }
+      foundItems.push(...(response.result.objects ?? []).map(x => x.id));
+      cursor = response.result.cursor ?? undefined;
+    }
+    while (cursor);
+    logger.info(`Deleting the following Category object IDs: ${foundItems.join(", ")}`);
+    await this.BatchDeleteCatalogObjects(foundItems);
   }
 
   GetCatalogInfo = async (): Promise<SquareProviderApiCallReturnValue<CatalogInfoResponseLimits>> => {
