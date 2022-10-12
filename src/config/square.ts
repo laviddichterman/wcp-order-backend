@@ -1,4 +1,4 @@
-import { Error as SquareError, Client, CreateOrderRequest, CreateOrderResponse, CreatePaymentRequest, Environment, UpdateOrderRequest, ApiError, UpdateOrderResponse, PaymentRefund, RefundPaymentRequest, PayOrderRequest, PayOrderResponse, Payment, RetrieveOrderResponse, Order, UpsertCatalogObjectRequest, BatchUpsertCatalogObjectsRequest, CatalogObjectBatch, CatalogObject, BatchUpsertCatalogObjectsResponse, UpsertCatalogObjectResponse, BatchDeleteCatalogObjectsRequest, BatchDeleteCatalogObjectsResponse, BatchRetrieveCatalogObjectsRequest, BatchRetrieveCatalogObjectsResponse, CatalogInfoResponseLimits, SearchCatalogItemsRequest, SearchCatalogItemsResponse, SearchCatalogObjectsRequest, SearchCatalogObjectsResponse, ListCatalogResponse } from 'square';
+import { Error as SquareError, Client, CreateOrderRequest, CreateOrderResponse, CreatePaymentRequest, Environment, UpdateOrderRequest, ApiError, UpdateOrderResponse, PaymentRefund, RefundPaymentRequest, PayOrderRequest, PayOrderResponse, Payment, RetrieveOrderResponse, Order, UpsertCatalogObjectRequest, BatchUpsertCatalogObjectsRequest, CatalogObjectBatch, CatalogObject, BatchUpsertCatalogObjectsResponse, UpsertCatalogObjectResponse, BatchDeleteCatalogObjectsRequest, BatchDeleteCatalogObjectsResponse, BatchRetrieveCatalogObjectsRequest, BatchRetrieveCatalogObjectsResponse, CatalogInfoResponseLimits, SearchCatalogItemsRequest, SearchCatalogItemsResponse, SearchCatalogObjectsRequest, SearchCatalogObjectsResponse, ListCatalogResponse, SearchOrdersResponse, SearchOrdersRequest, SearchOrdersQuery } from 'square';
 import { WProvider } from '../types/WProvider';
 import crypto from 'crypto';
 import logger from '../logging';
@@ -178,6 +178,21 @@ export class SquareProvider implements WProvider {
     }
     return await SquareRequestHandler(callFxn);
   }
+
+  SearchOrders = async (locationIds: string[], query: SearchOrdersQuery) => {
+    const orders_api = this.#client.ordersApi;
+    const request_body: SearchOrdersRequest = {
+      query,
+      locationIds
+    };
+    const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<SearchOrdersResponse>> => {
+      logger.info(`Searching Square Orders with: ${request_body}`);
+      const { result, ...httpResponse } = await orders_api.searchOrders(request_body);
+      return { success: true, result: result, error: [] };
+    }
+    return await SquareRequestHandler(callFxn);
+  }
+
 
   CreatePayment = async ({
     locationId,
