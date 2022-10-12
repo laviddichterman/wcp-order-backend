@@ -34,7 +34,7 @@ import logger from '../logging';
 import { chunk } from 'lodash';
 import { WProvider } from "../types/WProvider";
 import { SquareProviderInstance, SQUARE_BATCH_CHUNK_SIZE } from "./square";
-import { GetSquareExternalIds, GetSquareIdIndexFromExternalIds, IdMappingsToExternalIds, ModifierOptionToSquareCatalogObject, PrinterGroupToSquareCatalogObjectPlusDummyProduct, ProductInstanceToSquareCatalogObject, SingleSelectModifierTypeToSquareCatalogObject, WARIO_SQUARE_ID_METADATA_KEY } from "./SquareWarioBridge";
+import { GetSquareExternalIds, GetSquareIdIndexFromExternalIds, IdMappingsToExternalIds, ModifierTypeToSquareCatalogObject, PrinterGroupToSquareCatalogObjectPlusDummyProduct, ProductInstanceToSquareCatalogObject, WARIO_SQUARE_ID_METADATA_KEY } from "./SquareWarioBridge";
 import { CatalogIdMapping, CatalogObject } from "square";
 import { FilterQuery } from "mongoose";
 
@@ -51,10 +51,8 @@ const ValidateProductModifiersFunctionsCategories = function (modifiers: { mtid:
 
 const BatchDeleteCatalogObjectsFromExternalIds = async (externalIds: KeyValue[]) => {
   const squareKV = externalIds.filter(x => x.key.startsWith(WARIO_SQUARE_ID_METADATA_KEY));
-  const squareKeys = squareKV.map(x => x.key.substring(WARIO_SQUARE_ID_METADATA_KEY.length));
-  const squareValues = squareKV.map(x => x.value);
   if (squareKV.length > 0) {
-    logger.debug(`Removing ${squareKeys.join(", ")} from Square: ${squareValues.join(", ")}`);
+    logger.debug(`Removing from square... ${squareKV.map(x => `${x.key}: ${x.value}`).join(", ")}`);
     return await SquareProviderInstance.BatchDeleteCatalogObjects(squareKV.map(x => x.value));
   }
   return true;
@@ -95,13 +93,19 @@ export class CatalogProvider implements WProvider {
   #catalog: ICatalog;
   #apiver: SEMVER;
   #requireSquareRebuild: boolean;
+  #squareCatalogIdsToDelete: string[];
   constructor() {
     this.#apiver = { major: 0, minor: 0, patch: 0 };
     this.#requireSquareRebuild = FORCE_SQUARE_CATALOG_REBUILD_ON_LOAD;
+    this.#squareCatalogIdsToDelete = [];
   }
 
   set RequireSquareRebuild(value: boolean) {
     this.#requireSquareRebuild = value;
+  }
+
+  set SquareCatalogIdsToDeleteOnLoad(value: string[]) {
+    this.#squareCatalogIdsToDelete = value.slice();
   }
 
   get PrinterGroups() {
@@ -254,13 +258,17 @@ export class CatalogProvider implements WProvider {
       const catalogObjectResponse = await SquareProviderInstance.BatchRetrieveCatalogObjects(squareCatalogObjectIds, false);
       if (catalogObjectResponse.success) {
         const foundObjects = catalogObjectResponse.result.objects!;
-        const missingSquareCatalogObjectBatches = Object.values(this.#printerGroups)
-          .filter(x =>
-            GetSquareExternalIds(x.externalIDs).reduce((acc, kv) => acc || foundObjects.findIndex(o => o.id === kv.value) === -1, false))
-          .map(x => ({
-            id: x.id,
-            printerGroup: { externalIDs: x.externalIDs.filter(kv => !kv.key.startsWith(WARIO_SQUARE_ID_METADATA_KEY)) }
-          }))
+        const missingSquareCatalogObjectBatches: UpdatePrinterGroupProps[] = [];
+        Object.values(this.#printerGroups)
+          .forEach(x => {
+            const missingIDs = GetSquareExternalIds(x.externalIDs).filter(kv => foundObjects.findIndex(o => o.id === kv.value) === -1);
+            if (missingIDs.length > 0) {
+              missingSquareCatalogObjectBatches.push({
+                id: x.id,
+                printerGroup: { externalIDs: x.externalIDs.filter(kv => missingIDs.findIndex(idKV => idKV.value === kv.value) === -1) }
+              });
+            }
+          });
         if (missingSquareCatalogObjectBatches.length > 0) {
           await this.BatchUpdatePrinterGroup(missingSquareCatalogObjectBatches);
         }
@@ -282,55 +290,47 @@ export class CatalogProvider implements WProvider {
       const catalogObjectResponse = await SquareProviderInstance.BatchRetrieveCatalogObjects(squareCatalogObjectIds, false);
       if (catalogObjectResponse.success) {
         const foundObjects = catalogObjectResponse.result.objects!;
-        const missingSquareCatalogObjectBatches = Object.values(this.Catalog.modifiers)
+        const missingSquareCatalogObjectBatches: UpdateModifierTypeProps[] = [];
+        const optionUpdates: { id: string; externalIDs: KeyValue[]; }[] = [];
+        Object.values(this.Catalog.modifiers)
           .filter(x =>
-            x.modifierType.max_selected === 1 &&
             GetSquareExternalIds(x.modifierType.externalIDs).reduce((acc, kv) => acc || foundObjects.findIndex(o => o.id === kv.value) === -1, false))
-          .map(x => ({
-            id: x.modifierType.id,
-            modifierType: { externalIDs: x.modifierType.externalIDs.filter(kv => !kv.key.startsWith(WARIO_SQUARE_ID_METADATA_KEY)) }
-          }))
+          .forEach((x) => {
+            missingSquareCatalogObjectBatches.push({
+              id: x.modifierType.id,
+              modifierType: { externalIDs: x.modifierType.externalIDs.filter(kv => !kv.key.startsWith(WARIO_SQUARE_ID_METADATA_KEY)) }
+            });
+            logger.info(`Pruning square catalog IDs from options: ${x.options.join(", ")}`);
+            optionUpdates.push(...x.options.map(oId => ({ id: oId, externalIDs: this.Catalog.options[oId]!.externalIDs.filter(kv => !kv.key.startsWith(WARIO_SQUARE_ID_METADATA_KEY)) })))
+          });
         if (missingSquareCatalogObjectBatches.length > 0) {
-          updatedModifierTypeIds.push(...(await this.BatchUpdateModifierType(missingSquareCatalogObjectBatches, true, false)).filter(x => x !== null).map(x => x!.id));
+          // logger.info(`DEBUG PRINTING: ${JSON.stringify(missingSquareCatalogObjectBatches)}`);
+          // @ts-ignore
+          const bulkWriteResult = await WOptionModel.bulkWrite(optionUpdates.map(o => ({
+            updateOne: {
+              filter: { _id: o.id },
+              update: { externalIDs: o.externalIDs },
+              upsert: true
+            }
+          })));
+          logger.info(`Bulk upsert of WOptionModel successful: ${JSON.stringify(bulkWriteResult)}`);
+          await this.SyncOptions();
+          this.RecomputeCatalog();
+          const updated = await this.BatchUpdateModifierType(missingSquareCatalogObjectBatches, true, false);
+          updatedModifierTypeIds.push(...updated.filter(x => x !== null).map(x => x!.id));
+          this.RecomputeCatalog();
         }
       }
     }
     const missingSquareIdBatches = Object.values(this.Catalog.modifiers)
       .filter(x =>
-        x.modifierType.max_selected === 1 &&
-        GetSquareIdIndexFromExternalIds(x.modifierType.externalIDs, 'MODIFIER_LIST') === -1)
+        GetSquareIdIndexFromExternalIds(x.modifierType.externalIDs, 'MODIFIER_LIST') === -1 ||
+        x.options.reduce((acc, oId) => acc || GetSquareIdIndexFromExternalIds(this.Catalog.options[oId]!.externalIDs, 'MODIFIER_WHOLE') === -1, false))
       .map(x => ({ id: x.modifierType.id, modifierType: {} }));
     if (missingSquareIdBatches.length > 0) {
       updatedModifierTypeIds.push(...(await this.BatchUpdateModifierType(missingSquareIdBatches, true, false)).filter(x => x !== null).map(x => x!.id))
     }
     return updatedModifierTypeIds;
-  }
-
-  private CheckAllModifierOptionsHaveSquareIdsAndFixIfNeeded = async () => {
-    const squareCatalogObjectIds = this.#options
-      .map(opt => GetSquareExternalIds(opt.externalIDs).map(x => x.value)).flat();
-    if (squareCatalogObjectIds.length > 0) {
-      const catalogObjectResponse = await SquareProviderInstance.BatchRetrieveCatalogObjects(squareCatalogObjectIds, false);
-      if (catalogObjectResponse.success) {
-        const foundObjects = catalogObjectResponse.result.objects!;
-        const missingSquareCatalogObjectBatches = this.#options
-          .filter(x => GetSquareExternalIds(x.externalIDs).reduce((acc, kv) => acc || foundObjects.findIndex(o => o.id === kv.value) === -1, false))
-          .map(x => ({ id: x.id, modifierTypeId: x.modifierTypeId, modifierOption: { externalIDs: x.externalIDs.filter(kv => !kv.key.startsWith(WARIO_SQUARE_ID_METADATA_KEY)) } }))
-        if (missingSquareCatalogObjectBatches.length > 0) {
-          await this.BatchUpdateModifierOption(missingSquareCatalogObjectBatches, true);
-          await this.SyncOptions();
-          this.RecomputeCatalog();
-        }
-      }
-    }
-    const missingSquareIdBatches = this.#options
-      .filter(opt => GetSquareIdIndexFromExternalIds(opt.externalIDs, 'MODIFIER_WHOLE') === -1)
-      .map(opt => ({ id: opt.id, modifierTypeId: opt.modifierTypeId, modifierOption: {} }));
-    if (missingSquareIdBatches.length > 0) {
-      await this.BatchUpdateModifierOption(missingSquareIdBatches, true);
-      await this.SyncOptions();
-      this.RecomputeCatalog();
-    }
   }
 
   CheckAllProductsHaveSquareIdsAndFixIfNeeded = async () => {
@@ -384,23 +384,62 @@ export class CatalogProvider implements WProvider {
     this.RecomputeCatalog();
   }
 
-  DoSomethingAsAOneOff = async () => {
+  private ObliterateItemsInSquareCatalog = async () => {
     // get all items in the Slices category and delete them
     const foundItems: string[] = [];
-    let cursor : string | undefined;
+    let cursor: string | undefined;
     let response;
     do {
-      // response = await SquareProviderInstance.SearchCatalogItems({ categoryIds: ['N5QMDVHPD5QAR4V35BVBC2CL' 'PKUWESSO3UPXCJHSITZMMHAM'] });
-      response = await SquareProviderInstance.SearchCatalogItems({ categoryIds: ['N5QMDVHPD5QAR4V35BVBC2CL'] });
+      response = await SquareProviderInstance.SearchCatalogItems({
+        // enabledLocationIds: [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION],
+        // categoryIds: ['PKUWESSO3UPXCJHSITZMMHAM'],
+        // categoryIds: ['N5QMDVHPD5QAR4V35BVBC2CL'] // sandbox
+        ...(cursor ? { cursor } : {})
+      });
       if (!response.success) {
         return;
       }
-      foundItems.push(...(response.result.items ?? []).map(x=>x.id));
+      foundItems.push(...(response.result.items ?? []).map(x => x.id));
+      // foundItems.push(...(response.result.items ?? []).filter(x => !x.itemData?.categoryId).map(x => x.id));
       cursor = response.result.cursor ?? undefined;
     }
     while (cursor);
     logger.info(`Deleting the following items: ${foundItems.join(", ")}`);
-    //await SquareProviderInstance.BatchDeleteCatalogObjects(foundItems);
+    await SquareProviderInstance.BatchDeleteCatalogObjects(foundItems);
+  }
+
+  private ObliterateModifiersInSquareCatalog = async () => {
+    const foundItems: string[] = [];
+    let cursor: string | undefined;
+    let response;
+    do {
+      response = await SquareProviderInstance.ListCatalogObjects(['MODIFIER_LIST'], cursor);
+      if (!response.success) {
+        return;
+      }
+      foundItems.push(...(response.result.objects ?? []).filter(x => x.presentAtLocationIds?.includes(DataProviderInstance.KeyValueConfig.SQUARE_LOCATION)).map(x => x.id));
+      cursor = response.result.cursor ?? undefined;
+    }
+    while (cursor);
+    logger.info(`Deleting the following object IDs: ${foundItems.join(", ")}`);
+    await SquareProviderInstance.BatchDeleteCatalogObjects(foundItems);
+  }
+
+  private ObliterateCategoriesInSquareCatalog = async () => {
+    const foundItems: string[] = [];
+    let cursor: string | undefined;
+    let response;
+    do {
+      response = await SquareProviderInstance.ListCatalogObjects(['CATEGORY'], cursor);
+      if (!response.success) {
+        return;
+      }
+      foundItems.push(...(response.result.objects ?? []).map(x => x.id));
+      cursor = response.result.cursor ?? undefined;
+    }
+    while (cursor);
+    logger.info(`Deleting the following object IDs: ${foundItems.join(", ")}`);
+    await SquareProviderInstance.BatchDeleteCatalogObjects(foundItems);
   }
 
   Bootstrap = async () => {
@@ -408,6 +447,12 @@ export class CatalogProvider implements WProvider {
 
     const newVer = await DBVersionModel.findOne().exec()!;
     this.#apiver = newVer!;
+
+    if (this.#squareCatalogIdsToDelete.length > 0) {
+      logger.warn('Migration requested square catalog object deletion.')
+      await SquareProviderInstance.BatchDeleteCatalogObjects(this.#squareCatalogIdsToDelete);
+      this.#squareCatalogIdsToDelete = [];
+    }
 
     await Promise.all([
       this.SyncPrinterGroups(),
@@ -421,15 +466,21 @@ export class CatalogProvider implements WProvider {
 
     this.RecomputeCatalog();
 
-    // await this.DoSomethingAsAOneOff();
-    //   throw "WE DONE";
+    // await this.ObliterateCategoriesInSquareCatalog();
+    // await this.ObliterateItemsInSquareCatalog();
+    // await this.ObliterateModifiersInSquareCatalog();
+    // await this.SyncModifierTypes();
+    // await this.SyncOptions();
+    // await this.SyncProducts();
+    // await this.SyncProductInstances();
+    // throw "WE DONE";
 
     if (SUPPRESS_SQUARE_SYNC) {
       logger.warn("Suppressing Square Catalog Sync at launch. Catalog skew may result.")
     } else {
       await this.CheckAllPrinterGroupsSquareIdsAndFixIfNeeded();
       const modifierTypeIdsUpdated = await this.CheckAllModifierTypesHaveSquareIdsAndFixIfNeeded();
-      await this.CheckAllModifierOptionsHaveSquareIdsAndFixIfNeeded();
+      this.RecomputeCatalog();
       await this.CheckAllProductsHaveSquareIdsAndFixIfNeeded();
       if (modifierTypeIdsUpdated.length > 0) {
         logger.info(`Going back and updating product instances impacted by earlier CheckAllModifierTypesHaveSquareIdsAndFixIfNeeded call, for ${modifierTypeIdsUpdated.length} modifier types`)
@@ -486,7 +537,11 @@ export class CatalogProvider implements WProvider {
 
     const catalogObjects = batches.map((b, i) =>
       PrinterGroupToSquareCatalogObjectPlusDummyProduct(
-        [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION, DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE],
+        [
+          DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
+          DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE,
+          ...(DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_3P ? [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_3P] : [])
+        ],
         { ...oldPGs[i], ...b.printerGroup },
         existingSquareObjects,
         ('000' + i).slice(-3)));
@@ -667,19 +722,14 @@ export class CatalogProvider implements WProvider {
       let updatedOptions = existingOptions.slice();
 
       const modifierTypeSquareExternalIds = existingModifierType.externalIDs.filter(x => x.key.startsWith(WARIO_SQUARE_ID_METADATA_KEY));
-      const willBeSingleSelect = updatedModifierType.max_selected === 1;
-      const wasSingleSelect = existingModifierType.max_selected === 1;
-      const switchingSelectionType = ((willBeSingleSelect ? 1 : 0) ^ (wasSingleSelect ? 1 : 0)) === 1;
-      const existingOptionsHave_MODIFIER_LIST = existingOptions.reduce((acc, x) => acc && GetSquareIdIndexFromExternalIds(x.externalIDs, 'MODIFIER_LIST') !== -1, true)
-      const existingOptionsHave_MODIFIER = existingOptions.reduce((acc, x) => acc && GetSquareIdIndexFromExternalIds(x.externalIDs, 'MODIFIER') !== -1, true)
-      const missingSquareCatalogObjects = !existingOptionsHave_MODIFIER || (willBeSingleSelect && modifierTypeSquareExternalIds.length === 0) || (!willBeSingleSelect && existingOptionsHave_MODIFIER_LIST);
+      const existingOptionsHave_MODIFIER_WHOLE = existingOptions.reduce((acc, x) => acc && GetSquareIdIndexFromExternalIds(x.externalIDs, 'MODIFIER_WHOLE') !== -1, true)
+      const missingSquareCatalogObjects = !existingOptionsHave_MODIFIER_WHOLE || modifierTypeSquareExternalIds.length === 0;
       const ordinalIsChanging = updatedModifierType.ordinal !== existingModifierType.ordinal;
       const nameAttributeIsChanging = (updatedModifierType.name !== existingModifierType.name || updatedModifierType.displayName !== existingModifierType.displayName);
-      const needsNewNaming = willBeSingleSelect && nameAttributeIsChanging;
       const otsOrSplitAllowingOptions = existingOptions.filter(x => x.metadata.allowOTS || x.metadata.can_split).length > 0;
       let deepUpdate = false || forceDeepUpsert;
       let updateModifierOptionsAndProducts = false;
-      if (willBeSingleSelect && otsOrSplitAllowingOptions) {
+      if (updatedModifierType.max_selected === 1 && otsOrSplitAllowingOptions) {
         const errorDetail = 'Unable to transition modifiers to single select as some modifier options have split or OTS enabled.';
         logger.warn(errorDetail);
         throw errorDetail;
@@ -688,11 +738,11 @@ export class CatalogProvider implements WProvider {
       // * final modifier options length > 0
       // * AND ...
       //    * ordinalIsChanging
-      //    * will be single select and nameAttributeIsChanging (needsNewNaming)
+      //    * nameAttributeIsChanging
       //    * selection type is changing (switchingSelectionType)
       //    * or if the MT or MOs are missing external IDs (missingSquareCatalogObjects)
-      if (updatedOptions.length > 0 && (ordinalIsChanging || needsNewNaming || switchingSelectionType || missingSquareCatalogObjects)) {
-        if (switchingSelectionType || missingSquareCatalogObjects) {
+      if (updatedOptions.length > 0 && (ordinalIsChanging || nameAttributeIsChanging || missingSquareCatalogObjects)) {
+        if (missingSquareCatalogObjects) {
           // make sure all square external IDs are removed from the new external IDs for the MT, because the externalIds might be explicitly updated here
           updatedModifierType.externalIDs = updatedModifierType.externalIDs.filter(x => !x.key.startsWith(WARIO_SQUARE_ID_METADATA_KEY));
 
@@ -713,7 +763,6 @@ export class CatalogProvider implements WProvider {
       return {
         deepUpdate,
         updateModifierOptionsAndProducts,
-        isSingleSelect: willBeSingleSelect,
         updatedOptions,
         updatedModifierType,
       };
@@ -735,21 +784,12 @@ export class CatalogProvider implements WProvider {
     const catalogObjectsToUpsert: CatalogObject[] = [];
     batchData.map((batch, batchId) => {
       if (batch.deepUpdate) {
-        if (batch.isSingleSelect) {
-          catalogObjectsToUpsert.push(SingleSelectModifierTypeToSquareCatalogObject(
-            [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION, DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE],
-            batch.updatedModifierType,
-            batch.updatedOptions,
-            existingSquareObjects,
-            ('000' + batchId).slice(-3)));
-        } else {
-          catalogObjectsToUpsert.push(...batch.updatedOptions.map((x, i) => ModifierOptionToSquareCatalogObject(
-            [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION, DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE],
-            batch.updatedModifierType.ordinal,
-            x,
-            existingSquareObjects,
-            `${('000' + batchId).slice(-3)}S${('000' + i).slice(-3)}S`)))
-        }
+        catalogObjectsToUpsert.push(ModifierTypeToSquareCatalogObject(
+          [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION, DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE],
+          batch.updatedModifierType,
+          batch.updatedOptions,
+          existingSquareObjects,
+          ('000' + batchId).slice(-3)));
       }
     })
     const upsertResponse = await SquareProviderInstance.BatchUpsertCatalogObjects(chunk(catalogObjectsToUpsert, SQUARE_BATCH_CHUNK_SIZE).map(x => ({ objects: x })));
@@ -931,11 +971,8 @@ export class CatalogProvider implements WProvider {
           squareCatalogObjectsToDelete.push(kvL.value, kvR.value);
         }
       }
-      // if single select, we need to pull the MODIFIER catalog objects from the entire modifier type
-      if (b.modifierTypeEntry.modifierType.max_selected === 1) {
-        existingSquareExternalIds.push(...GetSquareExternalIds(b.modifierTypeEntry.modifierType.externalIDs).map(x => x.value));
-        existingSquareExternalIds.push(...b.modifierTypeEntry.options.filter(x => x !== b.batch.id).flatMap(oId => GetSquareExternalIds(this.Catalog.options[oId]!.externalIDs)).map(x => x.value));
-      }
+      existingSquareExternalIds.push(...GetSquareExternalIds(b.modifierTypeEntry.modifierType.externalIDs).map(x => x.value));
+      existingSquareExternalIds.push(...b.modifierTypeEntry.options.filter(x => x !== b.batch.id).flatMap(oId => GetSquareExternalIds(this.Catalog.options[oId]!.externalIDs)).map(x => x.value));
       existingSquareExternalIds.push(...GetSquareExternalIds(b.updatedOption.externalIDs).map(x => x.value))
     })
 
@@ -954,22 +991,13 @@ export class CatalogProvider implements WProvider {
     }
     const catalogObjectsForUpsert: CatalogObject[] = [];
     batchesInfo.forEach((b, i) => {
-      if (b.modifierTypeEntry.modifierType.max_selected === 1) {
-        const options = b.modifierTypeEntry.options.map(oId => (oId === b.batch.id ? b.updatedOption : this.Catalog.options[oId]!))
-        catalogObjectsForUpsert.push(SingleSelectModifierTypeToSquareCatalogObject(
-          [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION, DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE],
-          b.modifierTypeEntry.modifierType,
-          options,
-          existingSquareObjects,
-          ('000' + i).slice(-3)));
-      } else {
-        catalogObjectsForUpsert.push(ModifierOptionToSquareCatalogObject(
-          [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION, DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE],
-          b.modifierTypeEntry.modifierType.ordinal,
-          b.updatedOption,
-          existingSquareObjects,
-          ('000' + i).slice(-3)));
-      }
+      const options = b.modifierTypeEntry.options.map(oId => (oId === b.batch.id ? b.updatedOption : this.Catalog.options[oId]!))
+      catalogObjectsForUpsert.push(ModifierTypeToSquareCatalogObject(
+        [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION, DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE],
+        b.modifierTypeEntry.modifierType,
+        options,
+        existingSquareObjects,
+        ('000' + i).slice(-3)));
     });
 
     let mappings: CatalogIdMapping[] | undefined;

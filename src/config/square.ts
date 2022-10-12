@@ -1,4 +1,4 @@
-import { Error as SquareError, Client, CreateOrderRequest, CreateOrderResponse, CreatePaymentRequest, Environment, UpdateOrderRequest, OrderLineItem, Money, ApiError, UpdateOrderResponse, PaymentRefund, RefundPaymentRequest, PayOrderRequest, PayOrderResponse, Payment, RetrieveOrderResponse, Order, UpsertCatalogObjectRequest, BatchUpsertCatalogObjectsRequest, CatalogObjectBatch, CatalogObject, BatchUpsertCatalogObjectsResponse, UpsertCatalogObjectResponse, BatchDeleteCatalogObjectsRequest, BatchDeleteCatalogObjectsResponse, BatchRetrieveCatalogObjectsRequest, BatchRetrieveCatalogObjectsResponse, CatalogInfoResponse, CatalogInfoResponseLimits, SearchCatalogItemsRequest, SearchCatalogItemsResponse } from 'square';
+import { Error as SquareError, Client, CreateOrderRequest, CreateOrderResponse, CreatePaymentRequest, Environment, UpdateOrderRequest, ApiError, UpdateOrderResponse, PaymentRefund, RefundPaymentRequest, PayOrderRequest, PayOrderResponse, Payment, RetrieveOrderResponse, Order, UpsertCatalogObjectRequest, BatchUpsertCatalogObjectsRequest, CatalogObjectBatch, CatalogObject, BatchUpsertCatalogObjectsResponse, UpsertCatalogObjectResponse, BatchDeleteCatalogObjectsRequest, BatchDeleteCatalogObjectsResponse, BatchRetrieveCatalogObjectsRequest, BatchRetrieveCatalogObjectsResponse, CatalogInfoResponseLimits, SearchCatalogItemsRequest, SearchCatalogItemsResponse, SearchCatalogObjectsRequest, SearchCatalogObjectsResponse, ListCatalogResponse } from 'square';
 import { WProvider } from '../types/WProvider';
 import crypto from 'crypto';
 import logger from '../logging';
@@ -355,8 +355,30 @@ export class SquareProvider implements WProvider {
     const catalogApi = this.#client.catalogApi;
 
     const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<SearchCatalogItemsResponse>> => {
-      logger.info(`sending catalog search: ${JSON.stringify(searchRequest)}`);
+      logger.info(`sending catalog item search: ${JSON.stringify(searchRequest)}`);
       const { result, ...httpResponse } = await catalogApi.searchCatalogItems(searchRequest);
+      return { success: true, result: result, error: [] };
+    }
+    return await SquareRequestHandler(callFxn);
+  }
+
+  SearchCatalogObjects = async (searchRequest: Omit<SearchCatalogObjectsRequest, 'limit'>) => {
+    const catalogApi = this.#client.catalogApi;
+
+    const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<SearchCatalogObjectsResponse>> => {
+      logger.info(`sending catalog search: ${JSON.stringify(searchRequest)}`);
+      const { result, ...httpResponse } = await catalogApi.searchCatalogObjects(searchRequest);
+      return { success: true, result: result, error: [] };
+    }
+    return await SquareRequestHandler(callFxn);
+  }
+
+  ListCatalogObjects = async (types: string[], cursor?: string | undefined) => {
+    const catalogApi = this.#client.catalogApi;
+
+    const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<ListCatalogResponse>> => {
+      logger.info(`sending catalog list request for types: ${types.join(', ')} with cursor: ${cursor}`);
+      const { result, ...httpResponse } = await catalogApi.listCatalog(cursor, types.join(', '));
       return { success: true, result: result, error: [] };
     }
     return await SquareRequestHandler(callFxn);

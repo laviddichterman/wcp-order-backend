@@ -433,25 +433,24 @@ export const ProductInstanceToSquareCatalogObject = (locationIds: string[],
         } : {})
       })
     } else {
+      // add the modifier to the list
+      const squareModifierListId = GetSquareIdFromExternalIds(modifierEntry.modifierType.externalIDs, 'MODIFIER_LIST')!;
+      if (squareModifierListId === null) {
+        logger.error(`Missing MODIFIER_LIST in ${JSON.stringify(modifierEntry.modifierType.externalIDs)}`);
+        return;
+      }
+      modifierListInfo.push({
+        modifierListId: squareModifierListId,
+        minSelectedModifiers: modifierEntry.modifierType.min_selected,
+        maxSelectedModifiers: modifierEntry.modifierType.max_selected ?? -1,
+      })
       // multi select modifiers, if pre-selected get added to the built in price
-      // if unselected, we add them to the product modifier list
       modifierEntry.options.forEach(oId => {
         const option = catalogSelectors.option(oId)!;
         const optionInstance = selectedOptionsForModifierType.find(x => x.optionId === option.id) ?? null;
-        const squareModifierListId = GetSquareIdFromExternalIds(option.externalIDs, 'MODIFIER_LIST')!;
-        if (squareModifierListId === null) {
-          logger.error(`Missing MODIFIER_LIST in ${JSON.stringify(option.externalIDs)}`);
-          return;
-        }
         if (optionInstance && optionInstance.placement !== OptionPlacement.NONE) {
           instancePriceWithoutSingleSelectModifiers += optionInstance.qualifier === OptionQualifier.HEAVY ? option.price.amount * 2 : option.price.amount;
-        } else {
-          modifierListInfo.push({
-            modifierListId: squareModifierListId!,
-            minSelectedModifiers: 0,
-            maxSelectedModifiers: 1,
-          })
-        }
+        } 
       })
     }
   });
@@ -507,6 +506,7 @@ export const ModifierOptionPlacementsAndQualifiersToSquareCatalogObjects = (loca
   const versionLite = currentObjects.find(x => x.id === squareIdLite)?.version ?? null;
   const squareIdOts = GetSquareIdFromExternalIds(option.externalIDs, 'MODIFIER_OTS') ?? `#${batch}_MODIFIER_OTS`;
   const versionOts = currentObjects.find(x => x.id === squareIdOts)?.version ?? null;
+  const baseOrdinal = (option.ordinal * 6);
   const modifierLite: CatalogObject[] = option.metadata.allowLite ? [{
     id: squareIdLite,
     type: 'MODIFIER',
@@ -515,7 +515,7 @@ export const ModifierOptionPlacementsAndQualifiersToSquareCatalogObjects = (loca
     ...(versionLite !== null ? { version: versionLite } : {}),
     modifierData: {
       name: `LITE ${option.displayName}`,
-      ordinal: (option.ordinal * 6) + 4,
+      ordinal: baseOrdinal + 4,
       modifierListId: modifierListId,
       priceMoney: IMoneyToBigIntMoney(option.price),
     }
@@ -528,7 +528,7 @@ export const ModifierOptionPlacementsAndQualifiersToSquareCatalogObjects = (loca
     ...(versionHeavy !== null ? { version: versionHeavy } : {}),
     modifierData: {
       name: `HEAVY ${option.displayName}`,
-      ordinal: (option.ordinal * 6) + 5,
+      ordinal: baseOrdinal + 5,
       modifierListId: modifierListId,
       priceMoney: IMoneyToBigIntMoney({ currency: option.price.currency, amount: option.price.amount * 2 }),
     }
@@ -541,7 +541,7 @@ export const ModifierOptionPlacementsAndQualifiersToSquareCatalogObjects = (loca
     ...(versionOts !== null ? { version: versionOts } : {}),
     modifierData: {
       name: `OTS ${option.displayName}`,
-      ordinal: (option.ordinal * 6) + 6,
+      ordinal: baseOrdinal + 6,
       modifierListId: modifierListId,
       priceMoney: IMoneyToBigIntMoney(option.price),
     }
@@ -555,7 +555,7 @@ export const ModifierOptionPlacementsAndQualifiersToSquareCatalogObjects = (loca
     ...(versionLeft !== null ? { version: versionLeft } : {}),
     modifierData: {
       name: `L) ${option.displayName}`,
-      ordinal: (option.ordinal * 6) + 1,
+      ordinal: baseOrdinal + 1,
       modifierListId: modifierListId,
       priceMoney: IMoneyToBigIntMoney(option.price),
     }
@@ -567,7 +567,7 @@ export const ModifierOptionPlacementsAndQualifiersToSquareCatalogObjects = (loca
     ...(versionRight !== null ? { version: versionRight } : {}),
     modifierData: {
       name: `R) ${option.displayName}`,
-      ordinal: (option.ordinal * 6) + 3,
+      ordinal: baseOrdinal + 3,
       modifierListId: modifierListId,
       priceMoney: IMoneyToBigIntMoney(option.price),
     }
@@ -581,7 +581,7 @@ export const ModifierOptionPlacementsAndQualifiersToSquareCatalogObjects = (loca
     ...(versionWhole !== null ? { version: versionWhole } : {}),
     modifierData: {
       name: option.displayName,
-      ordinal: (option.ordinal * 6) + 2,
+      ordinal: baseOrdinal + 2,
       modifierListId: modifierListId,
       priceMoney: IMoneyToBigIntMoney(option.price),
     }
@@ -589,33 +589,33 @@ export const ModifierOptionPlacementsAndQualifiersToSquareCatalogObjects = (loca
   return [...modifiersSplit, modifierWhole, ...modifierHeavy, ...modifierLite, ...modifierOts].sort((a, b) => a.modifierData!.ordinal! - b.modifierData!.ordinal!);
 }
 
-export const ModifierOptionToSquareCatalogObject = (
-  locationIds: string[],
-  modifierTypeOrdinal: number,
-  option: Omit<IOption, 'id' | 'modifierTypeId'>,
-  currentObjects: Pick<CatalogObject, 'id' | 'version'>[],
-  batch: string): CatalogObject => {
-  const modifierListId = GetSquareIdFromExternalIds(option.externalIDs, 'MODIFIER_LIST') ?? `#${batch}_MODIFIER_LIST`;
-  const version = currentObjects.find(x => x.id === modifierListId)?.version ?? null;
-  const squareName = `${('0000' + (modifierTypeOrdinal * 100 + option.ordinal)).slice(-4)}| ${option.displayName}`;
-  return {
-    id: modifierListId,
-    ...(version !== null ? { version } : {}),
-    type: 'MODIFIER_LIST',
-    presentAtAllLocations: false,
-    presentAtLocationIds: locationIds,
-    modifierListData: {
-      name: squareName,
-      ordinal: modifierTypeOrdinal * 1024 + option.ordinal,
-      selectionType: 'SINGLE',
-      modifiers: ModifierOptionPlacementsAndQualifiersToSquareCatalogObjects(locationIds, modifierListId, option, currentObjects, batch)
-    }
-  }
-};
+// export const ModifierOptionToSquareCatalogObject = (
+//   locationIds: string[],
+//   modifierTypeOrdinal: number,
+//   option: Omit<IOption, 'id' | 'modifierTypeId'>,
+//   currentObjects: Pick<CatalogObject, 'id' | 'version'>[],
+//   batch: string): CatalogObject => {
+//   const modifierListId = GetSquareIdFromExternalIds(option.externalIDs, 'MODIFIER_LIST') ?? `#${batch}_MODIFIER_LIST`;
+//   const version = currentObjects.find(x => x.id === modifierListId)?.version ?? null;
+//   const squareName = `${('0000' + (modifierTypeOrdinal * 100 + option.ordinal)).slice(-4)}| ${option.displayName}`;
+//   return {
+//     id: modifierListId,
+//     ...(version !== null ? { version } : {}),
+//     type: 'MODIFIER_LIST',
+//     presentAtAllLocations: false,
+//     presentAtLocationIds: locationIds,
+//     modifierListData: {
+//       name: squareName,
+//       ordinal: modifierTypeOrdinal * 1024 + option.ordinal,
+//       selectionType: 'SINGLE',
+//       modifiers: ModifierOptionPlacementsAndQualifiersToSquareCatalogObjects(locationIds, modifierListId, option, currentObjects, batch)
+//     }
+//   }
+// };
 
-export const SingleSelectModifierTypeToSquareCatalogObject = (
+export const ModifierTypeToSquareCatalogObject = (
   locationIds: string[],
-  modifierType: Pick<IOptionType, 'name' | 'displayName' | 'ordinal' | 'externalIDs'>,
+  modifierType: Pick<IOptionType, 'name' | 'displayName' | 'ordinal' | 'externalIDs' | 'max_selected' | 'min_selected'>,
   options: Omit<IOption, 'id' | 'modifierTypeId'>[],
   currentObjects: Pick<CatalogObject, 'id' | 'version'>[],
   batch: string): CatalogObject => {
@@ -632,7 +632,7 @@ export const SingleSelectModifierTypeToSquareCatalogObject = (
     modifierListData: {
       name: squareName,
       ordinal: modifierType.ordinal * 1024,
-      selectionType: 'SINGLE',
+      selectionType: modifierType.max_selected === 1 ? 'SINGLE' : 'MULTIPLE',
       modifiers: options.map((o, i) => ModifierOptionPlacementsAndQualifiersToSquareCatalogObjects(locationIds, modifierListId, o, currentObjects, `${batch}S${('000' + i).slice(-3)}S`)).flat()
     }
   };
