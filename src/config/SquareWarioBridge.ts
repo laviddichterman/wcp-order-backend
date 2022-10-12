@@ -12,7 +12,6 @@ import { IS_PRODUCTION } from '../utils';
 // * fix bug discovered with anna last night
 // * add fulfillment to MAIN square order, put in proposed until confirmed. 
 // * fix square catalog to remove default modifiers from item variations
-
 export const SQUARE_TAX_RATE_CATALOG_ID = IS_PRODUCTION ? "TMG7E3E5E45OXHJTBOHG2PMS" : "LOFKVY5UC3SLKPT2WANSBPZQ";
 export const SQUARE_BANKERS_ADJUSTED_TAX_RATE_CATALOG_ID = IS_PRODUCTION ? "R77FWA4SNHB4RWNY4KNNQHJD" : "HIUHEOWWVR6MB3PP7ORCUVZW"
 export const VARIABLE_PRICE_STORE_CREDIT_CATALOG_ID = IS_PRODUCTION ? "DNP5YT6QDIWTB53H46F3ECIN" : "RBYUD52HGFHPL4IG55LBHQAG";
@@ -83,6 +82,14 @@ const OptionInstanceToSquareIdSpecifier = (optionInstance: IOptionInstance) => {
   }
   logger.error(`UNHANDLED OPTION INSTANCE ${JSON.stringify(optionInstance)}`);
   return "MODIFIER_WHOLE";
+}
+
+const CreateWarioCustomAttribute = () => {
+  return {
+    customAttributeDefinitionData: {
+
+    }
+  } as CatalogObject;
 }
 
 /**
@@ -462,7 +469,7 @@ export const ProductInstanceToSquareCatalogObject = (locationIds: string[],
         ...(versionItemVariation !== null ? { version: versionItemVariation } : {}),
         itemVariationData: {
           itemId: squareItemId,
-          name: productInstance.displayName,
+          // name: productInstance.displayName, We omit this variation name so the tickets and receipts are shorter
           pricingType: 'FIXED_PRICING',
           priceMoney: IMoneyToBigIntMoney({ currency: product.price.currency, amount: instancePriceWithoutSingleSelectModifiers }),
           sellable: true,
