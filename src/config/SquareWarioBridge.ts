@@ -10,9 +10,8 @@ import { IS_PRODUCTION } from '../utils';
 // * add note to payment or whatever so the SQ receipt makes some sense, see https://squareup.com/receipt/preview/jXnAjUa3wdk6al0EofHUg8PUZzFZY 
 // * fix UI actions on orders
 // * fix bug discovered with anna last night
-// * add fulfillment to MAIN square order, put in proposed until confirmed. 
-// * fix square catalog to remove default modifiers from item variations
 export const SQUARE_TAX_RATE_CATALOG_ID = IS_PRODUCTION ? "TMG7E3E5E45OXHJTBOHG2PMS" : "LOFKVY5UC3SLKPT2WANSBPZQ";
+export const SQUARE_WARIO_EXTERNAL_ID = IS_PRODUCTION ? 'L75RYR2NI3ED7VM7VKXO2DKO' : 'NDV2QHR54XWVXCKOHXK43ZLE';
 export const SQUARE_BANKERS_ADJUSTED_TAX_RATE_CATALOG_ID = IS_PRODUCTION ? "R77FWA4SNHB4RWNY4KNNQHJD" : "HIUHEOWWVR6MB3PP7ORCUVZW"
 export const VARIABLE_PRICE_STORE_CREDIT_CATALOG_ID = IS_PRODUCTION ? "DNP5YT6QDIWTB53H46F3ECIN" : "RBYUD52HGFHPL4IG55LBHQAG";
 export const DISCOUNT_CATALOG_ID = IS_PRODUCTION ? "AKIYDPB5WJD2HURCWWZSAIF5" : 'PAMEV3WAZYEBJKFUAVQATS3K'
@@ -84,12 +83,26 @@ const OptionInstanceToSquareIdSpecifier = (optionInstance: IOptionInstance) => {
   return "MODIFIER_WHOLE";
 }
 
-const CreateWarioCustomAttribute = () => {
+const CreateWarioCustomAttribute = (locationIds: string[]): CatalogObject => {
   return {
+    id: "#WARIOID",
+    type: "CUSTOM_ATTRIBUTE_DEFINITION",
+    presentAtAllLocations: false,
+    presentAtLocationIds: locationIds,
     customAttributeDefinitionData: {
-
+      allowedObjectTypes: [
+        "ITEM",
+        "ITEM_VARIATION"
+      ],
+      name: "WARIO External ID",
+      type: "STRING",
+      appVisibility: "APP_VISIBILITY_HIDDEN",
+      key: "WARIO_",
+      stringConfig: {
+        enforceUniqueness: false
+      }
     }
-  } as CatalogObject;
+  };
 }
 
 /**
@@ -194,7 +207,7 @@ export const CreateOrderForMessages = (
   ticketName: string,
   messages: { squareItemVariationId: string; message: string[]; }[],
   fulfillmentInfo: SquareOrderFulfillmentInfo): Order => {
-    const truncatedTicketName = ticketName.slice(0, 29)
+  const truncatedTicketName = ticketName.slice(0, 29)
   return {
     lineItems: messages.map(x => ({
       quantity: "1",
@@ -584,7 +597,7 @@ export const ModifierOptionToSquareCatalogObject = (
   batch: string): CatalogObject => {
   const modifierListId = GetSquareIdFromExternalIds(option.externalIDs, 'MODIFIER_LIST') ?? `#${batch}_MODIFIER_LIST`;
   const version = currentObjects.find(x => x.id === modifierListId)?.version ?? null;
-  const squareName = `${('0000' + (modifierTypeOrdinal*100 + option.ordinal)).slice(-4)}| ${option.displayName}`;
+  const squareName = `${('0000' + (modifierTypeOrdinal * 100 + option.ordinal)).slice(-4)}| ${option.displayName}`;
   return {
     id: modifierListId,
     ...(version !== null ? { version } : {}),
@@ -609,7 +622,7 @@ export const SingleSelectModifierTypeToSquareCatalogObject = (
   const modifierListId = GetSquareIdFromExternalIds(modifierType.externalIDs, 'MODIFIER_LIST') ?? `#${batch}_MODIFIER_LIST`;
   const version = currentObjects.find(x => x.id === modifierListId)?.version ?? null;
   const displayName = modifierType.displayName?.length > 0 ? modifierType.displayName : modifierType.name;
-  const squareName = `${('0000' + (modifierType.ordinal*100)).slice(-4)}| ${displayName}`;
+  const squareName = `${('0000' + (modifierType.ordinal * 100)).slice(-4)}| ${displayName}`;
   return {
     id: modifierListId,
     ...(version !== null ? { version } : {}),

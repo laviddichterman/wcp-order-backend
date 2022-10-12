@@ -33,12 +33,11 @@ import { SocketIoProviderInstance } from "./socketio_provider";
 import logger from '../logging';
 import { chunk } from 'lodash';
 import { WProvider } from "../types/WProvider";
-import { SquareProviderInstance } from "./square";
+import { SquareProviderInstance, SQUARE_BATCH_CHUNK_SIZE } from "./square";
 import { GetSquareExternalIds, GetSquareIdIndexFromExternalIds, IdMappingsToExternalIds, ModifierOptionToSquareCatalogObject, PrinterGroupToSquareCatalogObjectPlusDummyProduct, ProductInstanceToSquareCatalogObject, SingleSelectModifierTypeToSquareCatalogObject, WARIO_SQUARE_ID_METADATA_KEY } from "./SquareWarioBridge";
 import { CatalogIdMapping, CatalogObject } from "square";
 import { FilterQuery } from "mongoose";
 
-const SQUARE_BATCH_CHUNK_SIZE = process.env.WARIO_SQUARE_BATCH_CHUNK_SIZE ? parseInt(process.env.WARIO_SQUARE_BATCH_CHUNK_SIZE) : 25;
 const SUPPRESS_SQUARE_SYNC = process.env.WARIO_SUPPRESS_SQUARE_INIT_SYNC === '1' || process.env.WARIO_SUPPRESS_SQUARE_INIT_SYNC === 'true';
 const FORCE_SQUARE_CATALOG_REBUILD_ON_LOAD = process.env.WARIO_FORCE_SQUARE_CATALOG_REBUILD_ON_LOAD === '1' || process.env.WARIO_SUPPRESS_SQUARE_INIT_SYNC === 'true';
 
@@ -385,6 +384,25 @@ export class CatalogProvider implements WProvider {
     this.RecomputeCatalog();
   }
 
+  DoSomethingAsAOneOff = async () => {
+    // get all items in the Slices category and delete them
+    const foundItems: string[] = [];
+    let cursor : string | undefined;
+    let response;
+    do {
+      // response = await SquareProviderInstance.SearchCatalogItems({ categoryIds: ['N5QMDVHPD5QAR4V35BVBC2CL' 'PKUWESSO3UPXCJHSITZMMHAM'] });
+      response = await SquareProviderInstance.SearchCatalogItems({ categoryIds: ['N5QMDVHPD5QAR4V35BVBC2CL'] });
+      if (!response.success) {
+        return;
+      }
+      foundItems.push(...(response.result.items ?? []).map(x=>x.id));
+      cursor = response.result.cursor ?? undefined;
+    }
+    while (cursor);
+    logger.info(`Deleting the following items: ${foundItems.join(", ")}`);
+    //await SquareProviderInstance.BatchDeleteCatalogObjects(foundItems);
+  }
+
   Bootstrap = async () => {
     logger.info(`Starting Bootstrap of CatalogProvider, Loading catalog from database...`);
 
@@ -402,6 +420,9 @@ export class CatalogProvider implements WProvider {
       this.SyncOrderInstanceFunctions()]);
 
     this.RecomputeCatalog();
+
+    // await this.DoSomethingAsAOneOff();
+    //   throw "WE DONE";
 
     if (SUPPRESS_SQUARE_SYNC) {
       logger.warn("Suppressing Square Catalog Sync at launch. Catalog skew may result.")

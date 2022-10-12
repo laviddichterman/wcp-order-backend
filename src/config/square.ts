@@ -1,4 +1,4 @@
-import { Error as SquareError, Client, CreateOrderRequest, CreateOrderResponse, CreatePaymentRequest, Environment, UpdateOrderRequest, OrderLineItem, Money, ApiError, UpdateOrderResponse, PaymentRefund, RefundPaymentRequest, PayOrderRequest, PayOrderResponse, Payment, OrderLineItemModifier, RetrieveOrderResponse, Order, UpsertCatalogObjectRequest, BatchUpsertCatalogObjectsRequest, CatalogObjectBatch, CatalogObject, BatchUpsertCatalogObjectsResponse, UpsertCatalogObjectResponse, BatchDeleteCatalogObjectsRequest, BatchDeleteCatalogObjectsResponse, BatchRetrieveCatalogObjectsRequest, BatchRetrieveCatalogObjectsResponse, CatalogInfoResponse, CatalogInfoResponseLimits } from 'square';
+import { Error as SquareError, Client, CreateOrderRequest, CreateOrderResponse, CreatePaymentRequest, Environment, UpdateOrderRequest, OrderLineItem, Money, ApiError, UpdateOrderResponse, PaymentRefund, RefundPaymentRequest, PayOrderRequest, PayOrderResponse, Payment, RetrieveOrderResponse, Order, UpsertCatalogObjectRequest, BatchUpsertCatalogObjectsRequest, CatalogObjectBatch, CatalogObject, BatchUpsertCatalogObjectsResponse, UpsertCatalogObjectResponse, BatchDeleteCatalogObjectsRequest, BatchDeleteCatalogObjectsResponse, BatchRetrieveCatalogObjectsRequest, BatchRetrieveCatalogObjectsResponse, CatalogInfoResponse, CatalogInfoResponseLimits, SearchCatalogItemsRequest, SearchCatalogItemsResponse } from 'square';
 import { WProvider } from '../types/WProvider';
 import crypto from 'crypto';
 import logger from '../logging';
@@ -8,15 +8,35 @@ import { parseISO } from 'date-fns';
 import { StoreCreditPayment } from '@wcp/wcpshared';
 import { BigIntMoneyToIntMoney, IMoneyToBigIntMoney, MapPaymentStatus } from './SquareWarioBridge';
 import { ExponentialBackoff, IS_PRODUCTION } from '../utils';
+import { RetryConfiguration } from 'square/dist/core';
+
+export const SQUARE_BATCH_CHUNK_SIZE = process.env.WARIO_SQUARE_BATCH_CHUNK_SIZE ? parseInt(process.env.WARIO_SQUARE_BATCH_CHUNK_SIZE) : 25;
 
 type SquareProviderApiCallReturnSuccess<T> = { success: true; result: T; error: SquareError[]; };
 
 type SquareProviderApiCallReturnValue<T> = SquareProviderApiCallReturnSuccess<T> |
 { success: false; result: null; error: SquareError[]; };
 
-// LAST WE WERE DOING, USING SQUARE_LOCATION_ALTERNATE to create dummy orders with pickup name `${customer name} ${num} of ${total}` 
-// we also want dummy orders sent to indicate cancellations since our cancelations aren't working for the square for restaurants UI
-// some of this should go in the SquareWarioBridge
+
+const DEFAULT_LIMITS: Required<CatalogInfoResponseLimits> = {
+  batchDeleteMaxObjectIds: 200,
+  batchRetrieveMaxObjectIds: 1000,
+  batchUpsertMaxObjectsPerBatch: 1000,
+  batchUpsertMaxTotalObjects: 10000,
+  searchMaxPageLimit: 1000,
+  updateItemModifierListsMaxItemIds: 1000,
+  updateItemModifierListsMaxModifierListsToDisable: 1000,
+  updateItemModifierListsMaxModifierListsToEnable: 1000,
+  updateItemTaxesMaxItemIds: 1000,
+  updateItemTaxesMaxTaxesToDisable: 1000,
+  updateItemTaxesMaxTaxesToEnable: 1000
+};
+
+/**
+ * CURRENTLY:
+ * - need to bootstrap square catalog in SquareConfigSchema
+ * - need to switch to an exponential backoff situation that works
+ */
 
 export interface SquareProviderProcessPaymentRequest {
   locationId: string;
@@ -52,10 +72,21 @@ const SquareRequestHandler = async <T>(apiRequestMaker: () => Promise<SquareProv
   return await call_fxn();
 }
 
+const SQUARE_RETRY_CONFIG: RetryConfiguration = {
+  maxNumberOfRetries: 5,
+  retryOnTimeout: true,
+  retryInterval: 1,
+  maximumRetryWaitTime: 0,
+  backoffFactor: 3,
+  httpStatusCodesToRetry: [408, 413, 429, 500, 502, 503, 504, 521, 522, 524],
+  httpMethodsToRetry: ['GET', 'PUT']
+};
+
 export class SquareProvider implements WProvider {
   #client: Client;
-  #catalogLimits: CatalogInfoResponseLimits;
+  #catalogLimits: Required<CatalogInfoResponseLimits>;
   constructor() {
+    this.#catalogLimits = DEFAULT_LIMITS;
   }
 
   Bootstrap = async () => {
@@ -65,10 +96,7 @@ export class SquareProvider implements WProvider {
         environment: IS_PRODUCTION ? Environment.Production : Environment.Sandbox,
         accessToken: DataProviderInstance.KeyValueConfig.SQUARE_TOKEN,
         httpClientOptions: {
-          retryConfig: {
-            backoffFactor: 3,
-            maxNumberOfRetries: 5
-          }
+          retryConfig: SQUARE_RETRY_CONFIG
         }
       });
     }
@@ -78,7 +106,10 @@ export class SquareProvider implements WProvider {
     }
     const catalogInfoLimitsResponse = await this.GetCatalogInfo();
     if (catalogInfoLimitsResponse.success) {
-      this.#catalogLimits = catalogInfoLimitsResponse.result;
+      this.#catalogLimits = {
+        ...DEFAULT_LIMITS,
+        ...catalogInfoLimitsResponse.result
+      };
     } else {
       logger.error("Can't Bootstrap SQUARE Provider, failed querying catalog limits");
       return;
@@ -320,58 +351,129 @@ export class SquareProvider implements WProvider {
     return await SquareRequestHandler(callFxn);
   }
 
-  BatchUpsertCatalogObjects = async (objectBatches: CatalogObjectBatch[]) => {
-    // this.#catalogLimits.batchUpsertMaxTotalObjects and this.#catalogLimits.batchUpsertMaxObjectsPerBatch
-    const idempotency_key = crypto.randomBytes(22).toString('hex');
+  SearchCatalogItems = async (searchRequest: Omit<SearchCatalogItemsRequest, 'limit'>) => {
     const catalogApi = this.#client.catalogApi;
-    const request_body: BatchUpsertCatalogObjectsRequest = {
-      idempotencyKey: idempotency_key,
-      batches: objectBatches
-    };
 
-    const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<BatchUpsertCatalogObjectsResponse>> => {
-      logger.info(`sending catalog upsert batch: ${JSON.stringify(request_body)}`);
-      const { result, ...httpResponse } = await catalogApi.batchUpsertCatalogObjects(request_body);
+    const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<SearchCatalogItemsResponse>> => {
+      logger.info(`sending catalog search: ${JSON.stringify(searchRequest)}`);
+      const { result, ...httpResponse } = await catalogApi.searchCatalogItems(searchRequest);
       return { success: true, result: result, error: [] };
     }
     return await SquareRequestHandler(callFxn);
   }
 
-  BatchDeleteCatalogObjects = async (objectIds: string[]) => {
+  BatchUpsertCatalogObjects = async (objectBatches: CatalogObjectBatch[]): Promise<SquareProviderApiCallReturnValue<BatchUpsertCatalogObjectsResponse>> => {
     const catalogApi = this.#client.catalogApi;
-    const request_body: BatchDeleteCatalogObjectsRequest = {
-      objectIds
-    };
 
-    const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<BatchDeleteCatalogObjectsResponse>> => {
-      logger.info(`sending catalog delete batch: ${JSON.stringify(request_body)}`);
-      const { result, ...httpResponse } = await catalogApi.batchDeleteCatalogObjects(request_body);
-      return { success: true, result: result, error: [] };
-    }
-    return await SquareRequestHandler(callFxn);
+    let remainingObjects = objectBatches.slice();
+    const responses: SquareProviderApiCallReturnSuccess<BatchUpsertCatalogObjectsResponse>[] = []
+    do {
+      const leftovers = remainingObjects.splice(Math.floor(this.#catalogLimits.batchUpsertMaxTotalObjects / SQUARE_BATCH_CHUNK_SIZE));
+      const idempotency_key = crypto.randomBytes(22).toString('hex');
+      const request_body: BatchUpsertCatalogObjectsRequest = {
+        idempotencyKey: idempotency_key,
+        batches: remainingObjects
+      };
+
+      const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<BatchUpsertCatalogObjectsResponse>> => {
+        logger.info(`sending catalog upsert batch: ${JSON.stringify(request_body)}`);
+        const { result, ...httpResponse } = await catalogApi.batchUpsertCatalogObjects(request_body);
+        return { success: true, result: result, error: [] };
+      }  
+      const response = await SquareRequestHandler(callFxn);
+      if (!response.success) {
+        return response;
+      }
+      remainingObjects = leftovers;
+      responses.push(response);
+    } while (remainingObjects.length > 0);
+    return { 
+      error: responses.flatMap(x=>x.error), 
+      result: {
+        errors: responses.flatMap(x=>(x.result.errors ?? [])),
+        idMappings: responses.flatMap(x=>(x.result.idMappings ?? [])),
+        objects: responses.flatMap(x=>(x.result.objects ?? [])),
+        updatedAt: responses[0].result.updatedAt, 
+      }, 
+      success: true 
+    };
   }
 
-  BatchRetrieveCatalogObjects = async (objectIds: string[], includeRelated: boolean) => {
-    // TODO: consume this.#catalogLimits.batchRetrieveMaxObjectIds
+  BatchDeleteCatalogObjects = async (objectIds: string[]): Promise<SquareProviderApiCallReturnValue<BatchDeleteCatalogObjectsResponse>> => {
     const catalogApi = this.#client.catalogApi;
-    const request_body: BatchRetrieveCatalogObjectsRequest = {
-      objectIds,
-      includeRelatedObjects: includeRelated
+    let remainingObjects = objectIds.slice();
+    const responses: SquareProviderApiCallReturnSuccess<BatchDeleteCatalogObjectsResponse>[] = []
+    do {
+      const leftovers = remainingObjects.splice(this.#catalogLimits.batchDeleteMaxObjectIds);
+      const request_body: BatchDeleteCatalogObjectsRequest = {
+        objectIds: remainingObjects
+      };
+
+      const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<BatchDeleteCatalogObjectsResponse>> => {
+        logger.info(`sending catalog delete batch: ${JSON.stringify(request_body)}`);
+        const { result, ...httpResponse } = await catalogApi.batchDeleteCatalogObjects(request_body);
+        return { success: true, result: result, error: [] };
+      }
+      const response = await SquareRequestHandler(callFxn);
+      if (!response.success) {
+        return response;
+      }
+      remainingObjects = leftovers;
+      responses.push(response);
+    } while (remainingObjects.length > 0);
+
+    return { 
+      error: responses.flatMap(x=>x.error), 
+      result: { deletedAt: responses[0].result.deletedAt, 
+        deletedObjectIds: responses.flatMap(x=>(x.result.deletedObjectIds ?? [])), 
+        errors: responses.flatMap(x=>(x.result.errors ?? [])) 
+      }, 
+      success: true 
     };
 
-    const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<BatchRetrieveCatalogObjectsResponse>> => {
-      logger.info(`sending catalog retrieve batch: ${JSON.stringify(request_body)}`);
-      const { result, ...httpResponse } = await catalogApi.batchRetrieveCatalogObjects(request_body);
-      return { success: true, result: result, error: [] };
-    }
-    return await SquareRequestHandler(callFxn);
+  }
+
+  BatchRetrieveCatalogObjects = async (objectIds: string[], includeRelated: boolean): Promise<SquareProviderApiCallReturnValue<BatchRetrieveCatalogObjectsResponse>> => {
+    const catalogApi = this.#client.catalogApi;
+    
+    let remainingObjects = objectIds.slice();
+    const responses: SquareProviderApiCallReturnSuccess<BatchRetrieveCatalogObjectsResponse>[] = []
+
+    do {
+      const leftovers = remainingObjects.splice(this.#catalogLimits.batchRetrieveMaxObjectIds);
+      const request_body: BatchRetrieveCatalogObjectsRequest = {
+        objectIds: remainingObjects,
+        includeRelatedObjects: includeRelated
+      };
+
+      const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<BatchRetrieveCatalogObjectsResponse>> => {
+        logger.info(`sending catalog retrieve batch: ${JSON.stringify(request_body)}`);
+        const { result, ...httpResponse } = await catalogApi.batchRetrieveCatalogObjects(request_body);
+        return { success: true, result: result, error: [] };
+      }
+      const response = await SquareRequestHandler(callFxn);
+      if (!response.success) {
+        return response;
+      }
+      remainingObjects = leftovers;
+      responses.push(response);
+    } while (remainingObjects.length > 0);
+
+    return { 
+      error: responses.flatMap(x=>x.error), 
+      result: { objects: responses.flatMap(x=>(x.result.objects ?? [])), 
+        relatedObjects: responses.flatMap(x=>(x.result.relatedObjects ?? [])), 
+        errors: responses.flatMap(x=>(x.result.errors ?? [])) 
+      }, 
+      success: true 
+    };
   }
 
   SendMessageOrder = async (order: Order) => {
     const sentOrder = await this.CreateOrder(order);
     if (sentOrder.success && sentOrder.result.order?.id) {
-      const payment = await this.CreatePayment({ 
-        amount: { currency: CURRENCY.USD, amount: 0 }, 
+      const payment = await this.CreatePayment({
+        amount: { currency: CURRENCY.USD, amount: 0 },
         autocomplete: true,
         locationId: order.locationId,
         referenceId: "",
@@ -379,9 +481,9 @@ export class SquareProvider implements WProvider {
           t: PaymentMethod.StoreCredit,
           amount: { currency: CURRENCY.USD, amount: 0 },
           createdAt: Date.now(),
-          payment: { 
+          payment: {
             code: "FOO",
-            lock:  { 
+            lock: {
               auth: 'FOO',
               iv: 'FOO',
               enc: 'FOO',
@@ -394,7 +496,7 @@ export class SquareProvider implements WProvider {
         squareOrderId: sentOrder.result.order.id,
         sourceId: "EXTERNAL"
       });
-      if (payment.success) { 
+      if (payment.success) {
         return true;
       }
     }
