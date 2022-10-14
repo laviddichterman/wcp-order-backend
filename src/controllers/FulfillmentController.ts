@@ -20,6 +20,7 @@ const FulfillmentValidationChain = [
   body('displayName').trim().exists(),
   body('shortcode').trim().escape().exists(),
   body('ordinal').isInt({min: 0}),
+  body('exposeFulfillment').exists().isBoolean({ strict: true }),
   body('service').exists().isIn(Object.keys(FulfillmentType)),
   body('terms').isArray().exists(),
   body('terms.*').trim(),
@@ -78,6 +79,7 @@ export class FulfillmentController implements IExpressController {
       const fulfillment: Omit<FulfillmentConfig, "id"> = {
         displayName: req.body.displayName,
         shortcode: req.body.shortcode,
+        exposeFulfillment: req.body.exposeFulfillment,
         ordinal: req.body.ordinal,
         service: req.body.service,
         terms: req.body.terms,
@@ -125,6 +127,7 @@ export class FulfillmentController implements IExpressController {
       const fulfillment: Omit<FulfillmentConfig, "id"> = {
         displayName: req.body.displayName,
         shortcode: req.body.shortcode,
+        exposeFulfillment: req.body.exposeFulfillment,
         ordinal: req.body.ordinal,
         service: req.body.service,
         terms: req.body.terms,

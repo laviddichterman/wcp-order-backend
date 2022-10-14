@@ -1,5 +1,5 @@
 import { Schema } from "mongoose";
-import { AddressComponent, DeliveryAddressValidateResponse, DeliveryInfoDto, DineInInfoDto, FulfillmentDto, WFulfillmentStatus } from "@wcp/wcpshared";
+import { AddressComponent, DeliveryAddressValidateResponse, DeliveryInfoDto, DineInInfoDto, FulfillmentDto, ThirdPartyInfo, WFulfillmentStatus } from "@wcp/wcpshared";
 
 export const DineInInfoSchema = new Schema<DineInInfoDto>({
   partySize: {
@@ -44,6 +44,13 @@ export const DeliveryInfoSchema = new Schema<DeliveryInfoDto>({
   validation: DeliveryAddressValidateResponseSchema
 }, { _id: false });
 
+export const ThirdPartyInfoSchema = new Schema<ThirdPartyInfo>({
+  squareId: { 
+    type: String,
+    required: true
+  }
+}, { _id: false });
+
 export const FulfillmentInfo = new Schema<FulfillmentDto>({
   status: {
     type: String,
@@ -65,5 +72,6 @@ export const FulfillmentInfo = new Schema<FulfillmentDto>({
     required: true
   },
   dineInInfo: DineInInfoSchema,
-  deliveryInfo: DeliveryInfoSchema
+  deliveryInfo: DeliveryInfoSchema,
+  thirdPartyInfo: ThirdPartyInfoSchema,
 }, { _id: false });

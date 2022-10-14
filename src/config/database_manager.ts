@@ -429,16 +429,16 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
         exit(-1);
       }
       const categories = await WCategoryModel.find().exec();
-      const printerGroups = await PrinterGroupModel.insertMany(categories.map(c=>({
+      const printerGroups = await PrinterGroupModel.insertMany(categories.map(c => ({
         name: c.name,
         externalIDs: [],
         singleItemPerTicket: false
       })));
-      const catIdToPGMapping = ReduceArrayToMapByKey(categories.map((c, i) => ({cId: c.id, pg: printerGroups[i]})), 'cId');
+      const catIdToPGMapping = ReduceArrayToMapByKey(categories.map((c, i) => ({ cId: c.id, pg: printerGroups[i] })), 'cId');
       const products = await WProductModelActual.find().exec();
       await Promise.all(products
-        .filter(p=>p.category_ids.length > 0)
-        .map(async(p) => {
+        .filter(p => p.category_ids.length > 0)
+        .map(async (p) => {
           const pg = catIdToPGMapping[p.category_ids[0]].pg;
           return await WProductModelActual
             .findByIdAndUpdate(p.id, { printerGroup: pg.id }, { new: true }).exec()
@@ -448,7 +448,7 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
             .catch((err: any) => {
               logger.error(`Failed updating product ID: ${p.id} with printer group. Got error: ${JSON.stringify(err)}`);
             });
-      }));
+        }));
     }
   }],
   "0.5.13": [{ major: 0, minor: 5, patch: 14 }, async () => {
@@ -518,12 +518,58 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
   "0.5.41": [{ major: 0, minor: 5, patch: 42 }, async () => {
   }],
   "0.5.42": [{ major: 0, minor: 5, patch: 43 }, async () => {
-    const allOptionsUpdate = await WOptionModelActual.updateMany({}, { $pull: { 'externalIDs': {key: {$regex: `^${WARIO_SQUARE_ID_METADATA_KEY}.*` } } } })
+    const allOptionsUpdate = await WOptionModelActual.updateMany({}, { $pull: { 'externalIDs': { key: { $regex: `^${WARIO_SQUARE_ID_METADATA_KEY}.*` } } } })
     logger.info(`Updated options: ${JSON.stringify(allOptionsUpdate)}`);
-    const allModifierTypeUpdate = await WOptionTypeModelActual.updateMany({}, { $pull: { 'externalIDs': {key: {$regex: `^${WARIO_SQUARE_ID_METADATA_KEY}.*` } } } })
+    const allModifierTypeUpdate = await WOptionTypeModelActual.updateMany({}, { $pull: { 'externalIDs': { key: { $regex: `^${WARIO_SQUARE_ID_METADATA_KEY}.*` } } } })
     logger.info(`Updated modifier types: ${JSON.stringify(allModifierTypeUpdate)}`);
     SquareProviderInstance.ObliterateModifiersOnLoad = true;
     CatalogProviderInstance.RequireSquareRebuild = true;
+  }],
+  "0.5.43": [{ major: 0, minor: 5, patch: 44 }, async () => {
+    {
+      const WFulfillmentSchema = mongoose.model('fulFILLmentSCHEMA', new Schema({
+        exposeFulfillment: {
+          type: Boolean,
+          required: true
+        }
+      }, { id: true }));
+      const updatedFulfillments = await WFulfillmentSchema.updateMany({}, { exposeFulfillment: true }, {});
+      logger.info(`Updated fulfillments, setting exposeFulfillment to true, got result: ${JSON.stringify(updatedFulfillments)}`);
+    }
+    {
+      // mass set is3p to false on OptionType
+      const WOptionTypeModel = mongoose.model('woPTioNtypescHema', new Schema({
+        displayFlags: {
+          is3p: Boolean
+        },
+      }));
+      const updateResponse = await WOptionTypeModel.updateMany({}, {
+        $set: { 'displayFlags.is3p': false }
+      }).exec();
+      if (updateResponse.modifiedCount > 0) {
+        logger.debug(`Updated ${updateResponse.modifiedCount} IOptionType with disabled is3p.`);
+      }
+      else {
+        logger.warn("No option types had is3p disabled");
+      }
+    }
+    {
+      // mass set is3p to false on IProduct
+      const WProductModel = mongoose.model('wproDUctsCHema', new Schema({
+        displayFlags: {
+          is3p: Boolean
+        },
+      }));
+      const updateResponse = await WProductModel.updateMany({}, {
+        $set: { 'displayFlags.is3p': false }
+      }).exec();
+      if (updateResponse.modifiedCount > 0) {
+        logger.debug(`Updated ${updateResponse.modifiedCount} IProduct with disabled is3p.`);
+      }
+      else {
+        logger.warn("No IProduct had is3p disabled");
+      }
+    }
   }],
 }
 

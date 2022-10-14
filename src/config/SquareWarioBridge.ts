@@ -1,14 +1,13 @@
 import { OrderLineItem, Money, OrderLineItemModifier, Order, CatalogObject, CatalogIdMapping, OrderFulfillment, CatalogItemModifierListInfo } from 'square';
 import logger from '../logging';
 import { CatalogProviderInstance } from './catalog_provider';
-import { IMoney, TenderBaseStatus, PRODUCT_LOCATION, IProduct, IProductInstance, KeyValue, ICatalogSelectors, OptionPlacement, OptionQualifier, IOption, IOptionInstance, PrinterGroup, CURRENCY, CoreCartEntry, WProduct, OrderLineDiscount, OrderTax, DiscountMethod, IOptionType } from '@wcp/wcpshared';
+import { IMoney, TenderBaseStatus, PRODUCT_LOCATION, IProduct, IProductInstance, KeyValue, ICatalogSelectors, OptionPlacement, OptionQualifier, IOption, IOptionInstance, PrinterGroup, CURRENCY, CoreCartEntry, WProduct, OrderLineDiscount, OrderTax, DiscountMethod, IOptionType, ICatalog, WCPProductV2Dto, ProductModifierEntry } from '@wcp/wcpshared';
 import { formatRFC3339 } from 'date-fns';
 import { IS_PRODUCTION } from '../utils';
 
 // TODOS FOR TODAY: 
 // * add versioning to mongoose?
 // * add note to payment or whatever so the SQ receipt makes some sense, see https://squareup.com/receipt/preview/jXnAjUa3wdk6al0EofHUg8PUZzFZY 
-// * fix UI actions on orders
 // * fix bug discovered with anna last night
 export const SQUARE_TAX_RATE_CATALOG_ID = IS_PRODUCTION ? "TMG7E3E5E45OXHJTBOHG2PMS" : "LOFKVY5UC3SLKPT2WANSBPZQ";
 export const SQUARE_WARIO_EXTERNAL_ID = IS_PRODUCTION ? 'L75RYR2NI3ED7VM7VKXO2DKO' : 'NDV2QHR54XWVXCKOHXK43ZLE';
@@ -50,6 +49,69 @@ export interface SquareOrderFulfillmentInfo {
   pickupAt: Date | number;
   note?: string;
 };
+
+/**
+ * Generates a mapping from Square Catalog Object ID to WARIO ID.
+ * Multiple square objects might map to the same WARIO ID due to feature emulation
+ * @param catalog 
+ * @returns mapping from Square Catalog Object ID to WARIO ID
+ */
+export const GenerateSquareReverseMapping = (catalog: ICatalog): Record<string, string> => {
+  const acc: Record<string, string> = {};
+  Object.values(catalog.modifiers).forEach(modEntry => {
+    if (modEntry.options.length >= 1) {
+      GetSquareExternalIds(modEntry.modifierType.externalIDs)
+        .forEach(kv => {
+          acc[kv.value] = modEntry.modifierType.id;
+        });
+      modEntry.options.forEach(oId => {
+        GetSquareExternalIds(catalog.options[oId]!.externalIDs)
+          .forEach(kv => {
+            acc[kv.value] = oId;
+          });
+      })
+    }
+  })
+  Object.values(catalog.products).forEach(productEntry => {
+    productEntry.instances.forEach(pIId => {
+      GetSquareExternalIds(catalog.productInstances[pIId]!.externalIDs)
+          .forEach(kv => {
+            acc[kv.value] = pIId;
+          });
+    });
+  });
+  return acc;
+}
+
+export const LineItemsToOrderInstanceCart = (lineItems: OrderLineItem[]): CoreCartEntry<WCPProductV2Dto>[] => {
+  return lineItems
+    .filter(line => line.itemType === 'ITEM')
+    .map((line) => {
+      const pIId = CatalogProviderInstance.ReverseMappings[line.catalogObjectId!];
+      if (!pIId) {
+        logger.error(`Unable to find matching product instance ID for square item variation`);
+      }
+      const warioProductInstance = CatalogProviderInstance.Catalog.productInstances[pIId]!;
+      const warioProduct = CatalogProviderInstance.Catalog.products[warioProductInstance.productId].product;
+      const modifiers: ProductModifierEntry[] = Object.values((line.modifiers ?? [])
+        .reduce((acc: Record<string, ProductModifierEntry>, lineMod) => {
+        const oId = CatalogProviderInstance.ReverseMappings[lineMod.catalogObjectId!];
+        const warioModifierOption = CatalogProviderInstance.Catalog.options[oId];
+        const mTId = warioModifierOption.modifierTypeId;
+        return { ...acc, [mTId]: { modifierTypeId: mTId, options: [...(acc[mTId]?.options ?? [])] } };
+      }, {}));
+      const category = warioProduct.category_ids[0];
+      // TODO: need to determine the CORRECT category, maybe this is easy since the products will be unique to the 3p merchant
+      return {
+        categoryId: category,
+        product: {
+          pid: warioProductInstance.id,
+          modifiers
+        },
+        quantity: parseInt(line.quantity)
+      };
+  });  
+}
 
 export const CreateFulfillment = (info: SquareOrderFulfillmentInfo): OrderFulfillment => {
   return {
@@ -386,7 +448,8 @@ export const PrinterGroupToSquareCatalogObjectPlusDummyProduct = (locationIds: s
   }];
 }
 
-export const ProductInstanceToSquareCatalogObject = (locationIds: string[],
+export const ProductInstanceToSquareCatalogObject = (
+  locationIds: string[],
   product: Pick<IProduct, 'modifiers' | 'price' | 'disabled'>,
   productInstance: Omit<IProductInstance, 'id' | 'productId'>,
   printerGroup: PrinterGroup | null,
@@ -397,7 +460,6 @@ export const ProductInstanceToSquareCatalogObject = (locationIds: string[],
   // do we need to add an additional variation on the square item corresponding to the base product instance for split and otherwise unruly product instances likely with pricingType: VARIABLE?
   // maybe we add variations for each half and half combo?
   // maybe we can just set variationName on the line item and call it good?
-  // TODO: MODIFIERS THAT ARE SINGLE SELECT (and therefore cannot be split) should all live in the same MODIFIER LIST in square, similar to how they are in WARIO
   // TODO: when we transition off the square POS, if we're still using the finance or employee management or whatever, we'll need to pull pre-selected modifiers off of the ITEM_VARIATIONs for a product instance
   // 
   const squareItemId = GetSquareIdFromExternalIds(productInstance.externalIDs, 'ITEM') ?? `#${batch}_ITEM`;
@@ -450,7 +512,7 @@ export const ProductInstanceToSquareCatalogObject = (locationIds: string[],
         const optionInstance = selectedOptionsForModifierType.find(x => x.optionId === option.id) ?? null;
         if (optionInstance && optionInstance.placement !== OptionPlacement.NONE) {
           instancePriceWithoutSingleSelectModifiers += optionInstance.qualifier === OptionQualifier.HEAVY ? option.price.amount * 2 : option.price.amount;
-        } 
+        }
       })
     }
   });
@@ -615,14 +677,14 @@ export const ModifierOptionPlacementsAndQualifiersToSquareCatalogObjects = (loca
 
 export const ModifierTypeToSquareCatalogObject = (
   locationIds: string[],
-  modifierType: Pick<IOptionType, 'name' | 'displayName' | 'ordinal' | 'externalIDs' | 'max_selected' | 'min_selected'>,
+  modifierType: Pick<IOptionType, 'name' | 'displayName' | 'ordinal' | 'externalIDs' | 'max_selected' | 'min_selected' | 'displayFlags'>,
   options: Omit<IOption, 'id' | 'modifierTypeId'>[],
   currentObjects: Pick<CatalogObject, 'id' | 'version'>[],
   batch: string): CatalogObject => {
   const modifierListId = GetSquareIdFromExternalIds(modifierType.externalIDs, 'MODIFIER_LIST') ?? `#${batch}_MODIFIER_LIST`;
   const version = currentObjects.find(x => x.id === modifierListId)?.version ?? null;
   const displayName = modifierType.displayName?.length > 0 ? modifierType.displayName : modifierType.name;
-  const squareName = `${('0000' + (modifierType.ordinal * 100)).slice(-4)}| ${displayName}`;
+  const squareName = modifierType.displayFlags.is3p ? displayName : `${('0000' + (modifierType.ordinal * 100)).slice(-4)}| ${displayName}`;
   return {
     id: modifierListId,
     ...(version !== null ? { version } : {}),

@@ -63,6 +63,7 @@ const ProductClassValidationChain = [
   // TODO: ensure show_name_of_base_product is TRUE if modifier list length === 0
   body('displayFlags.show_name_of_base_product').toBoolean(true),
   body('displayFlags.singular_noun').trim(),
+  body('displayFlags.is3p').exists().toBoolean(true),
   body('displayFlags.order_guide.warnings.*').trim().escape().exists().isMongoId(),
   body('displayFlags.order_guide.suggestions.*').trim().escape().exists().isMongoId(),
   body('printerGroup').optional({ nullable: true }).isMongoId(),
@@ -218,7 +219,8 @@ export class ProductController implements IExpressController {
           modifiers: product.modifiers, 
           price: product.price,
           printerGroup: product.printerGroup,
-          disabled: product.disabled
+          disabled: product.disabled,
+          displayFlags: product.displayFlags
         },
         productInstance: {
           description: req.body.description,

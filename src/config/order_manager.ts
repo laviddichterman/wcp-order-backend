@@ -53,7 +53,7 @@ import {
 
 import { WProvider } from '../types/WProvider';
 
-import { formatRFC3339, format, Interval, isSameMinute, formatISO, addHours, isSameDay } from 'date-fns';
+import { formatRFC3339, format, Interval, isSameMinute, formatISO, addHours, isSameDay, subHours, subMinutes, parseISO } from 'date-fns';
 import { GoogleProviderInstance } from "./google";
 import { SquareProviderInstance } from "./square";
 import { StoreCreditProviderInstance } from "./store_credit_provider";
@@ -63,12 +63,12 @@ import logger from '../logging';
 import crypto from 'crypto';
 import { OrderFunctional } from "@wcp/wcpshared";
 import { WOrderInstanceModel } from "../models/orders/WOrderInstance";
-import { Order as SquareOrder } from "square";
+import { CatalogObject, Order as SquareOrder } from "square";
 import { SocketIoProviderInstance } from "./socketio_provider";
-import { CreateOrderFromCart, CreateOrderForMessages, CreateOrdersForPrintingFromCart, CartByPrinterGroup, GetSquareIdFromExternalIds } from "./SquareWarioBridge";
+import { CreateOrderFromCart, CreateOrderForMessages, CreateOrdersForPrintingFromCart, CartByPrinterGroup, GetSquareIdFromExternalIds, BigIntMoneyToIntMoney, LineItemsToOrderInstanceCart } from "./SquareWarioBridge";
 import { FilterQuery } from "mongoose";
-import { WOrderInstanceFunctionModel } from "models/query/order/WOrderInstanceFunction";
-import { zonedTimeToUtc } from "date-fns-tz";
+import { WOrderInstanceFunctionModel } from "../models/query/order/WOrderInstanceFunction";
+import { utcToZonedTime, zonedTimeToUtc } from "date-fns-tz";
 type CrudFunctionResponseWithStatusCode = (order: WOrderInstance) => ResponseWithStatusCode<CrudOrderResponse>;
 const WCP = "Windy City Pie";
 
@@ -219,8 +219,8 @@ const GeneratePaymentSection = (totals: RecomputeTotalsResult, discounts: OrderL
   ${paymentDisplays}`;
 }
 
-const GenerateDeliverySection = (deliveryInfo: DeliveryInfoDto | null, ishtml: boolean) => {
-  if (deliveryInfo === null || !deliveryInfo.validation || !deliveryInfo.validation.validated_address) {
+const GenerateDeliverySection = (deliveryInfo: DeliveryInfoDto, ishtml: boolean) => {
+  if (!deliveryInfo.validation || !deliveryInfo.validation.validated_address) {
     return "";
   }
   const delivery_unit_info = deliveryInfo.address2 ? `, Unit info: ${deliveryInfo.address2}` : "";
@@ -228,10 +228,7 @@ const GenerateDeliverySection = (deliveryInfo: DeliveryInfoDto | null, ishtml: b
   return `${ishtml ? "<p><strong>" : "\n"}Delivery Address:${ishtml ? "</strong>" : ""} ${deliveryInfo.validation.validated_address}${delivery_unit_info}${delivery_instructions}${ishtml ? "</p>" : ""}`;
 }
 
-const GenerateDineInSection = (dineInInfo: DineInInfoDto | null, ishtml: boolean) => {
-  if (dineInInfo === null) {
-    return "";
-  }
+const GenerateDineInSection = (dineInInfo: DineInInfoDto, ishtml: boolean) => {
   return ishtml ? `<strong>Party size:</strong> ${dineInInfo.partySize}<br \>` : `Party size: ${dineInInfo.partySize}\n`;
 }
 
@@ -314,7 +311,7 @@ const CreateExternalEmail = async (
   const LOCATION_INFO = DataProviderInstance.KeyValueConfig.LOCATION_INFO;
   const cartstring = GenerateDisplayCartStringListFromProducts(cart);
   const paymentDisplays = order.payments.map(payment => GenerateOrderPaymentDisplay(payment, true)).join("<br />");
-  const delivery_section = GenerateDeliverySection(order.fulfillment.deliveryInfo, true);
+  const delivery_section = order.fulfillment.deliveryInfo ? GenerateDeliverySection(order.fulfillment.deliveryInfo, true) : "";
   const location_section = delivery_section ? "" : `<p><strong>Location Information:</strong>
 We are located ${LOCATION_INFO}</p>`;
   const special_instructions_section = order.specialInstructions && order.specialInstructions.length > 0 ? `<p><strong>Special Instructions</strong>: ${order.specialInstructions} </p>` : "";
@@ -379,8 +376,8 @@ const CreateOrderEvent = async (
   const shortcart = GenerateShortCartFromFullCart(cart);
   const special_instructions_section = order.specialInstructions && order.specialInstructions.length > 0 ? `\nSpecial Instructions: ${order.specialInstructions}` : "";
   const payment_section = "\n" + GeneratePaymentSection(totals, order.discounts, order.payments, false);
-  const delivery_section = GenerateDeliverySection(order.fulfillment.deliveryInfo, false);
-  const dineInSection = GenerateDineInSection(order.fulfillment.dineInInfo, false);
+  const delivery_section = order.fulfillment.deliveryInfo ? GenerateDeliverySection(order.fulfillment.deliveryInfo, false) : "";
+  const dineInSection = order.fulfillment.dineInInfo ? GenerateDineInSection(order.fulfillment.dineInInfo, false) : "";
   const calendar_details =
     `${shortcart.map((x) => `${x.category_name}:\n${x.products.join("\n")}`).join("\n")}
 ${dineInSection}
@@ -429,6 +426,52 @@ export class OrderManager implements WProvider {
   constructor() {
   }
 
+  private Query3pOrders = async () => {
+    const timeSpanAgo = zonedTimeToUtc(subHours(Date.now(), 2), process.env.TZ!)
+    logger.info(`timeSpanAgo formatted: ${formatRFC3339(timeSpanAgo)}`);
+    const recentlyUpdatedOrdersResponse = await SquareProviderInstance.SearchOrders([DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_3P], {
+      filter: { dateTimeFilter: { updatedAt: { startAt: formatRFC3339(timeSpanAgo) } } }, sort: { sortField: 'UPDATED_AT', sortOrder: 'ASC' }
+    });
+    if (recentlyUpdatedOrdersResponse.success) {
+      const ordersToInspect = (recentlyUpdatedOrdersResponse.result.orders ?? []).filter(x => x.lineItems && x.lineItems.length > 0 && x.fulfillments?.length === 1);
+      const squareOrderIds = ordersToInspect.map(x => x.id!);
+      const found3pOrders = await WOrderInstanceModel.find({ 'fulfillment.thirdPartyInfo.squareId': { $in: squareOrderIds } }).exec();
+      const ordersToIngest = ordersToInspect.filter(x => found3pOrders.findIndex(order => order.fulfillment.thirdPartyInfo!.squareId === x.id!) === -1);
+      const orderInstances = ordersToIngest.map(squareOrder => {
+        const fulfillmentDetails = squareOrder.fulfillments![0];
+        const fulfillmentTime = WDateUtils.ComputeFulfillmentTime(utcToZonedTime(fulfillmentDetails.pickupDetails!.pickupAt!, process.env.TZ!));
+        const [givenName, familyFirstLetter] = (fulfillmentDetails.pickupDetails?.recipient?.displayName ?? "ABBIE NORMAL").split(' ');
+        return new WOrderInstanceModel({
+          customerInfo: {
+            email: DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS,
+            givenName,
+            familyName: familyFirstLetter,
+            mobileNum: fulfillmentDetails.pickupDetails?.recipient?.phoneNumber ?? "2064864743",
+            referral: ""
+          },
+          discounts: [],
+          fulfillment: {
+            ...fulfillmentTime,
+            selectedService: DataProviderInstance.KeyValueConfig.THIRD_PARTY_FULFILLMENT,
+            status: WFulfillmentStatus.PROPOSED,
+            thirdPartyInfo: { squareId: squareOrder.id! },
+          },
+          locked: null,
+          metadata: [{ key: 'SQORDER', value: squareOrder.id! }],
+          payments: squareOrder.tenders?.map((x): OrderPayment => ({ t: PaymentMethod.Cash, amount: BigIntMoneyToIntMoney(x.amountMoney!), createdAt: Date.now(), status: TenderBaseStatus.COMPLETED, tipAmount: { amount: 0, currency: CURRENCY.USD }, payment: { amountTendered: BigIntMoneyToIntMoney(x.amountMoney!), change: { amount: 0, currency: CURRENCY.USD }, processorId: x.paymentId! } })) ?? [],
+          refunds: [],
+          tip: { isPercentage: false, isSuggestion: false, value: { amount: 0, currency: CURRENCY.USD } },
+          taxes: squareOrder.taxes?.map((x => ({ amount: BigIntMoneyToIntMoney(x.appliedMoney!) }))) ?? [],
+          status: WOrderStatus.OPEN,
+          cart: LineItemsToOrderInstanceCart(squareOrder.lineItems!)
+        })
+      });
+      if (orderInstances.length > 0) {
+        await WOrderInstanceModel.bulkSave(orderInstances);
+      }
+    }
+
+  }
 
   /**
    * Finds UNLOCKED orders due within the next 3 hours with proposed fulfillment status and sends them, setting the fulfillment status to SENT
@@ -585,12 +628,16 @@ export class OrderManager implements WProvider {
     logger.debug(`Found order to cancel: ${JSON.stringify(lockedOrder, null, 2)}, lock applied.`);
     const errors: WError[] = [];
     try {
+      const fulfillmentConfig = DataProviderInstance.Fulfillments[lockedOrder.fulfillment.selectedService];
+      const is3pOrder = fulfillmentConfig.service === FulfillmentType.ThirdParty;
       const squareOrderId = lockedOrder.metadata.find(x => x.key === 'SQORDER')!.value;
 
-      // refund store credits
-      const discountCreditRefunds = lockedOrder.discounts.map(async (discount) => {
-        return StoreCreditProviderInstance.RefundStoreCredit(discount.discount.code, discount.discount.amount, 'WARIO');
-      });
+      if (!is3pOrder) {
+        // refund store credits
+        const discountCreditRefunds = lockedOrder.discounts.map(async (discount) => {
+          return StoreCreditProviderInstance.RefundStoreCredit(discount.discount.code, discount.discount.amount, 'WARIO');
+        });
+      }
 
       // lookup Square Order for payments and version number
       const retrieveSquareOrderResponse = await SquareProviderInstance.RetrieveOrder(squareOrderId);
@@ -628,7 +675,6 @@ export class OrderManager implements WProvider {
       // * send message on cancelation to relevant printer groups
       // do this here to give the refunds time to process, which hopefully results in the +2 increment in the order version
       if (lockedOrder.fulfillment.status === WFulfillmentStatus.SENT || lockedOrder.fulfillment.status === WFulfillmentStatus.PROCESSING) {
-        const fulfillmentConfig = DataProviderInstance.Fulfillments[lockedOrder.fulfillment.selectedService];
         const promisedTime = DateTimeIntervalBuilder(lockedOrder.fulfillment, fulfillmentConfig);
         const oldPromisedTime = WDateUtils.ComputeServiceDateTime(lockedOrder.fulfillment);
         const customerName = `${lockedOrder.customerInfo.givenName} ${lockedOrder.customerInfo.familyName}`;
@@ -677,9 +723,8 @@ export class OrderManager implements WProvider {
         // is this an error condition?
       }
 
-
       // send email if we're supposed to
-      if (emailCustomer) {
+      if (!is3pOrder && emailCustomer) {
         await CreateExternalCancelationEmail(lockedOrder, reason);
       }
 
@@ -736,6 +781,7 @@ export class OrderManager implements WProvider {
    */
   private AdjustLockedOrderTime = async (lockedOrder: WOrderInstance, newTime: FulfillmentTime, emailCustomer: boolean, additionalMessage: string): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
     const fulfillmentConfig = DataProviderInstance.Fulfillments[lockedOrder.fulfillment.selectedService];
+    const is3pOrder = fulfillmentConfig.service === FulfillmentType.ThirdParty;
     const promisedTime = DateTimeIntervalBuilder(lockedOrder.fulfillment, fulfillmentConfig);
     const oldPromisedTime = WDateUtils.ComputeServiceDateTime(lockedOrder.fulfillment);
     logger.info(`Adjusting order in status: ${lockedOrder.status} with fulfillment status ${lockedOrder.fulfillment.status} to new time of ${format(promisedTime.start, WDateUtils.ISODateTimeNoOffset)}`);
@@ -769,7 +815,6 @@ export class OrderManager implements WProvider {
     // adjust calendar event
     const gCalEventId = lockedOrder.metadata.find(x => x.key === 'GCALEVENT')?.value;
     if (gCalEventId) {
-
       const dateTimeInterval = DateTimeIntervalBuilder(newTime, fulfillmentConfig);
       await GoogleProviderInstance.ModifyCalendarEvent(gCalEventId, {
         start: {
@@ -783,7 +828,7 @@ export class OrderManager implements WProvider {
       })
     }
     // send email to customer
-    if (emailCustomer) {
+    if (!is3pOrder && emailCustomer) {
       await CreateExternalEmailForOrderReschedule(fulfillmentConfig, { ...lockedOrder.fulfillment, ...newTime }, lockedOrder.customerInfo, additionalMessage);
     }
 
@@ -826,49 +871,54 @@ export class OrderManager implements WProvider {
     );
   }
   public ConfirmLockedOrder = async (lockedOrder: WOrderInstance, messageToCustomer: string): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
-    // lookup Square Order
-    const squareOrderId = lockedOrder.metadata.find(x => x.key === 'SQORDER')!.value;
-    const retrieveSquareOrderResponse = await SquareProviderInstance.RetrieveOrder(squareOrderId);
-    if (!retrieveSquareOrderResponse.success) {
-      // unable to find the order
-      return { status: 405, success: false, error: retrieveSquareOrderResponse.error.map(e => ({ category: e.category, code: e.code, detail: e.detail ?? "" })) };
-    }
-    const squareOrder = retrieveSquareOrderResponse.result.order!;
-    if (squareOrder.state !== 'OPEN') {
-      // unable to edit the order at this point, error out
-      return { status: 405, success: false, error: [{ category: 'INVALID_REQUEST_ERROR', code: 'UNEXPECTED_VALUE', detail: 'Square order found, but not in a state where we can confirm it' }] };
+    const fulfillmentConfig = DataProviderInstance.Fulfillments[lockedOrder.fulfillment.selectedService];
+    const is3pOrder = fulfillmentConfig.service === FulfillmentType.ThirdParty;
+
+    if (!is3pOrder) {
+      // lookup Square Order
+      const squareOrderId = lockedOrder.metadata.find(x => x.key === 'SQORDER')!.value;
+      const retrieveSquareOrderResponse = await SquareProviderInstance.RetrieveOrder(squareOrderId);
+      if (!retrieveSquareOrderResponse.success) {
+        // unable to find the order
+        return { status: 405, success: false, error: retrieveSquareOrderResponse.error.map(e => ({ category: e.category, code: e.code, detail: e.detail ?? "" })) };
+      }
+      const squareOrder = retrieveSquareOrderResponse.result.order!;
+      if (squareOrder.state !== 'OPEN') {
+        // unable to edit the order at this point, error out
+        return { status: 405, success: false, error: [{ category: 'INVALID_REQUEST_ERROR', code: 'UNEXPECTED_VALUE', detail: 'Square order found, but not in a state where we can confirm it' }] };
+      }
+
+      // mark the order paid via PayOrder endpoint
+      const payOrderResponse = await SquareProviderInstance.PayOrder(squareOrderId, squareOrder.tenders?.map(x => x.id!) ?? []);
+      if (payOrderResponse.success) {
+        logger.info(`Square order successfully marked paid.`);
+        // send email to customer
+        await CreateExternalConfirmationEmail(lockedOrder);
+      } else {
+        const errorDetail = `Failed to pay the order: ${JSON.stringify(payOrderResponse)}`;
+        logger.error(errorDetail);
+        return { status: 422, success: false, error: payOrderResponse.error.map(e => ({ category: e.category, code: e.code, detail: e.detail ?? "" })) };
+      }
     }
 
-    // mark the order paid via PayOrder endpoint
-    const payOrderResponse = await SquareProviderInstance.PayOrder(squareOrderId, squareOrder.tenders?.map(x => x.id!) ?? []);
-    if (payOrderResponse.success) {
-      logger.info(`Square order successfully marked paid.`);
+    // TODO: check if the order is within time range and send it if so
+    // GetEndOfSendingRange
 
-      // TODO: check if the order is within time range and send it if so
-      // GetEndOfSendingRange
-
-      // send email to customer
-      await CreateExternalConfirmationEmail(lockedOrder);
-      // adjust DB event
-      return await WOrderInstanceModel.findOneAndUpdate(
-        { locked: lockedOrder.locked, _id: lockedOrder.id },
-        { locked: null, status: WOrderStatus.CONFIRMED }, // TODO: payments status need to be changed as committed to the DB
-        { new: true })
-        .then(async (updatedOrder) => {
-          // return success/failure
-          SocketIoProviderInstance.EmitOrder(updatedOrder!.toObject());
-          return { status: 200, success: true, error: [], result: updatedOrder! };
-        })
-        .catch((err: any) => {
-          const errorDetail = `Unable to commit update to order to release lock and update fulfillment time. Got error: ${JSON.stringify(err, null, 2)}`;
-          logger.error(errorDetail);
-          return { status: 500, success: false, error: [{ category: 'API_ERROR', code: 'INTERNAL_SERVER_ERROR', detail: errorDetail }] };
-        })
-    } else {
-      const errorDetail = `Failed to pay the order: ${JSON.stringify(payOrderResponse)}`;
-      logger.error(errorDetail);
-      return { status: 422, success: false, error: payOrderResponse.error.map(e => ({ category: e.category, code: e.code, detail: e.detail ?? "" })) };
-    }
+    // adjust DB event
+    return await WOrderInstanceModel.findOneAndUpdate(
+      { locked: lockedOrder.locked, _id: lockedOrder.id },
+      { locked: null, status: WOrderStatus.CONFIRMED }, // TODO: payments status need to be changed as committed to the DB if not 3p
+      { new: true })
+      .then(async (updatedOrder) => {
+        // return success/failure
+        SocketIoProviderInstance.EmitOrder(updatedOrder!.toObject());
+        return { status: 200, success: true, error: [], result: updatedOrder! };
+      })
+      .catch((err: any) => {
+        const errorDetail = `Unable to commit update to order to release lock and update fulfillment time. Got error: ${JSON.stringify(err, null, 2)}`;
+        logger.error(errorDetail);
+        return { status: 500, success: false, error: [{ category: 'API_ERROR', code: 'INTERNAL_SERVER_ERROR', detail: errorDetail }] };
+      })
   };
 
   public CreateOrder = async (createOrderRequest: CreateOrderRequestV2, ipAddress: string): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
@@ -897,15 +947,15 @@ export class OrderManager implements WProvider {
       };
     }
 
-    const shorthandEventTitle = EventTitleStringBuilder(CatalogProviderInstance.CatalogSelectors, fulfillmentConfig, customerName, createOrderRequest.fulfillment.dineInInfo, rebuiltCart, createOrderRequest.specialInstructions ?? "");
+    const shorthandEventTitle = EventTitleStringBuilder(CatalogProviderInstance.CatalogSelectors, fulfillmentConfig, customerName, createOrderRequest.fulfillment.dineInInfo ?? null, rebuiltCart, createOrderRequest.specialInstructions ?? "");
 
     // 3. 'let's setup the order object reference
     const orderInstance: WOrderInstancePartial = {
       cart: createOrderRequest.cart,
       customerInfo: createOrderRequest.customerInfo,
       fulfillment: {
-        dineInInfo: createOrderRequest.fulfillment.dineInInfo ?? null,
-        deliveryInfo: createOrderRequest.fulfillment.deliveryInfo ?? null,
+        dineInInfo: createOrderRequest.fulfillment.dineInInfo ?? undefined,
+        deliveryInfo: createOrderRequest.fulfillment.deliveryInfo ?? undefined,
         selectedService: createOrderRequest.fulfillment.selectedService,
         selectedDate: WDateUtils.formatISODate(dateTimeInterval.start), // REFORMAT THE DATE HERE FOR SAFETY
         selectedTime: createOrderRequest.fulfillment.selectedTime,
@@ -1194,7 +1244,16 @@ export class OrderManager implements WProvider {
 
     const _SEND_ORDER_INTERVAL = setInterval(() => {
       this.SendOrders();
-    }, 30000);
+    }, 10000);
+
+    // if (DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_3P) {
+    //   const _QUERY_3P_ORDERS = setInterval(() => {
+    //     this.Query3pOrders();
+    //   }, 35000);
+    //   logger.info(`Set job to query for 3rd Party orders at square location: ${DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_3P}.`);
+    // } else {
+    //   logger.warn("No value set for SQUARE_LOCATION_3P, skipping polling for 3p orders.");
+    // }
     logger.info("Order Manager Bootstrap completed.");
   };
 

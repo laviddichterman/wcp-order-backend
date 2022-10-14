@@ -1,6 +1,6 @@
 {
   "name": "@wcp/wcp-order-backend",
-  "version": "0.5.43",
+  "version": "0.5.44",
   "main": "dist/src/server.js",
   "files": [
     "dist",
@@ -33,7 +33,7 @@
     "@thream/socketio-jwt": "^3.0.1",
     "@turf/invariant": "^6.5.0",
     "@turf/turf": "^6.5.0",
-    "@wcp/wcpshared": "^4.1.47",
+    "@wcp/wcpshared": "^4.1.51",
     "apollo-server": "^3.10.3",
     "apollo-server-core": "^3.10.3",
     "apollo-server-express": "^3.10.3",
@@ -75,7 +75,7 @@
     "@types/glob": "^8.0.0",
     "@types/json-bigint": "^1.0.1",
     "@types/lodash": "^4.14.186",
-    "@types/node": "^18.8.4",
+    "@types/node": "^18.8.5",
     "@types/nodemailer": "^6.4.6",
     "@types/qrcode": "^1.5.0",
     "@types/validator": "^13.7.7",

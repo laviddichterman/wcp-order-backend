@@ -53,10 +53,7 @@ export const WOrderInstanceSchema = new Schema<Omit<WOrderInstance, 'id'>>({
     type: [WOrderPaymentSchema],
     required: true
   },
-  metrics: {
-    type: WMetricsSchema,
-    required: true
-  },
+  metrics: WMetricsSchema,
   taxes: {
     type: [OrderTaxSchema],
     required: true
@@ -71,4 +68,3 @@ export const WOrderInstanceSchema = new Schema<Omit<WOrderInstance, 'id'>>({
 }, { id: true, toJSON: { virtuals: true }, toObject: { virtuals: true } });
 
 export const WOrderInstanceModel = mongoose.model<WOrderInstance>(path.basename(__filename).replace(path.extname(__filename), ''), WOrderInstanceSchema);
-//WOrderInstanceSchema.path('payments').discriminator(PaymentMethod.StoreCredit, WStoreCreditPaymentSchema);

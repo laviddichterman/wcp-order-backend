@@ -133,7 +133,7 @@ export class SquareProvider implements WProvider {
       this.#catalogIdsToDelete = [];
     }
 
-    if (this.#obliterateModifiersOnLoad) {
+    if (this.#obliterateModifiersOnLoad === true) {
       logger.info('Obliterating modifiers for this location on load');
       await this.ObliterateModifiersInSquareCatalog();
     }
@@ -268,7 +268,7 @@ export class SquareProvider implements WProvider {
       locationIds
     };
     const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<SearchOrdersResponse>> => {
-      logger.info(`Searching Square Orders with: ${request_body}`);
+      logger.info(`Searching Square Orders with: ${JSON.stringify(request_body)}`);
       const { result, ...httpResponse } = await orders_api.searchOrders(request_body);
       return { success: true, result: result, error: [] };
     }

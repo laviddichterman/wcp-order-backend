@@ -26,6 +26,10 @@ export const FulfillmentSchema = new Schema<MT>({
     type: String,
     required: true
   },
+  exposeFulfillment: {
+    type: Boolean,
+    required: true
+  },
   ordinal: {
     type: Number,
     min: 0,

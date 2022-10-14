@@ -34,7 +34,7 @@ import logger from '../logging';
 import { chunk } from 'lodash';
 import { WProvider } from "../types/WProvider";
 import { SquareProviderInstance, SQUARE_BATCH_CHUNK_SIZE } from "./square";
-import { GetSquareExternalIds, GetSquareIdIndexFromExternalIds, IdMappingsToExternalIds, ModifierTypeToSquareCatalogObject, PrinterGroupToSquareCatalogObjectPlusDummyProduct, ProductInstanceToSquareCatalogObject, WARIO_SQUARE_ID_METADATA_KEY } from "./SquareWarioBridge";
+import { GenerateSquareReverseMapping, GetSquareExternalIds, GetSquareIdIndexFromExternalIds, IdMappingsToExternalIds, ModifierTypeToSquareCatalogObject, PrinterGroupToSquareCatalogObjectPlusDummyProduct, ProductInstanceToSquareCatalogObject, WARIO_SQUARE_ID_METADATA_KEY } from "./SquareWarioBridge";
 import { CatalogIdMapping, CatalogObject } from "square";
 import { FilterQuery } from "mongoose";
 
@@ -49,6 +49,12 @@ const ValidateProductModifiersFunctionsCategories = function (modifiers: { mtid:
   return found_all_categories && found_all_modifiers;
 }
 
+const LocationsConsidering3pFlag = (is3p: boolean) => [
+    DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE,
+    ...(is3p && DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_3P ? [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_3P] : [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION]) 
+  ];
+
+
 const BatchDeleteCatalogObjectsFromExternalIds = async (externalIds: KeyValue[]) => {
   const squareKV = externalIds.filter(x => x.key.startsWith(WARIO_SQUARE_ID_METADATA_KEY));
   if (squareKV.length > 0) {
@@ -60,7 +66,7 @@ const BatchDeleteCatalogObjectsFromExternalIds = async (externalIds: KeyValue[])
 
 type UpdateProductInstanceProps = {
   piid: string;
-  product: Pick<IProduct, 'price' | 'modifiers' | 'printerGroup' | 'disabled'>;
+  product: Pick<IProduct, 'price' | 'modifiers' | 'printerGroup' | 'disabled' | 'displayFlags'>;
   productInstance: Partial<Omit<IProductInstance, 'id' | 'productId'>>;
 };
 
@@ -91,11 +97,13 @@ export class CatalogProvider implements WProvider {
   #product_instance_functions: RecordProductInstanceFunctions;
   #orderInstanceFunctions: RecordOrderInstanceFunctions;
   #catalog: ICatalog;
+  #squareIdToWarioIdMapping: Record<string, string>;
   #apiver: SEMVER;
   #requireSquareRebuild: boolean;
   constructor() {
     this.#apiver = { major: 0, minor: 0, patch: 0 };
-    this.#requireSquareRebuild = FORCE_SQUARE_CATALOG_REBUILD_ON_LOAD;
+    this.#requireSquareRebuild = FORCE_SQUARE_CATALOG_REBUILD_ON_LOAD === true;
+    this.#squareIdToWarioIdMapping = {};
   }
 
   set RequireSquareRebuild(value: boolean) {
@@ -136,6 +144,10 @@ export class CatalogProvider implements WProvider {
 
   get Catalog() {
     return this.#catalog;
+  }
+
+  get ReverseMappings(): Readonly<Record<string, string>> {
+    return this.#squareIdToWarioIdMapping;
   }
 
   get CatalogSelectors() {
@@ -238,6 +250,7 @@ export class CatalogProvider implements WProvider {
   RecomputeCatalog = () => {
     logger.debug('Recomputing catalog');
     this.#catalog = CatalogGenerator(Object.values(this.#categories), this.#modifier_types, this.#options, this.#products, this.#product_instances, this.#product_instance_functions, this.#orderInstanceFunctions, this.#apiver);
+    this.#squareIdToWarioIdMapping = GenerateSquareReverseMapping(this.#catalog);
   }
 
   RecomputeCatalogAndEmit = () => {
@@ -337,7 +350,7 @@ export class CatalogProvider implements WProvider {
         const missingSquareCatalogObjectBatches = Object.values(this.#catalog.products)
           .map(p => p.instances
             .filter(x => GetSquareExternalIds(this.#catalog.productInstances[x]!.externalIDs).reduce((acc, kv) => acc || foundObjects.findIndex(o => o.id === kv.value) === -1, false))
-            .map(piid => ({ piid, product: { modifiers: p.product.modifiers, price: p.product.price, printerGroup: p.product.printerGroup, disabled: p.product.disabled }, productInstance: { externalIDs: this.#catalog.productInstances[piid]!.externalIDs.filter(kv => !kv.key.startsWith(WARIO_SQUARE_ID_METADATA_KEY)) } })))
+            .map(piid => ({ piid, product: { modifiers: p.product.modifiers, price: p.product.price, printerGroup: p.product.printerGroup, disabled: p.product.disabled, displayFlags: p.product.displayFlags }, productInstance: { externalIDs: this.#catalog.productInstances[piid]!.externalIDs.filter(kv => !kv.key.startsWith(WARIO_SQUARE_ID_METADATA_KEY)) } })))
           .flat();
         if (missingSquareCatalogObjectBatches.length > 0) {
           await this.BatchUpdateProductInstance(missingSquareCatalogObjectBatches, true);
@@ -350,7 +363,7 @@ export class CatalogProvider implements WProvider {
     const batches = Object.values(this.#catalog.products)
       .map(p => p.instances
         .filter(piid => GetSquareIdIndexFromExternalIds(this.#catalog.productInstances[piid]!.externalIDs, "ITEM") === -1)
-        .map(piid => ({ piid, product: { modifiers: p.product.modifiers, price: p.product.price, printerGroup: p.product.printerGroup, disabled: p.product.disabled }, productInstance: {} })))
+        .map(piid => ({ piid, product: { modifiers: p.product.modifiers, price: p.product.price, printerGroup: p.product.printerGroup, disabled: p.product.disabled, displayFlags: p.product.displayFlags }, productInstance: {} })))
       .flat();
     if (batches.length > 0) {
       await this.BatchUpdateProductInstance(batches, true);
@@ -409,7 +422,7 @@ export class CatalogProvider implements WProvider {
       }
     }
 
-    if (this.#requireSquareRebuild) {
+    if (this.#requireSquareRebuild === true) {
       logger.info('Forcing Square catalog rebuild on load');
       await this.ForceSquareCatalogCompleteUpsert();
     }
@@ -421,7 +434,7 @@ export class CatalogProvider implements WProvider {
     logger.info(`Creating Printer Group: ${JSON.stringify(printerGroup)}`);
     const upsertResponse = await SquareProviderInstance.BatchUpsertCatalogObjects([{
       objects: PrinterGroupToSquareCatalogObjectPlusDummyProduct(
-        [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION, DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE],
+        [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE], // this ONLY goes to the alternate location since we can't purchase messages
         printerGroup,
         [],
         "")
@@ -601,7 +614,7 @@ export class CatalogProvider implements WProvider {
       .filter(p => p.product.modifiers.findIndex(x => modifierTypeIds.findIndex(y => y === x.mtid) !== -1) !== -1)
       .map((p) => p.instances.map(piid => ({
         piid,
-        product: { modifiers: p.product.modifiers, price: p.product.price, printerGroup: p.product.printerGroup, disabled: p.product.disabled },
+        product: { modifiers: p.product.modifiers, price: p.product.price, printerGroup: p.product.printerGroup, disabled: p.product.disabled, displayFlags: p.product.displayFlags },
         productInstance: {}
       }))).flat();
     if (productUpdates.length > 0) {
@@ -615,7 +628,7 @@ export class CatalogProvider implements WProvider {
     const products = await WProductModel.find(testProduct).exec();
     const instanceUpdates = (await Promise.all(products.map(async (p) => {
       const instances = await WProductInstanceModel.find({ productId: p.id }).exec();
-      return instances.map(i => ({ piid: i.id, product: { ...{ price: p.price, modifiers: p.modifiers, printerGroup: p.printerGroup, disabled: p.disabled }, ...updateProduct }, productInstance: {} }));
+      return instances.map(i => ({ piid: i.id, product: { ...{ price: p.price, modifiers: p.modifiers, printerGroup: p.printerGroup, disabled: p.disabled, displayFlags: p.displayFlags }, ...updateProduct }, productInstance: {} }));
     }))).flat();
     if (instanceUpdates.length > 0) {
       await WProductModel.updateMany(testProduct, updateProduct);
@@ -706,7 +719,7 @@ export class CatalogProvider implements WProvider {
     batchData.map((batch, batchId) => {
       if (batch.deepUpdate) {
         catalogObjectsToUpsert.push(ModifierTypeToSquareCatalogObject(
-          [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION, DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE],
+          LocationsConsidering3pFlag(batch.updatedModifierType.displayFlags.is3p),
           batch.updatedModifierType,
           batch.updatedOptions,
           existingSquareObjects,
@@ -914,7 +927,7 @@ export class CatalogProvider implements WProvider {
     batchesInfo.forEach((b, i) => {
       const options = b.modifierTypeEntry.options.map(oId => (oId === b.batch.id ? b.updatedOption : this.Catalog.options[oId]!))
       catalogObjectsForUpsert.push(ModifierTypeToSquareCatalogObject(
-        [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION, DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE],
+        LocationsConsidering3pFlag(b.modifierTypeEntry.modifierType.displayFlags.is3p),
         b.modifierTypeEntry.modifierType,
         options,
         existingSquareObjects,
@@ -999,7 +1012,7 @@ export class CatalogProvider implements WProvider {
     // add the product instance to the square catalog here
     const upsertResponse = await SquareProviderInstance.UpsertCatalogObject(
       ProductInstanceToSquareCatalogObject(
-        [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION, DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE],
+        LocationsConsidering3pFlag(product.displayFlags.is3p),
         product,
         adjustedInstance,
         product.printerGroup ? this.#printerGroups[product.printerGroup] : null,
@@ -1060,7 +1073,7 @@ export class CatalogProvider implements WProvider {
         pi.modifiers.filter(mod => removedModifierTypes.includes(mod.modifierTypeId)).length > 0)
       .map((pi) => ({
         piid: pi.id,
-        product: { modifiers: updated.modifiers, price: updated.price, printerGroup: updated.printerGroup, disabled: updated.disabled },
+        product: { modifiers: updated.modifiers, price: updated.price, printerGroup: updated.printerGroup, disabled: updated.disabled, displayFlags: updated.displayFlags },
         productInstance: {
           modifiers: pi.modifiers.filter(x => !removedModifierTypes.includes(x.modifierTypeId))
         }
@@ -1105,7 +1118,7 @@ export class CatalogProvider implements WProvider {
     // add the product instance to the square catalog here
     const product = this.#catalog.products[adjustedInstance.productId]!.product;
     const upsertResponse = await SquareProviderInstance.UpsertCatalogObject(ProductInstanceToSquareCatalogObject(
-      [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION, DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE],
+      LocationsConsidering3pFlag(product.displayFlags.is3p),
       product,
       adjustedInstance,
       product.printerGroup ? this.#printerGroups[product.printerGroup] : null,
@@ -1144,7 +1157,7 @@ export class CatalogProvider implements WProvider {
 
     const catalogObjects = batches.map((b, i) =>
       ProductInstanceToSquareCatalogObject(
-        [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION, DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE],
+        LocationsConsidering3pFlag(b.product.displayFlags.is3p),
         b.product,
         { ...oldProductInstances[i], ...b.productInstance },
         b.product.printerGroup ? this.#printerGroups[b.product.printerGroup] : null,
