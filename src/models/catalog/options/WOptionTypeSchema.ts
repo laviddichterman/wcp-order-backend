@@ -29,6 +29,10 @@ export const WOptionTypeSchema = new Schema<MT>({
   max_selected: { type: Number, required: false },
 
   displayFlags: {
+    is3p: {
+      type: Boolean,
+      required: true
+    },
     // if no options can be selected, don't display this modifier section at all
     omit_section_if_no_available_options: Boolean,
     // if any option of this modifier isn't selectable, don't show it grayed out

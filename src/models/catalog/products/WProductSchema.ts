@@ -44,6 +44,10 @@ const WProductSchema = new Schema<MT>({
   serviceDisable: [{ type: String, ref: 'FulfillmentSchema'}],
   
   displayFlags: {
+    is3p: {
+      type: Boolean,
+      required: true
+    },
     flavor_max: Number,
     bake_max: Number,
     bake_differential: Number,
