@@ -695,7 +695,7 @@ export const ModifierTypeToSquareCatalogObject = (
     modifierListData: {
       name: squareName,
       ordinal: modifierType.ordinal * 1024,
-      selectionType: modifierType.max_selected === 1 ? 'SINGLE' : 'MULTIPLE',
+      selectionType: 'MULTIPLE', // this should always be MULTIPLE otherwise square autoselects a modifier
       modifiers: options.map((o, i) => ModifierOptionPlacementsAndQualifiersToSquareCatalogObjects(locationIds, modifierListId, o, currentObjects, `${batch}S${('000' + i).slice(-3)}S`)).flat()
     }
   };
