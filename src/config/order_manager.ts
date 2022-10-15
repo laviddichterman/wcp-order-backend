@@ -427,50 +427,64 @@ export class OrderManager implements WProvider {
   }
 
   private Query3pOrders = async () => {
-    const timeSpanAgo = zonedTimeToUtc(subHours(Date.now(), 2), process.env.TZ!)
-    logger.info(`timeSpanAgo formatted: ${formatRFC3339(timeSpanAgo)}`);
-    const recentlyUpdatedOrdersResponse = await SquareProviderInstance.SearchOrders([DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_3P], {
-      filter: { dateTimeFilter: { updatedAt: { startAt: formatRFC3339(timeSpanAgo) } } }, sort: { sortField: 'UPDATED_AT', sortOrder: 'ASC' }
-    });
-    if (recentlyUpdatedOrdersResponse.success) {
-      const ordersToInspect = (recentlyUpdatedOrdersResponse.result.orders ?? []).filter(x => x.lineItems && x.lineItems.length > 0 && x.fulfillments?.length === 1);
-      const squareOrderIds = ordersToInspect.map(x => x.id!);
-      const found3pOrders = await WOrderInstanceModel.find({ 'fulfillment.thirdPartyInfo.squareId': { $in: squareOrderIds } }).exec();
-      const ordersToIngest = ordersToInspect.filter(x => found3pOrders.findIndex(order => order.fulfillment.thirdPartyInfo!.squareId === x.id!) === -1);
-      const orderInstances = ordersToIngest.map(squareOrder => {
-        const fulfillmentDetails = squareOrder.fulfillments![0];
-        const fulfillmentTime = WDateUtils.ComputeFulfillmentTime(utcToZonedTime(fulfillmentDetails.pickupDetails!.pickupAt!, process.env.TZ!));
-        const [givenName, familyFirstLetter] = (fulfillmentDetails.pickupDetails?.recipient?.displayName ?? "ABBIE NORMAL").split(' ');
-        return new WOrderInstanceModel({
-          customerInfo: {
-            email: DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS,
-            givenName,
-            familyName: familyFirstLetter,
-            mobileNum: fulfillmentDetails.pickupDetails?.recipient?.phoneNumber ?? "2064864743",
-            referral: ""
-          },
-          discounts: [],
-          fulfillment: {
-            ...fulfillmentTime,
-            selectedService: DataProviderInstance.KeyValueConfig.THIRD_PARTY_FULFILLMENT,
-            status: WFulfillmentStatus.PROPOSED,
-            thirdPartyInfo: { squareId: squareOrder.id! },
-          },
-          locked: null,
-          metadata: [{ key: 'SQORDER', value: squareOrder.id! }],
-          payments: squareOrder.tenders?.map((x): OrderPayment => ({ t: PaymentMethod.Cash, amount: BigIntMoneyToIntMoney(x.amountMoney!), createdAt: Date.now(), status: TenderBaseStatus.COMPLETED, tipAmount: { amount: 0, currency: CURRENCY.USD }, payment: { amountTendered: BigIntMoneyToIntMoney(x.amountMoney!), change: { amount: 0, currency: CURRENCY.USD }, processorId: x.paymentId! } })) ?? [],
-          refunds: [],
-          tip: { isPercentage: false, isSuggestion: false, value: { amount: 0, currency: CURRENCY.USD } },
-          taxes: squareOrder.taxes?.map((x => ({ amount: BigIntMoneyToIntMoney(x.appliedMoney!) }))) ?? [],
-          status: WOrderStatus.OPEN,
-          cart: LineItemsToOrderInstanceCart(squareOrder.lineItems!)
-        })
+    try {
+      const timeSpanAgo = zonedTimeToUtc(subMinutes(Date.now(), 20), process.env.TZ!)
+      logger.info(`timeSpanAgo formatted: ${formatRFC3339(timeSpanAgo)}`);
+      const recentlyUpdatedOrdersResponse = await SquareProviderInstance.SearchOrders([DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_3P], {
+        filter: { dateTimeFilter: { updatedAt: { startAt: formatRFC3339(timeSpanAgo) } } }, sort: { sortField: 'UPDATED_AT', sortOrder: 'ASC' }
       });
-      if (orderInstances.length > 0) {
-        await WOrderInstanceModel.bulkSave(orderInstances);
+      if (recentlyUpdatedOrdersResponse.success) {
+        const ordersToInspect = (recentlyUpdatedOrdersResponse.result.orders ?? []).filter(x => x.lineItems && x.lineItems.length > 0 && x.fulfillments?.length === 1);
+        const squareOrderIds = ordersToInspect.map(x => x.id!);
+        const found3pOrders = await WOrderInstanceModel.find({ 'fulfillment.thirdPartyInfo.squareId': { $in: squareOrderIds } }).exec();
+        const ordersToIngest = ordersToInspect.filter(x => found3pOrders.findIndex(order => order.fulfillment.thirdPartyInfo!.squareId === x.id!) === -1);
+        const orderInstances: Omit<WOrderInstance, "id">[] = [];
+        ordersToIngest.forEach(squareOrder => {
+          const fulfillmentDetails = squareOrder.fulfillments![0];
+          const fulfillmentTime = WDateUtils.ComputeFulfillmentTime(utcToZonedTime(fulfillmentDetails.pickupDetails!.pickupAt!, process.env.TZ!));
+          const [givenName, familyFirstLetter] = (fulfillmentDetails.pickupDetails?.recipient?.displayName ?? "ABBIE NORMAL").split(' ');
+          try {
+            const cart = LineItemsToOrderInstanceCart(squareOrder.lineItems!)
+            orderInstances.push({
+              customerInfo: {
+                email: DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS,
+                givenName,
+                familyName: familyFirstLetter,
+                mobileNum: fulfillmentDetails.pickupDetails?.recipient?.phoneNumber ?? "2064864743",
+                referral: ""
+              },
+              discounts: [],
+              fulfillment: {
+                ...fulfillmentTime,
+                selectedService: DataProviderInstance.KeyValueConfig.THIRD_PARTY_FULFILLMENT,
+                status: WFulfillmentStatus.PROPOSED,
+                thirdPartyInfo: { squareId: squareOrder.id! },
+              },
+              locked: null,
+              metadata: [{ key: 'SQORDER', value: squareOrder.id! }],
+              payments: squareOrder.tenders?.map((x): OrderPayment => ({ t: PaymentMethod.Cash, amount: BigIntMoneyToIntMoney(x.amountMoney!), createdAt: Date.now(), status: TenderBaseStatus.COMPLETED, tipAmount: { amount: 0, currency: CURRENCY.USD }, payment: { amountTendered: BigIntMoneyToIntMoney(x.amountMoney!), change: { amount: 0, currency: CURRENCY.USD }, processorId: x.paymentId! } })) ?? [],
+              refunds: [],
+              tip: { isPercentage: false, isSuggestion: false, value: { amount: 0, currency: CURRENCY.USD } },
+              taxes: squareOrder.taxes?.map((x => ({ amount: BigIntMoneyToIntMoney(x.appliedMoney!) }))) ?? [],
+              status: WOrderStatus.OPEN,
+              cart
+            })
+          }
+          catch (err: any) {
+            logger.error(`Skipping ${JSON.stringify(ordersToInspect)} due to error ingesting.`)
+          }
+        });
+        if (orderInstances.length > 0) {
+          logger.info(`Inserting ${orderInstances.length} 3p orders... ${JSON.stringify(orderInstances)}`);
+          const saveResponse =  await WOrderInstanceModel.bulkSave(orderInstances.map(x=>new WOrderInstanceModel(x)));
+          logger.info(`Save response for 3p order: ${JSON.stringify(saveResponse)}`);
+        }
       }
     }
-
+    catch (err: any) {
+      const errorDetail = `Got error when attempting to ingest 3p orders: ${JSON.stringify(err, Object.getOwnPropertyNames(err), 2)}`;
+      logger.error(errorDetail);
+    }
   }
 
   /**
@@ -1246,14 +1260,14 @@ export class OrderManager implements WProvider {
       this.SendOrders();
     }, 10000);
 
-    // if (DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_3P) {
-    //   const _QUERY_3P_ORDERS = setInterval(() => {
-    //     this.Query3pOrders();
-    //   }, 35000);
-    //   logger.info(`Set job to query for 3rd Party orders at square location: ${DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_3P}.`);
-    // } else {
-    //   logger.warn("No value set for SQUARE_LOCATION_3P, skipping polling for 3p orders.");
-    // }
+    if (DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_3P) {
+      const _QUERY_3P_ORDERS = setInterval(() => {
+        this.Query3pOrders();
+      }, 35000);
+      logger.info(`Set job to query for 3rd Party orders at square location: ${DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_3P}.`);
+    } else {
+      logger.warn("No value set for SQUARE_LOCATION_3P, skipping polling for 3p orders.");
+    }
     logger.info("Order Manager Bootstrap completed.");
   };
 

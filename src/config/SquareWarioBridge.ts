@@ -85,7 +85,8 @@ export const GenerateSquareReverseMapping = (catalog: ICatalog): Record<string, 
 }
 
 export const LineItemsToOrderInstanceCart = (lineItems: OrderLineItem[]): CoreCartEntry<WCPProductV2Dto>[] => {
-  return lineItems
+  try {
+    return lineItems
     .filter(line => line.itemType === 'ITEM')
     .map((line) => {
       const pIId = CatalogProviderInstance.ReverseMappings[line.catalogObjectId!];
@@ -99,19 +100,27 @@ export const LineItemsToOrderInstanceCart = (lineItems: OrderLineItem[]): CoreCa
         const oId = CatalogProviderInstance.ReverseMappings[lineMod.catalogObjectId!];
         const warioModifierOption = CatalogProviderInstance.Catalog.options[oId];
         const mTId = warioModifierOption.modifierTypeId;
-        return { ...acc, [mTId]: { modifierTypeId: mTId, options: [...(acc[mTId]?.options ?? [])] } };
+        return { ...acc, [mTId]: { modifierTypeId: mTId, options: [...(acc[mTId]?.options ?? []), { optionId: oId, placement: OptionPlacement.WHOLE, qualifier: OptionQualifier.REGULAR }] } };
       }, {}));
       const category = warioProduct.category_ids[0];
       // TODO: need to determine the CORRECT category, maybe this is easy since the products will be unique to the 3p merchant
       return {
         categoryId: category,
         product: {
-          pid: warioProductInstance.id,
+          pid: warioProductInstance.productId,
           modifiers
         },
         quantity: parseInt(line.quantity)
       };
-  });  
+  });   
+  }
+  catch (err: any) {
+    const errorDetail = `Got error when attempting to ingest 3p line items (${JSON.stringify(lineItems)}) got error: ${JSON.stringify(err, Object.getOwnPropertyNames(err), 2)}`;
+    logger.error(errorDetail);
+    throw errorDetail;
+  }
+  return [];
+
 }
 
 export const CreateFulfillment = (info: SquareOrderFulfillmentInfo): OrderFulfillment => {

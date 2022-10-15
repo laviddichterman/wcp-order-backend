@@ -471,11 +471,7 @@ export class CatalogProvider implements WProvider {
 
     const catalogObjects = batches.map((b, i) =>
       PrinterGroupToSquareCatalogObjectPlusDummyProduct(
-        [
-          DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
-          DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE,
-          ...(DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_3P ? [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_3P] : [])
-        ],
+        [ DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE], // message only needs to go to the alternate location
         { ...oldPGs[i], ...b.printerGroup },
         existingSquareObjects,
         ('000' + i).slice(-3)));
