@@ -247,7 +247,7 @@ const GenerateShortCartFromFullCart = (cart: CategorizedRebuiltCart): { category
     .filter(([_, cart]) => cart.length > 0)
     .map(([catid, category_cart]) => {
       const category_name = catalogCategories[catid].category.name;
-      const category_shortcart = { category_name: category_name, products: category_cart.map(x => `${x.quantity}x: ${x.product.m.shortname}`) };
+      const category_shortcart = { category_name: category_name, products: category_cart.map(x => `${x.quantity}x: ${x.product.m.name}`) };
       return category_shortcart;
     })
 }
@@ -476,7 +476,7 @@ export class OrderManager implements WProvider {
         });
         if (orderInstances.length > 0) {
           logger.info(`Inserting ${orderInstances.length} 3p orders... ${JSON.stringify(orderInstances)}`);
-          const saveResponse =  await WOrderInstanceModel.bulkSave(orderInstances.map(x=>new WOrderInstanceModel(x)));
+          const saveResponse = await WOrderInstanceModel.bulkSave(orderInstances.map(x=>new WOrderInstanceModel(x)));
           logger.info(`Save response for 3p order: ${JSON.stringify(saveResponse)}`);
         }
       }
