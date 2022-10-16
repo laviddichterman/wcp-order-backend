@@ -548,10 +548,10 @@ export class CatalogProvider implements WProvider {
         logger.debug(`In changing ${category_id}'s parent_id to ${category.parent_id}, found cycle at ${cur}, blanking out ${cur}'s parent_id to prevent cycle.`);
         // this assignment to #categories seems suspect
         this.#categories[cur].parent_id = null;
-        cycle_update_promise = WCategoryModel.findByIdAndUpdate(cur, { parent_id: null }).exec();
+        cycle_update_promise = WCategoryModel.findByIdAndUpdate(cur, { parent_id: null }, { new: true }).exec();
       }
     }
-    const response = await WCategoryModel.findByIdAndUpdate(category_id, category).exec();
+    const response = await WCategoryModel.findByIdAndUpdate(category_id, category, { new: true }).exec();
     if (cycle_update_promise) {
       await cycle_update_promise;
     }
