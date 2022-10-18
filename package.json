@@ -1,6 +1,6 @@
 {
   "name": "@wcp/wcp-order-backend",
-  "version": "0.5.50",
+  "version": "0.5.51",
   "main": "dist/src/server.js",
   "files": [
     "dist",
@@ -14,7 +14,7 @@
     "clean": "rm -fr ./dist && tsc --build --clean",
     "start:prod": "node ./dist/src/server.js",
     "start": "ts-node ./src/server.ts",
-    "debug": "ts-node-dev ./src/server.ts"
+    "debug": "ts-node-dev --transpile-only ./src/server.ts"
   },
   "keywords": [],
   "repository": {
@@ -34,7 +34,6 @@
     "@turf/invariant": "^6.5.0",
     "@turf/turf": "^6.5.0",
     "@wcp/wcpshared": "^4.1.55",
-    "apollo-server": "^3.10.3",
     "apollo-server-core": "^3.10.3",
     "apollo-server-express": "^3.10.3",
     "bluebird": "^3.7.2",
@@ -52,8 +51,6 @@
     "express-validator": "^6.14.2",
     "express-winston": "^4.2.0",
     "googleapis": "^108.0.0",
-    "graphql": "^16.6.0",
-    "graphql-ws": "^5.11.2",
     "json-bigint": "^1.0.0",
     "jsonwebtoken": "^8.5.1",
     "jwks-rsa": "^2.1.5",
@@ -75,13 +72,13 @@
     "@types/glob": "^8.0.0",
     "@types/json-bigint": "^1.0.1",
     "@types/lodash": "^4.14.186",
-    "@types/node": "^18.11.0",
+    "@types/node": "^18.11.2",
     "@types/nodemailer": "^6.4.6",
     "@types/qrcode": "^1.5.0",
     "@types/validator": "^13.7.8",
     "@types/voucher-code-generator": "^1.1.1",
-    "@typescript-eslint/eslint-plugin": "^5.40.0",
-    "@typescript-eslint/parser": "^5.40.0",
+    "@typescript-eslint/eslint-plugin": "^5.40.1",
+    "@typescript-eslint/parser": "^5.40.1",
     "chai": "^4.3.6",
     "eslint": "^8.25.0",
     "eslint-config-airbnb-base": "^15.0.0",

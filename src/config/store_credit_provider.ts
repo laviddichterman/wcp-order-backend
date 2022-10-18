@@ -280,7 +280,7 @@ export class StoreCreditProvider {
 
     const create_order_response = await SquareProviderInstance.CreateOrder(
       CreateOrderStoreCredit(
-        DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE,
+        DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
         referenceId,
         request.amount,
         `Purchase of store credit code: ${creditCode}`));
