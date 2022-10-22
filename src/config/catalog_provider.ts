@@ -85,6 +85,8 @@ type UpdateModifierOptionProps = {
   modifierTypeId: string;
   modifierOption: Partial<Omit<IOption, 'id' | 'modifierTypeId'>>;
 };
+export type UncommitedOption = Omit<IOption, 'modifierTypeId' | 'id'>;
+export type UpsertOption = (Partial<UncommitedOption> & Pick<IOption, 'id'>) | UncommitedOption;
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
 export class CatalogProvider implements WProvider {
@@ -595,11 +597,31 @@ export class CatalogProvider implements WProvider {
     return doc.toObject();
   }
 
-  CreateModifierType = async (modifierType: Omit<IOptionType, "id">) => {
+  CreateModifierType = async (modifierType: Omit<IOptionType, "id">, modifierOptions: UncommitedOption[]) => {
+    modifierOptions.forEach(opt => {
+      if (!this.ValidateOption(doc, opt)) {
+        throw 'Failed validation on modifier option in a single select modifier type';
+      }  
+    })
     const doc = new WOptionTypeModel({ ...modifierType, externalIDs: GetNonSquareExternalIds(modifierType.externalIDs) });
     await doc.save();
+    const modifierTypeId = doc.id;
     await this.SyncModifierTypes();
-    // NOTE: we don't make anything in the square catalog for just the modifier type
+    if (modifierOptions.length > 0) { 
+  
+      // we need to filter these external IDs because it'll interfere with adding the new modifier to the catalog
+      const adjustedOptions: Omit<IOption, 'id'>[] = modifierOptions.map(opt=> ({ ...opt, modifierTypeId, externalIDs: GetNonSquareExternalIds(opt.externalIDs) })).sort((a,b)=>a.ordinal-b.ordinal);
+      const optionDocuments = adjustedOptions.map(x=>new WOptionModel(x));
+      // add the new option to the db, sync and recompute the catalog, then use UpdateModifierType to clean up
+      const bulkWriteResult = await WOptionModel.bulkWrite(optionDocuments.map(o => ({
+        insertOne: {
+          document: o
+        }
+      })));
+      await this.SyncOptions();
+      this.RecomputeCatalog();
+      await this.UpdateModifierType({ id: modifierTypeId, modifierType: {} });
+    }
     this.RecomputeCatalogAndEmit();
     return doc.toObject();
   };
@@ -826,7 +848,7 @@ export class CatalogProvider implements WProvider {
   }
 
   ValidateOption = (modifierType: Pick<IOptionType, 'max_selected'>,
-    modifierOption: Partial<Omit<IOption, 'id' | 'modifierTypeId'>>) => {
+    modifierOption: Partial<UncommitedOption>) => {
     if (modifierType.max_selected === 1) {
       return !modifierOption.metadata || (modifierOption.metadata.allowOTS === false && modifierOption.metadata.can_split === false);
     }

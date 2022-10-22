@@ -290,7 +290,7 @@ export class StoreCreditProvider {
       const squareOrderId = squareOrder.id!;
       logger.info(`For internal id ${referenceId} created Square Order ID: ${squareOrderId} for ${amountString}`)
       const payment_response = await SquareProviderInstance.ProcessPayment({
-        locationId: DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE,
+        locationId: DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
         sourceId: nonce,
         amount: request.amount,
         referenceId,
@@ -337,7 +337,7 @@ export class StoreCreditProvider {
         logger.error("Failed to process payment: %o", payment_response);
         if (create_order_response.result) {
           await SquareProviderInstance.OrderStateChange(
-            DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE,
+            DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
             squareOrderId,
             squareOrderVersion,
             "CANCELED");

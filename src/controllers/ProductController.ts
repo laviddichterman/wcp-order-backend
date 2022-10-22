@@ -67,8 +67,6 @@ const ProductClassValidationChain = [
   body('displayFlags.order_guide.warnings.*').trim().escape().exists().isMongoId(),
   body('displayFlags.order_guide.suggestions.*').trim().escape().exists().isMongoId(),
   body('printerGroup').optional({ nullable: true }).isMongoId(),
-
-
 ];
 
 const AddProductClassValidationChain = [

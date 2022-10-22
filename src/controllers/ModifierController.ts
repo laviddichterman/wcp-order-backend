@@ -1,13 +1,14 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { body, param } from 'express-validator';
-import { CURRENCY, DISPLAY_AS, MODIFIER_CLASS } from '@wcp/wcpshared';
+import { CURRENCY, DISPLAY_AS, IOptionType, MODIFIER_CLASS } from '@wcp/wcpshared';
 
 import logger from '../logging';
 import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
 import IExpressController from '../types/IExpressController';
 import { isValidDisabledValue } from '../types/Validations';
 import { CheckJWT, ScopeDeleteCatalog, ScopeWriteCatalog } from '../config/authorization';
-import { CatalogProviderInstance } from '../config/catalog_provider';
+import { CatalogProviderInstance, UncommitedOption } from '../config/catalog_provider';
+
 const ModifierTypeByIdValidationChain = [
   param('mtid').trim().escape().exists().isMongoId(),
 ];
@@ -38,35 +39,47 @@ const ModifierTypeValidationChain = [
   body('displayFlags.non_empty_group_suffix').exists()
 ];
 
+const ModifierOptionValidationChain = (prefix: string) => [
+  body(`${prefix}displayName`).trim().exists(),
+  body(`${prefix}description`).trim(),
+  body(`${prefix}shortcode`).trim().escape().exists(),
+  body(`${prefix}externalIDs`).isArray(),
+  body(`${prefix}externalIDs.*.key`).exists(),
+  body(`${prefix}externalIDs.*.value`).exists(),
+  body(`${prefix}disabled`).custom(isValidDisabledValue),
+  body(`${prefix}price.amount`).isInt({ min: 0 }).exists(),
+  body(`${prefix}price.currency`).exists().isIn(Object.values(CURRENCY)),
+  body(`${prefix}ordinal`).isInt({ min: 0 }).exists(),
+  body(`${prefix}enable`).optional({ nullable: true }).isMongoId(),
+  body(`${prefix}metadata.flavor_factor`).isFloat({ min: 0 }),
+  body(`${prefix}metadata.bake_factor`).isFloat({ min: 0 }),
+  body(`${prefix}metadata.can_split`).toBoolean(true),
+  body(`${prefix}metadata.allowHeavy`).toBoolean(true),
+  body(`${prefix}metadata.allowLite`).toBoolean(true),
+  body(`${prefix}metadata.allowOTS`).toBoolean(true),
+  body(`${prefix}displayFlags.omit_from_shortname`).toBoolean(true),
+  body(`${prefix}displayFlags.omit_from_name`).toBoolean(true),
+];
+
+const AddModifierTypeValidationChain = [
+  ...ModifierTypeValidationChain,
+  body('options').isArray(),
+  ...ModifierOptionValidationChain('options.*.')
+]
+
 const EditModifierTypeValidationChain = [
   ...ModifierTypeByIdValidationChain,
   ...ModifierTypeValidationChain
 ];
-const ModifierOptionValidationChain = [
+
+const AddModifierOptionValidationChain = [
   ...ModifierTypeByIdValidationChain,
-  body('displayName').trim().exists(),
-  body('description').trim(),
-  body('shortcode').trim().escape().exists(),
-  body('externalIDs').isArray(),
-  body('externalIDs.*.key').exists(),
-  body('externalIDs.*.value').exists(),
-  body('disabled').custom(isValidDisabledValue),
-  body('price.amount').isInt({ min: 0 }).exists(),
-  body('price.currency').exists().isIn(Object.values(CURRENCY)),
-  body('ordinal').isInt({ min: 0 }).exists(),
-  body('enable').optional({ nullable: true }).isMongoId(),
-  body('metadata.flavor_factor').isFloat({ min: 0 }),
-  body('metadata.bake_factor').isFloat({ min: 0 }),
-  body('metadata.can_split').toBoolean(true),
-  body('metadata.allowHeavy').toBoolean(true),
-  body('metadata.allowLite').toBoolean(true),
-  body('metadata.allowOTS').toBoolean(true),
-  body('displayFlags.omit_from_shortname').toBoolean(true),
-  body('displayFlags.omit_from_name').toBoolean(true),
-];
+  ...ModifierOptionValidationChain('')
+]
 const EditModifierOptionValidationChain = [
   ...ModifierTypeByIdValidationChain,
-  ...ModifierOptionValidationChain
+  ...ModifierOptionByIdValidationChain,
+  ...ModifierOptionValidationChain('')
 ];
 
 
@@ -80,17 +93,17 @@ export class ModifierController implements IExpressController {
 
   private initializeRoutes() {
     // this.router.get(`${this.path}/:mtid`, CheckJWT, ScopeReadKVStore, this.getModifierType);
-    this.router.post(`${this.path}`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(ModifierTypeValidationChain), this.postModifierType);
+    this.router.post(`${this.path}`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(AddModifierTypeValidationChain), this.postModifierType);
     this.router.patch(`${this.path}/:mtid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(EditModifierTypeValidationChain), this.patchModifierType);
     this.router.delete(`${this.path}/:mtid`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware(ModifierTypeByIdValidationChain), this.deleteModifierType);
-    this.router.post(`${this.path}/:mtid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(ModifierOptionValidationChain), this.postModifierOption);
+    this.router.post(`${this.path}/:mtid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(AddModifierOptionValidationChain), this.postModifierOption);
     this.router.patch(`${this.path}/:mtid/:moid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(EditModifierOptionValidationChain), this.patchModifierOption);
     this.router.delete(`${this.path}/:mtid/:moid`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware([...ModifierTypeByIdValidationChain, ...ModifierOptionByIdValidationChain]), this.deleteModifierOption);
   };
 
   private postModifierType = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const doc = await CatalogProviderInstance.CreateModifierType({
+      const modifierType: Omit<IOptionType, "id"> = {
         name: req.body.name,
         displayName: req.body.displayName,
         ordinal: req.body.ordinal,
@@ -98,7 +111,9 @@ export class ModifierController implements IExpressController {
         max_selected: req.body.max_selected,
         externalIDs: req.body.externalIDs,
         displayFlags: req.body.displayFlags,
-      });
+      };
+      const options: UncommitedOption[] = req.body.options; 
+      const doc = await CatalogProviderInstance.CreateModifierType(modifierType, options);
       const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/${doc.id}`;
       res.setHeader('Location', location);
       return res.status(201).send(doc);
