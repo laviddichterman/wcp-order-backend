@@ -487,7 +487,7 @@ export class OrderManager implements WProvider {
               taxes: squareOrder.taxes?.map((x => ({ amount: BigIntMoneyToIntMoney(x.appliedMoney!) }))) ?? [],
               status: WOrderStatus.OPEN,
               cart,
-              specialInstructions: `${squareOrder.source?.name ?? ""}${(requestedFulfillmentTime.selectedTime !== adjustedFulfillmentTime) ? ` ORT: ${WDateUtils.MinutesToPrintTime(adjustedFulfillmentTime)}` : ""}`
+              specialInstructions: `${squareOrder.source?.name ?? ""}${(requestedFulfillmentTime.selectedTime !== adjustedFulfillmentTime) ? ` ORT: ${WDateUtils.MinutesToPrintTime(requestedFulfillmentTime.selectedTime)}` : ""}`
             })
           }
           catch (err: any) {
