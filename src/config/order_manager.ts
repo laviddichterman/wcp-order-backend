@@ -53,7 +53,7 @@ import {
 
 import { WProvider } from '../types/WProvider';
 
-import { formatRFC3339, format, Interval, isSameMinute, formatISO, addHours, isSameDay, subHours, subMinutes, parseISO } from 'date-fns';
+import { formatRFC3339, format, Interval, isSameMinute, formatISO, addHours, isSameDay, subHours, subMinutes, parseISO, setSeconds, setMilliseconds } from 'date-fns';
 import { GoogleProviderInstance } from "./google";
 import { SquareProviderInstance } from "./square";
 import { StoreCreditProviderInstance } from "./store_credit_provider";
@@ -255,7 +255,7 @@ const GenerateShortCartFromFullCart = (cart: CategorizedRebuiltCart): { category
 const RebuildOrderState = function (menu: IMenu, cart: CoreCartEntry<WCPProductV2Dto>[], service_time: Date | number, fulfillmentId: string) {
   const catalogSelectors = CatalogProviderInstance.CatalogSelectors;
   const rebuiltCart = RebuildAndSortCart(cart, catalogSelectors, service_time, fulfillmentId);
-  const noLongerAvailable: CoreCartEntry<WProduct>[] = Object.values(rebuiltCart).flatMap(entries => entries.filter(x => !CanThisBeOrderedAtThisTimeAndFulfillment(x.product.p, menu, catalogSelectors, service_time, fulfillmentId) ||
+  const noLongerAvailable: CoreCartEntry<WProduct>[] = Object.values(rebuiltCart).flatMap(entries => entries.filter(x => !CanThisBeOrderedAtThisTimeAndFulfillment(x.product.p, menu, catalogSelectors, service_time, fulfillmentId, true) ||
     !catalogSelectors.category(x.categoryId)))
   return {
     noLongerAvailable,
@@ -428,12 +428,13 @@ export class OrderManager implements WProvider {
 
   private Query3pOrders = async () => {
     try {
-      const timeSpanAgo = zonedTimeToUtc(subMinutes(Date.now(), 20), process.env.TZ!)
-      logger.info(`timeSpanAgo formatted: ${formatRFC3339(timeSpanAgo)}`);
+      const now = Date.now();
+      const timeSpanAgo = subMinutes(zonedTimeToUtc(now, process.env.TZ!), 10);
       const recentlyUpdatedOrdersResponse = await SquareProviderInstance.SearchOrders([DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_3P], {
         filter: { dateTimeFilter: { updatedAt: { startAt: formatRFC3339(timeSpanAgo) } } }, sort: { sortField: 'UPDATED_AT', sortOrder: 'ASC' }
       });
       if (recentlyUpdatedOrdersResponse.success) {
+        const fulfillmentConfig = DataProviderInstance.Fulfillments[DataProviderInstance.KeyValueConfig.THIRD_PARTY_FULFILLMENT]!;
         const ordersToInspect = (recentlyUpdatedOrdersResponse.result.orders ?? []).filter(x => x.lineItems && x.lineItems.length > 0 && x.fulfillments?.length === 1);
         const squareOrderIds = ordersToInspect.map(x => x.id!);
         const found3pOrders = await WOrderInstanceModel.find({ 'fulfillment.thirdPartyInfo.squareId': { $in: squareOrderIds } }).exec();
@@ -441,10 +442,27 @@ export class OrderManager implements WProvider {
         const orderInstances: Omit<WOrderInstance, "id">[] = [];
         ordersToIngest.forEach(squareOrder => {
           const fulfillmentDetails = squareOrder.fulfillments![0];
-          const fulfillmentTime = WDateUtils.ComputeFulfillmentTime(utcToZonedTime(fulfillmentDetails.pickupDetails!.pickupAt!, process.env.TZ!));
+          const requestedFulfillmentTime = WDateUtils.ComputeFulfillmentTime(setMilliseconds(setSeconds(utcToZonedTime(fulfillmentDetails.pickupDetails!.pickupAt!, process.env.TZ!), 0), 0));
+          const fulfillmentTimeClampedRounded = Math.floor(requestedFulfillmentTime.selectedTime / fulfillmentConfig.timeStep) * fulfillmentConfig.timeStep;
+          let adjustedFulfillmentTime = requestedFulfillmentTime.selectedTime;
           const [givenName, familyFirstLetter] = (fulfillmentDetails.pickupDetails?.recipient?.displayName ?? "ABBIE NORMAL").split(' ');
           try {
-            const cart = LineItemsToOrderInstanceCart(squareOrder.lineItems!)
+            // generate the WARIO cart from the square order
+            const cart = LineItemsToOrderInstanceCart(squareOrder.lineItems!);
+            
+            // determine what available time we have for this order
+            const mainCategoryProductCount = ComputeMainProductCategoryCount(fulfillmentConfig.orderBaseCategoryId, cart);
+            const availabilityMap = WDateUtils.GetInfoMapForAvailabilityComputation([fulfillmentConfig], requestedFulfillmentTime.selectedDate, { cart_based_lead_time: 0, size: mainCategoryProductCount });
+            const optionsForSelectedDate = WDateUtils.GetOptionsForDate(availabilityMap, requestedFulfillmentTime.selectedDate, formatISO(now))
+            const foundTimeOptionIndex = optionsForSelectedDate.findIndex(x => x.value >= fulfillmentTimeClampedRounded);
+            if (foundTimeOptionIndex === -1 || optionsForSelectedDate[foundTimeOptionIndex].disabled) {
+              const errorDetail = `Requested fulfillment (${fulfillmentConfig.displayName}) at ${WDateUtils.MinutesToPrintTime(requestedFulfillmentTime.selectedTime)} is no longer valid and could not find suitable time. Ignoring WARIO timing and sending order for originally requested time.`;
+              logger.error(errorDetail)
+            }
+            else {
+              adjustedFulfillmentTime = optionsForSelectedDate[foundTimeOptionIndex].value;
+            }
+
             orderInstances.push({
               customerInfo: {
                 email: DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS,
@@ -455,7 +473,8 @@ export class OrderManager implements WProvider {
               },
               discounts: [],
               fulfillment: {
-                ...fulfillmentTime,
+                selectedDate: requestedFulfillmentTime.selectedDate,
+                selectedTime: adjustedFulfillmentTime,
                 selectedService: DataProviderInstance.KeyValueConfig.THIRD_PARTY_FULFILLMENT,
                 status: WFulfillmentStatus.PROPOSED,
                 thirdPartyInfo: { squareId: squareOrder.id! },
@@ -467,7 +486,8 @@ export class OrderManager implements WProvider {
               tip: { isPercentage: false, isSuggestion: false, value: { amount: 0, currency: CURRENCY.USD } },
               taxes: squareOrder.taxes?.map((x => ({ amount: BigIntMoneyToIntMoney(x.appliedMoney!) }))) ?? [],
               status: WOrderStatus.OPEN,
-              cart
+              cart,
+              specialInstructions: `${squareOrder.source?.name ?? ""}${(requestedFulfillmentTime.selectedTime !== adjustedFulfillmentTime) ? ` ORT: ${WDateUtils.MinutesToPrintTime(adjustedFulfillmentTime)}` : ""}`
             })
           }
           catch (err: any) {

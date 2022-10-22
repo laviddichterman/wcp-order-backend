@@ -1,6 +1,6 @@
 {
   "name": "@wcp/wcp-order-backend",
-  "version": "0.5.52",
+  "version": "0.5.53",
   "main": "dist/src/server.js",
   "files": [
     "dist",
@@ -33,7 +33,7 @@
     "@thream/socketio-jwt": "^3.0.1",
     "@turf/invariant": "^6.5.0",
     "@turf/turf": "^6.5.0",
-    "@wcp/wcpshared": "^4.1.55",
+    "@wcp/wcpshared": "^4.1.56",
     "apollo-server-core": "^3.10.3",
     "apollo-server-express": "^3.10.3",
     "bluebird": "^3.7.2",
@@ -75,7 +75,7 @@
     "@types/node": "^18.11.3",
     "@types/nodemailer": "^6.4.6",
     "@types/qrcode": "^1.5.0",
-    "@types/validator": "^13.7.8",
+    "@types/validator": "^13.7.9",
     "@types/voucher-code-generator": "^1.1.1",
     "@typescript-eslint/eslint-plugin": "^5.40.1",
     "@typescript-eslint/parser": "^5.40.1",

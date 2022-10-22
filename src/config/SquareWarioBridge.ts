@@ -100,15 +100,18 @@ export const LineItemsToOrderInstanceCart = (lineItems: OrderLineItem[]): CoreCa
         const oId = CatalogProviderInstance.ReverseMappings[lineMod.catalogObjectId!];
         const warioModifierOption = CatalogProviderInstance.Catalog.options[oId];
         const mTId = warioModifierOption.modifierTypeId;
-        return { ...acc, [mTId]: { modifierTypeId: mTId, options: [...(acc[mTId]?.options ?? []), { optionId: oId, placement: OptionPlacement.WHOLE, qualifier: OptionQualifier.REGULAR }] } };
-      }, {}));
+        return { ...acc, [mTId]: { modifierTypeId: mTId, options: [{ optionId: oId, placement: OptionPlacement.WHOLE, qualifier: OptionQualifier.REGULAR }, ...(acc[mTId]?.options ?? [])] } };
+      }, {}))
+      // now sort it...
+      .sort((a, b) => CatalogProviderInstance.Catalog.modifiers[a.modifierTypeId].modifierType.ordinal - CatalogProviderInstance.Catalog.modifiers[b.modifierTypeId].modifierType.ordinal)
+      .map(x=>({...x, options: x.options.sort((a, b) => CatalogProviderInstance.Catalog.options[a.optionId].ordinal - CatalogProviderInstance.Catalog.options[b.optionId].ordinal)}))
+      // PRECONDITION: 3p products are unique to the 3p merchant and shouldn't yield a category outside of the 3p menu tree
       const category = warioProduct.category_ids[0];
-      // TODO: need to determine the CORRECT category, maybe this is easy since the products will be unique to the 3p merchant
       return {
         categoryId: category,
         product: {
           pid: warioProductInstance.productId,
-          modifiers
+          modifiers: modifiers
         },
         quantity: parseInt(line.quantity)
       };
