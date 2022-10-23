@@ -78,15 +78,6 @@ const MI_AREA_CODES = ["231", "248", "269", "313", "517", "586", "616", "734", "
 const BTP_AREA_CODES = IL_AREA_CODES.concat(MI_AREA_CODES);
 const WCP_AREA_CODES = IL_AREA_CODES;
 
-/**
- * order transitions to check
- * new order -> cancel
- * new order -> reschedule (within 5 hrs) -> cancel
- * new order -> reschedule (within 5 hrs) -> confirm -> reschedule -> cancel
- * new order (tomorrow) -> reschedule (within 5 hrs) -> confirm -> cancel 
- * new order (w/in 5 hrs) -> confirm -> cancel 
- */
-
 interface RecomputeTotalsArgs {
   order: WOrderInstancePartial;
   cart: CategorizedRebuiltCart;
