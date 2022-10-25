@@ -71,7 +71,8 @@ const ProductClassValidationChain = [
 
 const AddProductClassValidationChain = [
   ...ProductClassValidationChain,
-  ...ProductInstanceValidationChain('instance.')
+  body('instances').isArray({ min: 1 }),
+  ...ProductInstanceValidationChain('instances.*.')
 ]
 
 const EditProductClassValidationChain = [
@@ -119,26 +120,20 @@ export class ProductController implements IExpressController {
         displayFlags: req.body.displayFlags,
         printerGroup: req.body.printerGroup ?? null
       };
-      const newProductInstance = await CatalogProviderInstance.CreateProduct(
+      const instances = req.body.instances;
+      const newProduct = await CatalogProviderInstance.CreateProduct(
         productClass,
-        {
-          description: req.body.instance.description,
-          displayName: req.body.instance.displayName,
-          shortcode: req.body.instance.shortcode,
-          ordinal: req.body.instance.ordinal,
-          externalIDs: req.body.instance.externalIDs ?? [],
-          modifiers: req.body.instance.modifiers,
-          displayFlags: req.body.instance.displayFlags
-        }
+        instances
       );
-      if (!newProductInstance) {
-        logger.info(`Unable to find Modifiers or Categories to create Product`);
-        return res.status(404).send("Unable to find Modifiers or Categories to create Product");
+      if (!newProduct) {
+        const errorDetail = `Unable to satisfy prerequisites to create Product and instances`;
+        logger.info(errorDetail);
+        return res.status(404).send(errorDetail);
       }
 
-      const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/${newProductInstance.productId}/${newProductInstance.id}`;
+      const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/${newProduct.id}`;
       res.setHeader('Location', location);
-      return res.status(201).send({ ...newProductInstance });
+      return res.status(201).send(newProduct);
     } catch (error) {
       return next(error)
     }

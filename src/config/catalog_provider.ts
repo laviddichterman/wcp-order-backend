@@ -473,7 +473,7 @@ export class CatalogProvider implements WProvider {
 
     const catalogObjects = batches.map((b, i) =>
       PrinterGroupToSquareCatalogObjectPlusDummyProduct(
-        [ DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE], // message only needs to go to the alternate location
+        [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE], // message only needs to go to the alternate location
         { ...oldPGs[i], ...b.printerGroup },
         existingSquareObjects,
         ('000' + i).slice(-3)));
@@ -599,19 +599,19 @@ export class CatalogProvider implements WProvider {
 
   CreateModifierType = async (modifierType: Omit<IOptionType, "id">, modifierOptions: UncommitedOption[]) => {
     modifierOptions.forEach(opt => {
-      if (!this.ValidateOption(doc, opt)) {
+      if (!this.ValidateOption(modifierType, opt)) {
         throw 'Failed validation on modifier option in a single select modifier type';
-      }  
+      }
     })
     const doc = new WOptionTypeModel({ ...modifierType, externalIDs: GetNonSquareExternalIds(modifierType.externalIDs) });
     await doc.save();
     const modifierTypeId = doc.id;
     await this.SyncModifierTypes();
-    if (modifierOptions.length > 0) { 
-  
+    if (modifierOptions.length > 0) {
+
       // we need to filter these external IDs because it'll interfere with adding the new modifier to the catalog
-      const adjustedOptions: Omit<IOption, 'id'>[] = modifierOptions.map(opt=> ({ ...opt, modifierTypeId, externalIDs: GetNonSquareExternalIds(opt.externalIDs) })).sort((a,b)=>a.ordinal-b.ordinal);
-      const optionDocuments = adjustedOptions.map(x=>new WOptionModel(x));
+      const adjustedOptions: Omit<IOption, 'id'>[] = modifierOptions.map(opt => ({ ...opt, modifierTypeId, externalIDs: GetNonSquareExternalIds(opt.externalIDs) })).sort((a, b) => a.ordinal - b.ordinal);
+      const optionDocuments = adjustedOptions.map(x => new WOptionModel(x));
       // add the new option to the db, sync and recompute the catalog, then use UpdateModifierType to clean up
       const bulkWriteResult = await WOptionModel.bulkWrite(optionDocuments.map(o => ({
         insertOne: {
@@ -754,7 +754,7 @@ export class CatalogProvider implements WProvider {
         logger.error(errorDetail);
         throw errorDetail;
       }
-      mappings.push(...(upsertResponse.result.idMappings ?? []));  
+      mappings.push(...(upsertResponse.result.idMappings ?? []));
     }
 
     const updatedWarioObjects = batchData.map((batch, batchId) => {
@@ -1024,46 +1024,48 @@ export class CatalogProvider implements WProvider {
     return doc.toObject();
   }
 
-  CreateProduct = async (product: Omit<IProduct, 'id' | 'baseProductId'>, instance: Omit<IProductInstance, 'id' | 'productId'>) => {
-    if (!ValidateProductModifiersFunctionsCategories(product.modifiers, product.category_ids, this)) {
+  CreateProduct = async (product: Omit<IProduct, 'id' | 'baseProductId'>, instances: Omit<IProductInstance, 'id' | 'productId'>[]) => {
+    if (!ValidateProductModifiersFunctionsCategories(product.modifiers, product.category_ids, this) && instances.length >= 1) {
       return null;
     }
-
     // we need to filter these external IDs because it'll interfere with adding the new product to the catalog
-    const filteredExternalIds = GetNonSquareExternalIds(instance.externalIDs);
-    const adjustedInstance: Omit<IProductInstance, 'id' | 'productId'> = { ...instance, externalIDs: filteredExternalIds };
-    // add the product instance to the square catalog here
-    const upsertResponse = await SquareProviderInstance.UpsertCatalogObject(
+    const adjustedProduct: Omit<IProduct, 'id' | 'baseProductId'> = { ...product, externalIDs: GetNonSquareExternalIds(product.externalIDs) };
+    const adjustedInstances: Omit<IProductInstance, 'id' | 'productId'>[] = instances.map(x => ({ ...x, externalIDs: GetNonSquareExternalIds(x.externalIDs) }))
+
+    // first add the stuff to square so we can write to the DB in two operations
+    const catalogObjects = adjustedInstances.map((pi, i) =>
       ProductInstanceToSquareCatalogObject(
         LocationsConsidering3pFlag(product.displayFlags.is3p),
-        product,
-        adjustedInstance,
+        adjustedProduct,
+        pi,
         product.printerGroup ? this.#printerGroups[product.printerGroup] : null,
-        this.CatalogSelectors,
-        [],
-        ""));
+        this.CatalogSelectors, [], ('000' + i).slice(-3)));
+    const upsertResponse = await SquareProviderInstance.BatchUpsertCatalogObjects(chunk(catalogObjects, SQUARE_BATCH_CHUNK_SIZE).map(x => ({ objects: x })));
     if (!upsertResponse.success) {
-      logger.error(`failed to add product, got errors: ${JSON.stringify(upsertResponse.error)}`);
+      logger.error(`Failed to save square products, got errors: ${JSON.stringify(upsertResponse.error)}`);
       return null;
     }
+    const mappings = (upsertResponse.result.idMappings ?? []);
 
-    const doc = new WProductModel(product);
-    const savedProduct = await doc.save();
-    logger.debug(`Saved new WProductModel: ${JSON.stringify(savedProduct.toObject())}`);
-    const pi = new WProductInstanceModel({
-      ...adjustedInstance,
-      productId: savedProduct.id,
-      externalIDs: [...adjustedInstance.externalIDs, ...IdMappingsToExternalIds(upsertResponse.result.idMappings, "")]
-    });
-    const piDoc = await pi.save();
-    logger.debug(`Saved new product instance: ${JSON.stringify(piDoc.toObject())}`);
-    savedProduct.baseProductId = piDoc.id;
-    await savedProduct.save();
-
+    const productDoc = new WProductModel(adjustedProduct);
+    const instancesDocs = adjustedInstances.map((x, i)=> new WProductInstanceModel({
+      ...x,
+      productId: productDoc.id,
+      externalIDs: [...x.externalIDs, ...IdMappingsToExternalIds(mappings, ('000' + i).slice(-3))]
+    }))
+    productDoc.baseProductId = instancesDocs[0].id;
+    await productDoc.save();
+    logger.debug(`Saved new WProductModel: ${JSON.stringify(productDoc.toObject())}`);
+    const bulkWriteResult = await WProductInstanceModel.bulkWrite(instancesDocs.map(o => ({
+      insertOne: {
+        document: o
+      }
+    })));
+    logger.debug(`Instances creation result: ${JSON.stringify(bulkWriteResult)}`);
     await Promise.all([this.SyncProducts(), this.SyncProductInstances()]);
 
     this.RecomputeCatalogAndEmit();
-    return piDoc.toObject();
+    return productDoc.toObject();
   };
 
   UpdateProduct = async (pid: string, product: Partial<Omit<IProduct, 'id'>>) => {
