@@ -53,7 +53,7 @@ import {
 
 import { WProvider } from '../types/WProvider';
 
-import { formatRFC3339, format, Interval, isSameMinute, formatISO, addHours, isSameDay, subHours, subMinutes, parseISO, setSeconds, setMilliseconds } from 'date-fns';
+import { formatRFC3339, format, Interval, isSameMinute, formatISO, addHours, isSameDay, subMinutes, setSeconds, setMilliseconds, isBefore } from 'date-fns';
 import { GoogleProviderInstance } from "./google";
 import { SquareProviderInstance } from "./square";
 import { StoreCreditProviderInstance } from "./store_credit_provider";
@@ -63,12 +63,13 @@ import logger from '../logging';
 import crypto from 'crypto';
 import { OrderFunctional } from "@wcp/wcpshared";
 import { WOrderInstanceModel } from "../models/orders/WOrderInstance";
-import { CatalogObject, Order as SquareOrder } from "square";
+import { Order as SquareOrder } from "square";
 import { SocketIoProviderInstance } from "./socketio_provider";
 import { CreateOrderFromCart, CreateOrderForMessages, CreateOrdersForPrintingFromCart, CartByPrinterGroup, GetSquareIdFromExternalIds, BigIntMoneyToIntMoney, LineItemsToOrderInstanceCart } from "./SquareWarioBridge";
 import { FilterQuery } from "mongoose";
 import { WOrderInstanceFunctionModel } from "../models/query/order/WOrderInstanceFunction";
 import { utcToZonedTime, zonedTimeToUtc } from "date-fns-tz";
+import { calendar_v3 } from "googleapis";
 type CrudFunctionResponseWithStatusCode = (order: WOrderInstance) => ResponseWithStatusCode<CrudOrderResponse>;
 const WCP = "Windy City Pie";
 
@@ -232,7 +233,7 @@ const GenerateDisplayCartStringListFromProducts = (cart: CategorizedRebuiltCart)
   Object.values(cart).map((category_cart) => category_cart.map((item) => `${item.quantity}x: ${item.product.m.name}`)).flat(1);
 
 
-const GenerateShortCartFromFullCart = (cart: CategorizedRebuiltCart): { category_name: string; products: string[] }[] => {
+const GenerateCartTextFromFullCart = (cart: CategorizedRebuiltCart): { category_name: string; products: string[] }[] => {
   const catalogCategories = CatalogProviderInstance.Catalog.categories;
   return Object.entries(cart)
     .filter(([_, cart]) => cart.length > 0)
@@ -260,7 +261,10 @@ const RecomputeTotals = function ({ cart, creditValidations, fulfillment, order 
 
   const mainCategoryProductCount = ComputeMainProductCategoryCount(fulfillment.orderBaseCategoryId, order.cart);
   const cartSubtotal = { currency: CURRENCY.USD, amount: Object.values(cart).reduce((acc, c) => acc + ComputeCartSubTotal(c).amount, 0) };
-  const serviceFee = { currency: CURRENCY.USD, amount: fulfillment.serviceCharge !== null ? OrderFunctional.ProcessOrderInstanceFunction(order, CatalogProviderInstance.Catalog.orderInstanceFunctions[fulfillment.serviceCharge], CatalogProviderInstance.CatalogSelectors) as number : 0 };
+  const serviceFee = {
+    currency: CURRENCY.USD,
+    amount: fulfillment.serviceCharge !== null ? OrderFunctional.ProcessOrderInstanceFunction(order, CatalogProviderInstance.Catalog.orderInstanceFunctions[fulfillment.serviceCharge], CatalogProviderInstance.CatalogSelectors) as number : 0
+  };
   const subtotalPreDiscount = ComputeSubtotalPreDiscount(cartSubtotal, serviceFee);
   const discountApplied = ComputeCreditsApplied(subtotalPreDiscount, creditValidations.filter(x => x.validation.credit_type === StoreCreditType.DISCOUNT));
   const amountDiscounted = { amount: discountApplied.reduce((acc, x) => acc + x.amount_used.amount, 0), currency: CURRENCY.USD };
@@ -358,13 +362,13 @@ const CreateExternalEmailForOrderReschedule = async (
     emailbody);
 }
 
-const CreateOrderEvent = async (
+const GenerateOrderEventJson = (
   shorthandEventTitle: string,
   order: Pick<WOrderInstance, 'customerInfo' | 'fulfillment' | 'payments' | 'discounts' | 'specialInstructions'>,
   cart: CategorizedRebuiltCart,
   service_time_interval: Interval,
-  totals: RecomputeTotalsResult) => {
-  const shortcart = GenerateShortCartFromFullCart(cart);
+  totals: RecomputeTotalsResult): calendar_v3.Schema$Event => {
+  const shortcart = GenerateCartTextFromFullCart(cart);
   const special_instructions_section = order.specialInstructions && order.specialInstructions.length > 0 ? `\nSpecial Instructions: ${order.specialInstructions}` : "";
   const payment_section = "\n" + GeneratePaymentSection(totals, order.discounts, order.payments, false);
   const delivery_section = order.fulfillment.deliveryInfo ? GenerateDeliverySection(order.fulfillment.deliveryInfo, false) : "";
@@ -375,7 +379,7 @@ ${dineInSection}
 ph: ${order.customerInfo.mobileNum}
 ${special_instructions_section}${delivery_section}${payment_section}`;
 
-  return await GoogleProviderInstance.CreateCalendarEvent({
+  return {
     summary: shorthandEventTitle,
     location: order.fulfillment.deliveryInfo?.validation?.validated_address ?? "",
     description: calendar_details,
@@ -387,7 +391,7 @@ ${special_instructions_section}${delivery_section}${payment_section}`;
       dateTime: formatRFC3339(service_time_interval.end),
       timeZone: process.env.TZ
     }
-  });
+  };
 }
 
 async function RefundStoreCreditDebits(spends: ValidateLockAndSpendSuccess[]) {
@@ -412,6 +416,22 @@ async function CancelSquarePayments(payments: OrderPayment[]) {
 const GetEndOfSendingRange = (now: Date | number): Date => {
   return addHours(now, 3);
 }
+
+const Map3pSource = (source: string) => {
+  if (source.startsWith("Postmates") || source.startsWith("Uber")) {
+    return "UE";
+  }
+  return "DD";
+}
+
+
+// WHERE WE LEFT OFF: NEED TO SAVE THE VARIOUS MESSAGE ORDERS AND THEIR PAYMENTS SO WE CAN CLOSE THOSE OUT AT THE END OF THE DAY OR TO SEND VOID ORDER MESSAGES
+/**
+ * SQORDER: the main order to the main location OR the 3p order we originated from
+ * SQORDER_PRINT: CSV the orders sent to ALT location to print the tickets
+ * SQORDER_MSG: CSV orders sent to ALT location to print messages
+ */
+
 
 export class OrderManager implements WProvider {
   constructor() {
@@ -440,7 +460,7 @@ export class OrderManager implements WProvider {
           try {
             // generate the WARIO cart from the square order
             const cart = LineItemsToOrderInstanceCart(squareOrder.lineItems!);
-            
+
             // determine what available time we have for this order
             const mainCategoryProductCount = ComputeMainProductCategoryCount(fulfillmentConfig.orderBaseCategoryId, cart);
             const availabilityMap = WDateUtils.GetInfoMapForAvailabilityComputation([fulfillmentConfig], requestedFulfillmentTime.selectedDate, { cart_based_lead_time: 0, size: mainCategoryProductCount });
@@ -468,17 +488,28 @@ export class OrderManager implements WProvider {
                 selectedTime: adjustedFulfillmentTime,
                 selectedService: DataProviderInstance.KeyValueConfig.THIRD_PARTY_FULFILLMENT,
                 status: WFulfillmentStatus.PROPOSED,
-                thirdPartyInfo: { squareId: squareOrder.id! },
+                thirdPartyInfo: { squareId: squareOrder.id!, source: Map3pSource(squareOrder.source?.name ?? "") },
               },
               locked: null,
               metadata: [{ key: 'SQORDER', value: squareOrder.id! }],
-              payments: squareOrder.tenders?.map((x): OrderPayment => ({ t: PaymentMethod.Cash, amount: BigIntMoneyToIntMoney(x.amountMoney!), createdAt: Date.now(), status: TenderBaseStatus.COMPLETED, tipAmount: { amount: 0, currency: CURRENCY.USD }, payment: { amountTendered: BigIntMoneyToIntMoney(x.amountMoney!), change: { amount: 0, currency: CURRENCY.USD }, processorId: x.paymentId! } })) ?? [],
+              payments: squareOrder.tenders?.map((x): OrderPayment => ({
+                t: PaymentMethod.Cash,
+                amount: BigIntMoneyToIntMoney(x.amountMoney!),
+                createdAt: Date.now(),
+                status: TenderBaseStatus.COMPLETED,
+                tipAmount: { amount: 0, currency: CURRENCY.USD },
+                payment: {
+                  amountTendered: BigIntMoneyToIntMoney(x.amountMoney!),
+                  change: { amount: 0, currency: CURRENCY.USD },
+                  processorId: x.paymentId!
+                }
+              })) ?? [],
               refunds: [],
               tip: { isPercentage: false, isSuggestion: false, value: { amount: 0, currency: CURRENCY.USD } },
               taxes: squareOrder.taxes?.map((x => ({ amount: BigIntMoneyToIntMoney(x.appliedMoney!) }))) ?? [],
               status: WOrderStatus.OPEN,
               cart,
-              specialInstructions: `${squareOrder.source?.name ?? ""}${(requestedFulfillmentTime.selectedTime !== adjustedFulfillmentTime) ? ` ORT: ${WDateUtils.MinutesToPrintTime(requestedFulfillmentTime.selectedTime)}` : ""}`
+              specialInstructions: (requestedFulfillmentTime.selectedTime !== adjustedFulfillmentTime) ? `ORT: ${WDateUtils.MinutesToPrintTime(requestedFulfillmentTime.selectedTime)}` : undefined,
             })
           }
           catch (err: any) {
@@ -487,7 +518,7 @@ export class OrderManager implements WProvider {
         });
         if (orderInstances.length > 0) {
           logger.info(`Inserting ${orderInstances.length} 3p orders... ${JSON.stringify(orderInstances)}`);
-          const saveResponse = await WOrderInstanceModel.bulkSave(orderInstances.map(x=>new WOrderInstanceModel(x)));
+          const saveResponse = await WOrderInstanceModel.bulkSave(orderInstances.map(x => new WOrderInstanceModel(x)));
           logger.info(`Save response for 3p order: ${JSON.stringify(saveResponse)}`);
         }
       }
@@ -499,7 +530,8 @@ export class OrderManager implements WProvider {
   }
 
   /**
-   * Finds UNLOCKED orders due within the next 3 hours with proposed fulfillment status and sends them, setting the fulfillment status to SENT
+   * Finds UNLOCKED orders due within the next GetEndOfSendingRange with 
+   * proposed fulfillment status and sends them, setting the fulfillment status to SENT
    */
   private SendOrders = async () => {
     const idempotencyKey = crypto.randomBytes(22).toString('hex');
@@ -529,27 +561,12 @@ export class OrderManager implements WProvider {
             .then(async (lockedOrders) => {
               // for loop keeps it sequential / synchronous
               for (let i = 0; i < lockedOrders.length; ++i) {
-                await this.SendLockedOrder(lockedOrders[i], true);
+                await this.SendLockedOrder(lockedOrders[i].toObject(), true);
               }
             })
         }
       })
   }
-
-  public GetOrder = async (orderId: string): Promise<WOrderInstance | null> => {
-    // find order and return
-    return await WOrderInstanceModel.findById(orderId);
-  };
-
-  public GetOrders = async (queryDate: string | null, queryStatus: WOrderStatus | null): Promise<WOrderInstance[]> => {
-    // find orders and return
-    const dateConstraint = queryDate ? { 'fulfillment.selectedDate': queryDate } : {};
-    const statusConstraint = queryStatus ? { 'status': queryStatus } : {};
-    return await WOrderInstanceModel.find({
-      ...(dateConstraint),
-      ...(statusConstraint)
-    }).exec();
-  };
 
   private LockAndActOnOrder = async (
     idempotencyKey: string,
@@ -574,12 +591,75 @@ export class OrderManager implements WProvider {
       });
   }
 
-  public DiscountOrder = async (idempotencyKey: string, orderId: string, reason: string) => {
-    // TODO
-  }
+  /**
+   * 
+   * @param lockedOrder 
+   * @returns 
+   */
+  private SendMoveLockedOrderTicket = async (lockedOrder: WOrderInstance, destination: string, additionalMessage: string): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
+    logger.debug(`Sending move ticket for order ${JSON.stringify({ id: lockedOrder.id, fulfillment: lockedOrder.fulfillment, customerInfo: lockedOrder.customerInfo }, null, 2)}.`);
+    try {
+      // send order to alternate location
+      const customerName = `${lockedOrder.customerInfo.givenName} ${lockedOrder.customerInfo.familyName}`;
+      const fulfillmentConfig = DataProviderInstance.Fulfillments[lockedOrder.fulfillment.selectedService];
+      const promisedTime = DateTimeIntervalBuilder(lockedOrder.fulfillment, fulfillmentConfig);
+      const rebuiltCart = RebuildAndSortCart(lockedOrder.cart, CatalogProviderInstance.CatalogSelectors, promisedTime.start, fulfillmentConfig.id);
+      const eventTitle = EventTitleStringBuilder(CatalogProviderInstance.CatalogSelectors, fulfillmentConfig, customerName, lockedOrder.fulfillment, rebuiltCart, lockedOrder.specialInstructions ?? "")
 
-  public ObliterateLocks = async () => {
-    await WOrderInstanceModel.updateMany({}, { locked: null });
+      const SQORDER_MSG = lockedOrder.metadata.find(x => x.key === 'SQORDER_MSG')?.value?.split(',') ?? [];
+      const expoPrinters = Object.values(CatalogProviderInstance.PrinterGroups).filter(x=>x.isExpo);
+      if (expoPrinters.length > 0) {
+        const message = [`Move to ${destination}`, ...(additionalMessage ? [additionalMessage] : [])];
+        const messages = expoPrinters.map(pg => ({
+          squareItemVariationId: GetSquareIdFromExternalIds(pg.externalIDs, 'ITEM_VARIATION')!,
+          message: message
+        }))
+        const messageOrder = CreateOrderForMessages(
+          DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE,
+          lockedOrder.id,
+          eventTitle,
+          messages,
+          {
+            displayName: `MOVE ${eventTitle}`,
+            emailAddress: lockedOrder.customerInfo.email,
+            phoneNumber: lockedOrder.customerInfo.mobileNum,
+            pickupAt: promisedTime.start
+          });
+        const messageOrderResponse = await SquareProviderInstance.SendMessageOrder(messageOrder);
+        if (messageOrderResponse !== false) {
+          SQORDER_MSG.push(messageOrderResponse.order!.id!);
+        }
+      }
+
+      // update order in DB, release lock
+      return await WOrderInstanceModel.findOneAndUpdate(
+        { locked: lockedOrder.locked, _id: lockedOrder.id },
+        {
+          locked: null,
+          metadata: [
+            ...lockedOrder.metadata.filter(x => !['SQORDER_MSG'].includes(x.key)),
+            ...(SQORDER_MSG.length > 0 ? [{ key: 'SQORDER_MSG', value: SQORDER_MSG.join(',') }] : []),
+          ]
+        },
+        { new: true })
+        .then(async (updatedOrder): Promise<ResponseWithStatusCode<ResponseSuccess<WOrderInstance>>> => {
+          return { success: true, status: 200, result: updatedOrder!.toObject() };
+        })
+        .catch((err: any) => {
+          throw err;
+        })
+    } catch (error: any) {
+      const errorDetail = `Caught error when attempting to send move ticket: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`;
+      logger.error(errorDetail);
+      try {
+        await WOrderInstanceModel.findOneAndUpdate(
+          { _id: lockedOrder.id },
+          { locked: null });
+      } catch (err2: any) {
+        logger.error(`Got even worse error in attempting to release lock on order we failed to finish send processing: ${JSON.stringify(err2, Object.getOwnPropertyNames(err2), 2)}`)
+      }
+      return { status: 500, success: false, error: [{ category: 'API_ERROR', code: 'INTERNAL_SERVER_ERROR', detail: errorDetail }] };
+    }
   }
 
   /**
@@ -595,7 +675,7 @@ export class OrderManager implements WProvider {
       const fulfillmentConfig = DataProviderInstance.Fulfillments[lockedOrder.fulfillment.selectedService];
       const promisedTime = DateTimeIntervalBuilder(lockedOrder.fulfillment, fulfillmentConfig);
       const rebuiltCart = RebuildAndSortCart(lockedOrder.cart, CatalogProviderInstance.CatalogSelectors, promisedTime.start, fulfillmentConfig.id);
-      const eventTitle = EventTitleStringBuilder(CatalogProviderInstance.CatalogSelectors, fulfillmentConfig, customerName, lockedOrder.fulfillment.dineInInfo ?? null, rebuiltCart, lockedOrder.specialInstructions ?? "")
+      const eventTitle = EventTitleStringBuilder(CatalogProviderInstance.CatalogSelectors, fulfillmentConfig, customerName, lockedOrder.fulfillment, rebuiltCart, lockedOrder.specialInstructions ?? "")
       const messageOrders = CreateOrdersForPrintingFromCart(
         DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE,
         lockedOrder.id,
@@ -608,45 +688,50 @@ export class OrderManager implements WProvider {
           pickupAt: promisedTime.start,
           note: lockedOrder.specialInstructions ?? undefined
         })
+
+      const SQORDER_PRINT = lockedOrder.metadata.find(x => x.key === 'SQORDER_PRINT')?.value?.split(',') ?? [];
+      const messageOrderResponses: SquareOrder[] = [];
       for (let i = 0; i < messageOrders.length; ++i) {
-        await SquareProviderInstance.SendMessageOrder(messageOrders[i])
+        const messageOrderResponse = await SquareProviderInstance.SendMessageOrder(messageOrders[i]);
+        if (messageOrderResponse !== false) {
+          messageOrderResponses.push(messageOrderResponse.order!);
+        }
       }
-      if (releaseLock) {
-        // update order in DB, release lock
-        return await WOrderInstanceModel.findOneAndUpdate(
-          { locked: lockedOrder.locked, _id: lockedOrder.id },
-          {
-            locked: null,
-            'fulfillment.status': WFulfillmentStatus.SENT
-          },
-          { new: true })
-          .then(async (updatedOrder): Promise<ResponseWithStatusCode<ResponseSuccess<WOrderInstance>>> => {
-            return { success: true, status: 200, result: updatedOrder! };
-          })
-          .catch((err: any) => {
-            throw err;
-          })
+      SQORDER_PRINT.push(...messageOrderResponses.map(x => x.id!));
+
+      const updatedOrder = { ...lockedOrder,
+        ...(releaseLock ? { locked: null } : {}),
+        fulfillment: { ...lockedOrder.fulfillment, status: WFulfillmentStatus.SENT },
+        metadata: [
+          ...lockedOrder.metadata.filter(x => x.key !== 'SQORDER_PRINT' && x.key !== 'SQPAYMENT_PRINT'),
+          { key: 'SQORDER_PRINT', value: SQORDER_PRINT.join(',') },
+        ]
       }
-      return { success: true, status: 200, result: lockedOrder };
+      // update order in DB, release lock (if requested)
+      return await WOrderInstanceModel.findOneAndUpdate(
+        { locked: lockedOrder.locked, _id: lockedOrder.id },
+        updatedOrder,
+        { new: true })
+        .then(async (updated): Promise<ResponseWithStatusCode<ResponseSuccess<WOrderInstance>>> => {
+          return { success: true, status: 200, result: updated!.toObject() };
+        })
+        .catch((err: any) => {
+          throw err;
+        })
     } catch (error: any) {
       const errorDetail = `Caught error when attempting to send order: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`;
       logger.error(errorDetail);
-      try {
-        await WOrderInstanceModel.findOneAndUpdate(
-          { _id: lockedOrder.id },
-          { locked: null });
-      } catch (err2: any) {
-        logger.error(`Got even worse error in attempting to release lock on order we failed to finish send processing: ${JSON.stringify(err2, Object.getOwnPropertyNames(err2), 2)}`)
+      if (releaseLock) {
+        try {
+          await WOrderInstanceModel.findOneAndUpdate(
+            { _id: lockedOrder.id },
+            { locked: null });
+        } catch (err2: any) {
+          logger.error(`Got even worse error in attempting to release lock on order we failed to finish send processing: ${JSON.stringify(err2, Object.getOwnPropertyNames(err2), 2)}`)
+        }
       }
       return { status: 500, success: false, error: [{ category: 'API_ERROR', code: 'INTERNAL_SERVER_ERROR', detail: errorDetail }] };
     }
-  }
-
-  public SendOrder = async (idempotencyKey: string, orderId: string): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
-    return await this.LockAndActOnOrder(idempotencyKey, orderId,
-      { status: { $nin: [WOrderStatus.CANCELED] } },
-      (o) => this.SendLockedOrder(o, true)
-    );
   }
 
   private CancelLockedOrder = async (lockedOrder: WOrderInstance, reason: string, emailCustomer: boolean): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
@@ -675,7 +760,7 @@ export class OrderManager implements WProvider {
       let orderVersion = retrieveSquareOrderResponse.result.order!.version!;
 
       // refund square payments
-      const paymentRefunds = lockedOrder.payments.map(async (payment) => {
+      lockedOrder.payments.map(async (payment) => {
         if (payment.t === PaymentMethod.StoreCredit) {
           // refund the credit in the store credit DB
           StoreCreditProviderInstance.RefundStoreCredit(payment.payment.code, payment.amount, 'WARIO');
@@ -695,21 +780,58 @@ export class OrderManager implements WProvider {
         }
         return undoPaymentResponse;
       });
-      // TODO: check refund statuses
+      if (errors.length > 0) {
+        // maybe this should result in some more sophisticated cleanup, but we haven't seen a failure here yet
+        logger.error('Got errors when refunding payments. Sending email to the big giant head');
+        GoogleProviderInstance.SendEmail(
+          DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS,
+          { name: DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS, address: "dave@windycitypie.com" },
+          "ERROR IN REFUND PROCESSING. CONTACT DAVE IMMEDIATELY",
+          "dave@windycitypie.com",
+          `<p>Errors: ${JSON.stringify(errors)}</p>`);
+      }
 
-      // * send message on cancelation to relevant printer groups
+      const cancelMessageOrderResponses: SquareOrder[] = [];
+      const SQORDER_MSG = lockedOrder.metadata.find(x => x.key === 'SQORDER_MSG')?.value?.split(',') ?? [];
+      const SQORDER_PRINT = lockedOrder.metadata.find(x => x.key === 'SQORDER_PRINT')?.value?.split(',') ?? [];
+      // * Cancel the printer orders we previously sent if the order's fulfillment is in state SENT
+      // then send message on cancelation to relevant printer groups (this might not be necessary any longer)
       // do this here to give the refunds time to process, which hopefully results in the +2 increment in the order version
       if (lockedOrder.fulfillment.status === WFulfillmentStatus.SENT || lockedOrder.fulfillment.status === WFulfillmentStatus.PROCESSING) {
+        const printOrders: SquareOrder[] = [];
+        if (SQORDER_PRINT.length > 0) {
+          const batchOrders = await SquareProviderInstance.BatchRetrieveOrders(DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE, SQORDER_PRINT);
+          if (batchOrders.success) {
+            printOrders.push(...(batchOrders.result?.orders ?? []))
+          }
+        }
+
+        for (let pIdx = 0; pIdx < printOrders.length; ++pIdx) {
+          if (printOrders[pIdx].state === 'OPEN') {
+            const updateSquareOrderResponse = await SquareProviderInstance.OrderUpdate(
+              DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE,
+              printOrders[pIdx].id!,
+              printOrders[pIdx].version!, {
+              fulfillments: printOrders[pIdx].fulfillments?.map(x => ({
+                uid: x.uid,
+                state: 'CANCELED',
+                pickupDetails: { canceledAt: formatRFC3339(Date.now()), cancelReason: reason }
+              })) ?? []
+            }, []);
+          }
+        }
+        SQORDER_PRINT.splice(0);
+
         const promisedTime = DateTimeIntervalBuilder(lockedOrder.fulfillment, fulfillmentConfig);
         const oldPromisedTime = WDateUtils.ComputeServiceDateTime(lockedOrder.fulfillment);
         const customerName = `${lockedOrder.customerInfo.givenName} ${lockedOrder.customerInfo.familyName}`;
         const rebuiltCart = RebuildAndSortCart(lockedOrder.cart, CatalogProviderInstance.CatalogSelectors, promisedTime.start, fulfillmentConfig.id);
-        const eventTitle = EventTitleStringBuilder(CatalogProviderInstance.CatalogSelectors, fulfillmentConfig, customerName, lockedOrder.fulfillment.dineInInfo ?? null, rebuiltCart, lockedOrder.specialInstructions ?? "")
+        const eventTitle = EventTitleStringBuilder(CatalogProviderInstance.CatalogSelectors, fulfillmentConfig, customerName, lockedOrder.fulfillment, rebuiltCart, lockedOrder.specialInstructions ?? "")
         const flatCart = Object.values(rebuiltCart).flat();
         // get mapping from printerGroupId to list CoreCartEntry<WProduct> being adjusted for that pgId
         const messages = Object.entries(CartByPrinterGroup(flatCart)).map(([pgId, entries]) => ({
           squareItemVariationId: GetSquareIdFromExternalIds(CatalogProviderInstance.PrinterGroups[pgId]!.externalIDs, 'ITEM_VARIATION')!,
-          message: entries.map(x => `${x.quantity}x:${x.product.m.shortname}`)
+          message: entries.map(x => `CANCEL ${x.quantity}x:${x.product.m.name}`)
         }))
         // get all dummy message item variations for the printerGroups
         const messageOrder = CreateOrderForMessages(
@@ -724,8 +846,12 @@ export class OrderManager implements WProvider {
             pickupAt: oldPromisedTime,
             note: `CANCEL ${eventTitle}`
           });
-        await SquareProviderInstance.SendMessageOrder(messageOrder);
+        const messageOrderResponse = await SquareProviderInstance.SendMessageOrder(messageOrder);
+        if (messageOrderResponse !== false) {
+          cancelMessageOrderResponses.push(messageOrderResponse.order!);
+        }
       }
+      SQORDER_MSG.push(...cancelMessageOrderResponses.map(x => x.id!));
 
       const squareOrder = retrieveSquareOrderResponse.result.order!;
       // cancel square fulfillment(s) and the order if it's not paid
@@ -765,7 +891,12 @@ export class OrderManager implements WProvider {
         {
           locked: null,
           status: WOrderStatus.CANCELED,
-          'fulfillment.status': WFulfillmentStatus.CANCELED
+          'fulfillment.status': WFulfillmentStatus.CANCELED,
+          metadata: [
+            ...lockedOrder.metadata.filter(x => !['SQORDER_PRINT', 'SQORDER_MSG'].includes(x.key)),
+            ...(SQORDER_PRINT.length > 0 ? [{ key: 'SQORDER_PRINT', value: SQORDER_PRINT.join(',') }] : []),
+            ...(SQORDER_MSG.length > 0 ? [{ key: 'SQORDER_MSG', value: SQORDER_MSG.join(',') }] : []),
+          ]
           // TODO: need to add refunds to the order too?
         },
         { new: true })
@@ -790,11 +921,58 @@ export class OrderManager implements WProvider {
     }
   }
 
-  public CancelOrder = async (idempotencyKey: string, orderId: string, reason: string, emailCustomer: boolean): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
-    return await this.LockAndActOnOrder(idempotencyKey, orderId,
-      { status: { $in: [WOrderStatus.OPEN, WOrderStatus.CONFIRMED] } },
-      (o) => this.CancelLockedOrder(o, reason, emailCustomer)
-    );
+  /**
+   * TODO: NEEDS IMPLEMENTATION
+   * @param lockedOrder Order in OPEN or CONFIRMED state, with fulfillment in PROPOSED or SENT state
+   * @returns 
+   */
+  private ModifyLockedOrder = async (lockedOrder: WOrderInstance, orderUpdate: Partial<Pick<WOrderInstance, 'customerInfo' | 'cart' | 'discounts' | 'fulfillment' | 'specialInstructions' | 'tip'>>): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
+    const updatedOrder = { ...lockedOrder, ...orderUpdate };
+    const fulfillmentConfig = DataProviderInstance.Fulfillments[updatedOrder.fulfillment.selectedService];
+    const is3pOrder = fulfillmentConfig.service === FulfillmentType.ThirdParty;
+    const promisedTime = DateTimeIntervalBuilder(lockedOrder.fulfillment, fulfillmentConfig);
+    const oldPromisedTime = WDateUtils.ComputeServiceDateTime(lockedOrder.fulfillment);
+    logger.info(`Adjusting order in status: ${lockedOrder.status} with fulfillment status ${lockedOrder.fulfillment.status} to new time of ${format(promisedTime.start, WDateUtils.ISODateTimeNoOffset)}`);
+    const customerName = `${lockedOrder.customerInfo.givenName} ${lockedOrder.customerInfo.familyName}`;
+    const rebuiltCart = RebuildAndSortCart(lockedOrder.cart, CatalogProviderInstance.CatalogSelectors, promisedTime.start, fulfillmentConfig.id);
+    const eventTitle = EventTitleStringBuilder(CatalogProviderInstance.CatalogSelectors, fulfillmentConfig, customerName, lockedOrder.fulfillment, rebuiltCart, lockedOrder.specialInstructions ?? "")
+    const flatCart = Object.values(rebuiltCart).flat();
+
+    // TODO: this doesn't work as it doesn't properly handle updated discounts or store credit redemptions
+    const recomputedTotals = RecomputeTotals({ cart: rebuiltCart, creditValidations: [] /*createOrderRequest.creditValidations*/, fulfillment: fulfillmentConfig, order: updatedOrder });
+
+    // adjust calendar event
+    const gCalEventId = lockedOrder.metadata.find(x => x.key === 'GCALEVENT')?.value;
+    if (gCalEventId) {
+      const dateTimeInterval = DateTimeIntervalBuilder(updatedOrder.fulfillment, fulfillmentConfig);
+      const updatedOrderEventJson = GenerateOrderEventJson(
+        eventTitle,
+        updatedOrder,
+        rebuiltCart,
+        dateTimeInterval,
+        recomputedTotals);
+      await GoogleProviderInstance.ModifyCalendarEvent(gCalEventId, updatedOrderEventJson);
+    }
+    throw "This shit doesn't work yet.";
+
+    // adjust DB event
+    return await WOrderInstanceModel.findOneAndUpdate(
+      { locked: lockedOrder.locked, _id: lockedOrder.id },
+      {
+        ...updatedOrder,
+        locked: null,
+      },
+      { new: true })
+      .then(async (updatedOrder) => {
+        // return success/failure
+        SocketIoProviderInstance.EmitOrder(updatedOrder!.toObject());
+        return { status: 200, success: true, error: [], result: updatedOrder! };
+      })
+      .catch((err: any) => {
+        const errorDetail = `Unable to commit update to order to release lock and update fulfillment time. Got error: ${JSON.stringify(err, null, 2)}`;
+        logger.error(errorDetail);
+        return { status: 500, success: false, error: [{ category: 'API_ERROR', code: 'INTERNAL_SERVER_ERROR', detail: errorDetail }] };
+      })
   }
 
   /**
@@ -805,6 +983,7 @@ export class OrderManager implements WProvider {
    * @returns 
    */
   private AdjustLockedOrderTime = async (lockedOrder: WOrderInstance, newTime: FulfillmentTime, emailCustomer: boolean, additionalMessage: string): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
+    let updatedOrder: WOrderInstance = { ...lockedOrder, fulfillment: { ...lockedOrder.fulfillment, ...newTime } };
     const fulfillmentConfig = DataProviderInstance.Fulfillments[lockedOrder.fulfillment.selectedService];
     const is3pOrder = fulfillmentConfig.service === FulfillmentType.ThirdParty;
     const promisedTime = DateTimeIntervalBuilder(lockedOrder.fulfillment, fulfillmentConfig);
@@ -812,14 +991,43 @@ export class OrderManager implements WProvider {
     logger.info(`Adjusting order in status: ${lockedOrder.status} with fulfillment status ${lockedOrder.fulfillment.status} to new time of ${format(promisedTime.start, WDateUtils.ISODateTimeNoOffset)}`);
     const customerName = `${lockedOrder.customerInfo.givenName} ${lockedOrder.customerInfo.familyName}`;
     const rebuiltCart = RebuildAndSortCart(lockedOrder.cart, CatalogProviderInstance.CatalogSelectors, promisedTime.start, fulfillmentConfig.id);
-    const eventTitle = EventTitleStringBuilder(CatalogProviderInstance.CatalogSelectors, fulfillmentConfig, customerName, lockedOrder.fulfillment.dineInInfo ?? null, rebuiltCart, lockedOrder.specialInstructions ?? "")
+    const eventTitle = EventTitleStringBuilder(CatalogProviderInstance.CatalogSelectors, fulfillmentConfig, customerName, lockedOrder.fulfillment, rebuiltCart, lockedOrder.specialInstructions ?? "")
     const flatCart = Object.values(rebuiltCart).flat();
+
+    const SQORDER_MSG = lockedOrder.metadata.find(x => x.key === 'SQORDER_MSG')?.value?.split(',') ?? [];
+    const SQORDER_PRINT = lockedOrder.metadata.find(x => x.key === 'SQORDER_PRINT')?.value?.split(',') ?? [];
+
     // if the order has SENT fulfillment, we need to notify all relevant printer groups of the new time
     if (lockedOrder.fulfillment.status === WFulfillmentStatus.SENT) {
+      // cancel any existing print orders
+      const printOrders: SquareOrder[] = [];
+      if (SQORDER_PRINT.length > 0) {
+        const batchOrders = await SquareProviderInstance.BatchRetrieveOrders(DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE, SQORDER_PRINT);
+        if (batchOrders.success) {
+          printOrders.push(...(batchOrders.result?.orders ?? []))
+        }
+      }
+
+      for (let pIdx = 0; pIdx < printOrders.length; ++pIdx) {
+        if (printOrders[pIdx].state === 'OPEN') {
+          const updateSquareOrderResponse = await SquareProviderInstance.OrderUpdate(
+            DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE,
+            printOrders[pIdx].id!,
+            printOrders[pIdx].version!, {
+            fulfillments: printOrders[pIdx].fulfillments?.map(x => ({
+              uid: x.uid,
+              state: 'CANCELED',
+              pickupDetails: { canceledAt: formatRFC3339(Date.now()), cancelReason: "rescheduled" }
+            })) ?? []
+          }, []);
+        }
+      }
+      SQORDER_PRINT.splice(0);
+
       // get mapping from printerGroupId to list CoreCartEntry<WProduct> being adjusted for that pgId
       const messages = Object.entries(CartByPrinterGroup(flatCart)).map(([pgId, entries]) => ({
         squareItemVariationId: GetSquareIdFromExternalIds(CatalogProviderInstance.PrinterGroups[pgId]!.externalIDs, 'ITEM_VARIATION')!,
-        message: entries.map(x => `${x.quantity}x:${x.product.m.shortname}`)
+        message: entries.map(x => `RESCHEDULE ${x.quantity}x:${x.product.m.name}`)
       }))
       // get all dummy message item variations for the printerGroups
       const messageOrder = CreateOrderForMessages(
@@ -834,7 +1042,10 @@ export class OrderManager implements WProvider {
           pickupAt: oldPromisedTime,
           note: `RESCHEDULED TO ${newTime.selectedDate} @ ${WDateUtils.MinutesToPrintTime(newTime.selectedTime)}${additionalMessage ? `\n${additionalMessage}` : ""}`
         });
-      await SquareProviderInstance.SendMessageOrder(messageOrder);
+      const messageOrderResponse = await SquareProviderInstance.SendMessageOrder(messageOrder);
+      if (messageOrderResponse !== false) {
+        SQORDER_MSG.push(messageOrderResponse.order!.id!);
+      }
     }
 
     // adjust calendar event
@@ -854,7 +1065,24 @@ export class OrderManager implements WProvider {
     }
     // send email to customer
     if (!is3pOrder && emailCustomer) {
-      await CreateExternalEmailForOrderReschedule(fulfillmentConfig, { ...lockedOrder.fulfillment, ...newTime }, lockedOrder.customerInfo, additionalMessage);
+      await CreateExternalEmailForOrderReschedule(fulfillmentConfig, updatedOrder.fulfillment, lockedOrder.customerInfo, additionalMessage);
+    }
+
+    updatedOrder.fulfillment.status = WFulfillmentStatus.PROPOSED;
+    updatedOrder = {
+      ...updatedOrder, metadata: [
+        ...updatedOrder.metadata.filter(x => !['SQORDER_PRINT', 'SQORDER_MSG'].includes(x.key)),
+        ...(SQORDER_PRINT.length > 0 ? [{ key: 'SQORDER_PRINT', value: SQORDER_PRINT.join(',') }] : []),
+        ...(SQORDER_MSG.length > 0 ? [{ key: 'SQORDER_MSG', value: SQORDER_MSG.join(',') }] : []),
+      ]
+    };
+
+    // check if the order is confirmed or processing and within time range and send it if so
+    if ((updatedOrder.status === WOrderStatus.CONFIRMED || updatedOrder.status === WOrderStatus.PROCESSING) &&
+      isBefore(WDateUtils.ComputeServiceDateTime(newTime), GetEndOfSendingRange(zonedTimeToUtc(Date.now(), process.env.TZ!)))) {
+      return await this.SendLockedOrder(updatedOrder, true);
+    } else {
+      updatedOrder.fulfillment.status = WFulfillmentStatus.PROPOSED;
     }
 
     // adjust DB event
@@ -862,9 +1090,8 @@ export class OrderManager implements WProvider {
       { locked: lockedOrder.locked, _id: lockedOrder.id },
       {
         locked: null,
-        'fulfillment.selectedDate': newTime.selectedDate,
-        'fulfillment.selectedTime': newTime.selectedTime,
-        'fulfillment.status': WFulfillmentStatus.PROPOSED,
+        fulfillment: updatedOrder.fulfillment,
+        metadata: updatedOrder.metadata
       },
       { new: true })
       .then(async (updatedOrder) => {
@@ -879,23 +1106,7 @@ export class OrderManager implements WProvider {
       })
   }
 
-  public AdjustOrderTime = async (idempotencyKey: string, orderId: string, newTime: FulfillmentTime, emailCustomer: boolean, additionalMessage: string): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
-    return await this.LockAndActOnOrder(idempotencyKey, orderId,
-      {
-        status: { $in: [WOrderStatus.OPEN, WOrderStatus.CONFIRMED] },
-        'fulfillment.status': { $in: [WFulfillmentStatus.PROPOSED, WFulfillmentStatus.SENT] }
-      },
-      (o) => this.AdjustLockedOrderTime(o, newTime, emailCustomer, additionalMessage)
-    );
-  }
-
-  public ConfirmOrder = async (idempotencyKey: string, orderId: string, messageToCustomer: string): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
-    return await this.LockAndActOnOrder(idempotencyKey, orderId,
-      { status: WOrderStatus.OPEN },
-      (o) => this.ConfirmLockedOrder(o, messageToCustomer)
-    );
-  }
-  public ConfirmLockedOrder = async (lockedOrder: WOrderInstance, messageToCustomer: string): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
+  private ConfirmLockedOrder = async (lockedOrder: WOrderInstance, messageToCustomer: string): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
     const fulfillmentConfig = DataProviderInstance.Fulfillments[lockedOrder.fulfillment.selectedService];
     const is3pOrder = fulfillmentConfig.service === FulfillmentType.ThirdParty;
 
@@ -926,8 +1137,11 @@ export class OrderManager implements WProvider {
       }
     }
 
-    // TODO: check if the order is within time range and send it if so
-    // GetEndOfSendingRange
+    // check if the order is within time range and send it if so
+    const endOfRange = GetEndOfSendingRange(zonedTimeToUtc(Date.now(), process.env.TZ!));
+    if (isBefore(WDateUtils.ComputeServiceDateTime(lockedOrder.fulfillment), endOfRange)) {
+      return await this.SendLockedOrder({ ...lockedOrder, status: WOrderStatus.CONFIRMED }, true);
+    }
 
     // adjust DB event
     return await WOrderInstanceModel.findOneAndUpdate(
@@ -937,14 +1151,74 @@ export class OrderManager implements WProvider {
       .then(async (updatedOrder) => {
         // return success/failure
         SocketIoProviderInstance.EmitOrder(updatedOrder!.toObject());
-        return { status: 200, success: true, error: [], result: updatedOrder! };
+        return { status: 200, success: true, error: [], result: updatedOrder!.toObject() };
       })
       .catch((err: any) => {
-        const errorDetail = `Unable to commit update to order to release lock and update fulfillment time. Got error: ${JSON.stringify(err, null, 2)}`;
+        const errorDetail = `Unable to commit update to order to release lock and confirm order. Got error: ${JSON.stringify(err, null, 2)}`;
         logger.error(errorDetail);
         return { status: 500, success: false, error: [{ category: 'API_ERROR', code: 'INTERNAL_SERVER_ERROR', detail: errorDetail }] };
       })
   };
+
+  public GetOrder = async (orderId: string): Promise<WOrderInstance | null> => {
+    // find order and return
+    return await WOrderInstanceModel.findById(orderId);
+  };
+
+  public GetOrders = async (queryDate: string | null, queryStatus: WOrderStatus | null): Promise<WOrderInstance[]> => {
+    // find orders and return
+    const dateConstraint = queryDate ? { 'fulfillment.selectedDate': queryDate } : {};
+    const statusConstraint = queryStatus ? { 'status': queryStatus } : {};
+    return await WOrderInstanceModel.find({
+      ...(dateConstraint),
+      ...(statusConstraint)
+    }).exec();
+  };
+
+  public ObliterateLocks = async () => {
+    await WOrderInstanceModel.updateMany({}, { locked: null });
+  }
+
+  public SendMoveOrderTicket = async (idempotencyKey: string, orderId: string, destination: string, additionalMessage: string): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
+    return await this.LockAndActOnOrder(idempotencyKey, orderId,
+      {
+        status: { $in: [WOrderStatus.CONFIRMED, WOrderStatus.PROCESSING, WOrderStatus.COMPLETED] },
+        'fulfillment.status': WFulfillmentStatus.SENT
+      },
+      (o) => this.SendMoveLockedOrderTicket(o, destination, additionalMessage)
+    );
+  }
+
+  public SendOrder = async (idempotencyKey: string, orderId: string): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
+    return await this.LockAndActOnOrder(idempotencyKey, orderId,
+      { status: { $nin: [WOrderStatus.CANCELED] } },
+      (o) => this.SendLockedOrder(o, true)
+    );
+  }
+
+  public CancelOrder = async (idempotencyKey: string, orderId: string, reason: string, emailCustomer: boolean): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
+    return await this.LockAndActOnOrder(idempotencyKey, orderId,
+      { status: { $in: [WOrderStatus.OPEN, WOrderStatus.CONFIRMED] } },
+      (o) => this.CancelLockedOrder(o, reason, emailCustomer)
+    );
+  }
+
+  public AdjustOrderTime = async (idempotencyKey: string, orderId: string, newTime: FulfillmentTime, emailCustomer: boolean, additionalMessage: string): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
+    return await this.LockAndActOnOrder(idempotencyKey, orderId,
+      {
+        status: { $in: [WOrderStatus.OPEN, WOrderStatus.CONFIRMED] },
+        'fulfillment.status': { $in: [WFulfillmentStatus.PROPOSED, WFulfillmentStatus.SENT] }
+      },
+      (o) => this.AdjustLockedOrderTime(o, newTime, emailCustomer, additionalMessage)
+    );
+  }
+
+  public ConfirmOrder = async (idempotencyKey: string, orderId: string, messageToCustomer: string): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
+    return await this.LockAndActOnOrder(idempotencyKey, orderId,
+      { status: WOrderStatus.OPEN },
+      (o) => this.ConfirmLockedOrder(o, messageToCustomer)
+    );
+  }
 
   public CreateOrder = async (createOrderRequest: CreateOrderRequestV2, ipAddress: string): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
     const requestTime = Date.now();
@@ -972,7 +1246,7 @@ export class OrderManager implements WProvider {
       };
     }
 
-    const shorthandEventTitle = EventTitleStringBuilder(CatalogProviderInstance.CatalogSelectors, fulfillmentConfig, customerName, createOrderRequest.fulfillment.dineInInfo ?? null, rebuiltCart, createOrderRequest.specialInstructions ?? "");
+    const shorthandEventTitle = EventTitleStringBuilder(CatalogProviderInstance.CatalogSelectors, fulfillmentConfig, customerName, createOrderRequest.fulfillment, rebuiltCart, createOrderRequest.specialInstructions ?? "");
 
     // 3. 'let's setup the order object reference
     const orderInstance: WOrderInstancePartial = {
@@ -1192,12 +1466,12 @@ export class OrderManager implements WProvider {
 
         // 6. create calendar event
         try {
-          return await CreateOrderEvent(
+          return await GoogleProviderInstance.CreateCalendarEvent(GenerateOrderEventJson(
             shorthandEventTitle,
             completedOrderInstance,
             rebuiltCart,
             dateTimeInterval,
-            recomputedTotals)
+            recomputedTotals))
             .then(async (orderEvent) => {
               return await new WOrderInstanceModel({
                 ...completedOrderInstance,
@@ -1269,7 +1543,7 @@ export class OrderManager implements WProvider {
 
     const _SEND_ORDER_INTERVAL = setInterval(() => {
       this.SendOrders();
-    }, 10000);
+    }, 60000);
 
     if (DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_3P) {
       const _QUERY_3P_ORDERS = setInterval(() => {

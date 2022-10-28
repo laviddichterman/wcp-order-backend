@@ -1,19 +1,11 @@
 import logger from '../logging';
 import { WProvider } from '../types/WProvider';
 import PACKAGE_JSON from '../../package.json';
-import { OptionPlacement, OptionQualifier, ReduceArrayToMapByKey, SEMVER, WDateUtils } from '@wcp/wcpshared';
+import { SEMVER, WDateUtils } from '@wcp/wcpshared';
 import DBVersionModel from '../models/DBVersionSchema';
-import { KeyValueModel } from '../models/settings/KeyValueSchema';
-import { WMoney } from '../models/WMoney';
-import { IntervalSchema } from '../models/IntervalSchema';
-import { WCategoryModel } from '../models/catalog/category/WCategorySchema';
 import { WOptionModel as WOptionModelActual } from '../models/catalog/options/WOptionSchema';
 import { WOptionTypeModel as WOptionTypeModelActual } from '../models/catalog/options/WOptionTypeSchema';
-import { WProductModel as WProductModelActual } from '../models/catalog/products/WProductSchema';
-import { WProductInstanceModel as WProductInstanceModelActual } from '../models/catalog/products/WProductInstanceSchema';
-import { PrinterGroupModel } from '../models/catalog/WPrinterGroupSchema';
 import mongoose, { Schema } from "mongoose";
-import { exit } from 'process';
 import { WOrderInstanceModel } from '../models/orders/WOrderInstance';
 import { parseISO } from 'date-fns';
 import { CatalogProviderInstance } from './catalog_provider';
@@ -167,6 +159,21 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
   "0.5.57": [{ major: 0, minor: 5, patch: 58 }, async () => {
   }],
   "0.5.58": [{ major: 0, minor: 5, patch: 59 }, async () => {
+    {
+      // set isExpo to false for all printer groups
+      const WPrinterGroupSchema = mongoose.model('WPRINTERGroupSchema', new Schema({
+        isExpo: Boolean,
+      }));
+      const updateResponse = await WPrinterGroupSchema.updateMany({}, {
+        $set: { 'isExpo': false }
+      }).exec();
+      if (updateResponse.modifiedCount > 0) {
+        logger.debug(`Updated ${updateResponse.modifiedCount} WPrinterGroupSchema with disabled isExpo.`);
+      }
+      else {
+        logger.warn("No WPrinterGroupSchema had isExpo disabled");
+      }
+    }
   }],
   "0.5.59": [{ major: 0, minor: 5, patch: 60 }, async () => {
   }],

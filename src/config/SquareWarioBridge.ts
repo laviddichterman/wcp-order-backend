@@ -284,6 +284,7 @@ export const CreateOrderForMessages = (
   fulfillmentInfo: SquareOrderFulfillmentInfo): Order => {
   const truncatedTicketName = ticketName.slice(0, 29)
   return {
+    // TODO: we might want one message per line... see how this prints
     lineItems: messages.map(x => ({
       quantity: "1",
       catalogObjectId: x.squareItemVariationId,

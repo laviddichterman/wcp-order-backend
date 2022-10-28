@@ -50,6 +50,12 @@ const ConfirmOrderValidationChain = [
   body('additionalMessage').trim().exists(),
 ]
 
+const MoveOrderValidationChain = [
+  ...IdempotentOrderIdPutValidationChain,
+  body('destination').trim().exists(),
+  body('additionalMessage').trim().exists(),
+]
+
 const RescheduleOrderValidationChain = [
   ...IdempotentOrderIdPutValidationChain,
   body('selectedDate').isISO8601(),
@@ -79,6 +85,7 @@ export class OrderController implements IExpressController {
     this.router.put(`${this.path}/:oId/cancel`, CheckJWT, ScopeCancelOrders, expressValidationMiddleware(CancelOrderValidationChain), this.putCancelOrder);
     this.router.put(`${this.path}/:oId/send`, CheckJWT, ScopeWriteOrders, expressValidationMiddleware(IdempotentOrderIdPutValidationChain), this.putSendOrder);
     this.router.put(`${this.path}/:oId/confirm`, CheckJWT, ScopeWriteOrders, expressValidationMiddleware(ConfirmOrderValidationChain), this.putConfirmOrder);
+    this.router.put(`${this.path}/:oId/move`, CheckJWT, ScopeWriteOrders, expressValidationMiddleware(MoveOrderValidationChain), this.putMoveOrder);
     this.router.put(`${this.path}/:oId/reschedule`, CheckJWT, ScopeWriteOrders, expressValidationMiddleware(RescheduleOrderValidationChain), this.putRescheduleOrder);
   };
 
@@ -136,6 +143,26 @@ export class OrderController implements IExpressController {
       const orderId = req.params.oId;
       const additionalMessage = req.body.additionalMessage as string;
       const response = await OrderManagerInstance.ConfirmOrder(idempotencyKey, orderId, additionalMessage);
+      res.status(response.status).json(response);
+    } catch (error) {
+      const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
+      GoogleProviderInstance.SendEmail(
+        EMAIL_ADDRESS,
+        { name: EMAIL_ADDRESS, address: "dave@windycitypie.com" },
+        "ERROR IN ORDER PROCESSING. CONTACT DAVE IMMEDIATELY",
+        "dave@windycitypie.com",
+        `<p>Order request: ${JSON.stringify(req.body)}</p><p>Error info:${JSON.stringify(error)}</p>`);
+      next(error)
+    }
+  }
+
+  private putMoveOrder = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const idempotencyKey = req.get('idempotency-key')!;
+      const orderId = req.params.oId;
+      const destination = req.body.destination as string;
+      const additionalMessage = req.body.additionalMessage as string;
+      const response = await OrderManagerInstance.SendMoveOrderTicket(idempotencyKey, orderId, destination, additionalMessage);
       res.status(response.status).json(response);
     } catch (error) {
       const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
