@@ -1,4 +1,4 @@
-import { Error as SquareError, Client, CreateOrderRequest, CreateOrderResponse, CreatePaymentRequest, Environment, UpdateOrderRequest, ApiError, UpdateOrderResponse, PaymentRefund, RefundPaymentRequest, PayOrderRequest, PayOrderResponse, Payment, RetrieveOrderResponse, Order, UpsertCatalogObjectRequest, BatchUpsertCatalogObjectsRequest, CatalogObjectBatch, CatalogObject, BatchUpsertCatalogObjectsResponse, UpsertCatalogObjectResponse, BatchDeleteCatalogObjectsRequest, BatchDeleteCatalogObjectsResponse, BatchRetrieveCatalogObjectsRequest, BatchRetrieveCatalogObjectsResponse, CatalogInfoResponseLimits, SearchCatalogItemsRequest, SearchCatalogItemsResponse, SearchCatalogObjectsRequest, SearchCatalogObjectsResponse, ListCatalogResponse, SearchOrdersResponse, SearchOrdersRequest, SearchOrdersQuery } from 'square';
+import { Error as SquareError, Client, CreateOrderRequest, CreateOrderResponse, CreatePaymentRequest, Environment, UpdateOrderRequest, ApiError, UpdateOrderResponse, PaymentRefund, RefundPaymentRequest, PayOrderRequest, PayOrderResponse, Payment, RetrieveOrderResponse, Order, UpsertCatalogObjectRequest, BatchUpsertCatalogObjectsRequest, CatalogObjectBatch, CatalogObject, BatchUpsertCatalogObjectsResponse, UpsertCatalogObjectResponse, BatchDeleteCatalogObjectsRequest, BatchDeleteCatalogObjectsResponse, BatchRetrieveCatalogObjectsRequest, BatchRetrieveCatalogObjectsResponse, CatalogInfoResponseLimits, SearchCatalogItemsRequest, SearchCatalogItemsResponse, SearchCatalogObjectsRequest, SearchCatalogObjectsResponse, ListCatalogResponse, SearchOrdersResponse, SearchOrdersRequest, SearchOrdersQuery, BatchRetrieveOrdersResponse } from 'square';
 import { WProvider } from '../types/WProvider';
 import crypto from 'crypto';
 import logger from '../logging';
@@ -261,6 +261,17 @@ export class SquareProvider implements WProvider {
     return await SquareRequestHandler(callFxn);
   }
 
+
+  BatchRetrieveOrders = async (locationId: string, orderIds: string[]) => {
+    const orders_api = this.#client.ordersApi;
+    const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<BatchRetrieveOrdersResponse>> => {
+      logger.debug(`Getting Square Orders: ${orderIds.join(", ")}`);
+      const { result, ...httpResponse } = await orders_api.batchRetrieveOrders({ orderIds, locationId });
+      return { success: true, result: result, error: [] };
+    }
+    return await SquareRequestHandler(callFxn);
+  }
+
   SearchOrders = async (locationIds: string[], query: SearchOrdersQuery) => {
     const orders_api = this.#client.ordersApi;
     const request_body: SearchOrdersRequest = {
@@ -268,7 +279,7 @@ export class SquareProvider implements WProvider {
       locationIds
     };
     const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<SearchOrdersResponse>> => {
-      logger.info(`Searching Square Orders with: ${JSON.stringify(request_body)}`);
+      logger.debug(`Searching Square Orders with: ${JSON.stringify(request_body)}`);
       const { result, ...httpResponse } = await orders_api.searchOrders(request_body);
       return { success: true, result: result, error: [] };
     }
@@ -293,6 +304,7 @@ export class SquareProvider implements WProvider {
     const request_body: CreatePaymentRequest = {
       sourceId: storeCreditPayment ? "EXTERNAL" : sourceId,
       externalDetails: storeCreditPayment ? { type: 'STORED_BALANCE', source: "WARIO", sourceId: storeCreditPayment.payment.code } : undefined,
+      ...(sourceId === 'CASH' ? { cashDetails: { buyerSuppliedMoney: IMoneyToBigIntMoney(amount), changeBackMoney: { amount: 0n, currency: amount.currency }}} : {}),
       amountMoney: IMoneyToBigIntMoney({ currency: amount.currency, amount: amount.amount - tipMoney.amount }),
       tipMoney: IMoneyToBigIntMoney(tipMoney),
       referenceId: storeCreditPayment ? storeCreditPayment.payment.code : referenceId,
@@ -300,7 +312,7 @@ export class SquareProvider implements WProvider {
       locationId,
       autocomplete,
       acceptPartialAuthorization: false,
-      statementDescriptionIdentifier: `${DataProviderInstance.KeyValueConfig.STORE_NAME}`.slice(0, 19),
+      //statementDescriptionIdentifier: `${DataProviderInstance.KeyValueConfig.STORE_NAME}`.slice(0, 19),
       verificationToken,
       idempotencyKey: idempotency_key
     };
@@ -596,27 +608,11 @@ export class SquareProvider implements WProvider {
         autocomplete: true,
         locationId: order.locationId,
         referenceId: "",
-        storeCreditPayment: {
-          t: PaymentMethod.StoreCredit,
-          amount: { currency: CURRENCY.USD, amount: 0 },
-          createdAt: Date.now(),
-          payment: {
-            code: "FOO",
-            lock: {
-              auth: 'FOO',
-              iv: 'FOO',
-              enc: 'FOO',
-            },
-            processorId: 'FOO',
-          },
-          status: TenderBaseStatus.AUTHORIZED,
-          tipAmount: { currency: CURRENCY.USD, amount: 0 }
-        },
         squareOrderId: sentOrder.result.order.id,
-        sourceId: "EXTERNAL"
+        sourceId: "CASH"
       });
       if (payment.success) {
-        return true;
+        return sentOrder.result;
       }
     }
     return false;
