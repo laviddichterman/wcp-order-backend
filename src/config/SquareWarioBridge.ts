@@ -449,7 +449,7 @@ export const PrinterGroupToSquareCatalogObjectPlusDummyProduct = (locationIds: s
         ...(versionItemVariation !== null ? { version: versionItemVariation } : {}),
         itemVariationData: {
           itemId: squareItemId,
-          name: "MESSAGE",
+          //name: "MESSAGE",
           pricingType: 'FIXED_PRICING',
           priceMoney: IMoneyToBigIntMoney({ currency: CURRENCY.USD, amount: 0 }),
           sellable: true,
