@@ -10,6 +10,10 @@ export const PrinterGroupSchema = new Schema<MT>({
     type: Boolean,
     required: true
   },
+  isExpo: { 
+    type: Boolean,
+    required: true
+  },
   externalIDs: {
     type: [KeyValueEntrySchema],
     required: true

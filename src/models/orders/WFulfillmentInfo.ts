@@ -5,7 +5,8 @@ export const DineInInfoSchema = new Schema<DineInInfoDto>({
   partySize: {
     type: Number,
     required: true
-  }
+  },
+  tableId: String
 }, { _id: false });
 
 export const AddressComponentSchema = new Schema<AddressComponent>({
@@ -46,6 +47,10 @@ export const DeliveryInfoSchema = new Schema<DeliveryInfoDto>({
 
 export const ThirdPartyInfoSchema = new Schema<ThirdPartyInfo>({
   squareId: { 
+    type: String,
+    required: true
+  },
+  source: { 
     type: String,
     required: true
   }

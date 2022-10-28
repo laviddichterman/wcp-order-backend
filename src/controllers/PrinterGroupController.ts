@@ -17,6 +17,7 @@ const PrinterGroupValidationChain = [
   body('externalIDs').isArray(),
   body('externalIDs.*.key').exists(),
   body('externalIDs.*.value').exists(),
+  body('isExpo').toBoolean(true),
   body('singleItemPerTicket').toBoolean(true),
 ];
 
@@ -56,11 +57,12 @@ export class PrinterGroupController implements IExpressController {
       const doc = await CatalogProviderInstance.CreatePrinterGroup({
         name: req.body.name,
         externalIDs: req.body.externalIDs,
-        singleItemPerTicket: req.body.singleItemPerTicket
+        singleItemPerTicket: req.body.singleItemPerTicket,
+        isExpo: req.body.isExpo,
       });
       if (!doc) {
         logger.error(`Unable to create printer group`);
-        return res.status(500).send(`Unable to printer group`);
+        return res.status(500).send(`Unable to create printer group`);
       }
       const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/${doc.id}`;
       res.setHeader('Location', location);
@@ -77,7 +79,8 @@ export class PrinterGroupController implements IExpressController {
         printerGroup: {
           name: req.body.name,
           externalIDs: req.body.externalIDs,
-          singleItemPerTicket: req.body.singleItemPerTicket
+          singleItemPerTicket: req.body.singleItemPerTicket,
+          isExpo: req.body.isExpo,
         }
       });
       if (!doc) {
