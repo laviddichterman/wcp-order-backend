@@ -304,12 +304,15 @@ const CreateExternalEmail = async (
   const STORE_NAME = DataProviderInstance.KeyValueConfig.STORE_NAME;
   const ORDER_RESPONSE_PREAMBLE = DataProviderInstance.KeyValueConfig.ORDER_RESPONSE_PREAMBLE;
   const LOCATION_INFO = DataProviderInstance.KeyValueConfig.LOCATION_INFO;
-  const cartstring = GenerateDisplayCartStringListFromProducts(cart);
-  const paymentDisplays = order.payments.map(payment => GenerateOrderPaymentDisplay(payment, true)).join("<br />");
   const delivery_section = order.fulfillment.deliveryInfo ? GenerateDeliverySection(order.fulfillment.deliveryInfo, true) : "";
-  const location_section = delivery_section ? "" : `<p><strong>Location Information:</strong>
-We are located ${LOCATION_INFO}</p>`;
-  const special_instructions_section = order.specialInstructions && order.specialInstructions.length > 0 ? `<p><strong>Special Instructions</strong>: ${order.specialInstructions} </p>` : "";
+  const sections = [ 
+    ...GenerateDisplayCartStringListFromProducts(cart),
+    ...(order.specialInstructions && order.specialInstructions.length > 0 ? [`<p><strong>Special Instructions</strong>: ${order.specialInstructions} </p>`] : []),
+    ...(delivery_section ? [delivery_section] : []),
+    ...order.discounts.map(discount => GenerateOrderLineDiscountDisplay(discount, true)),
+    ...order.payments.map(payment => GenerateOrderPaymentDisplay(payment, true)),
+    ...(delivery_section ? [] : [`<p><strong>Location Information:</strong> We are located ${LOCATION_INFO}</p>`])
+  ];
   const emailbody = `<p>${ORDER_RESPONSE_PREAMBLE}</p>
 <p>We take your health seriously; be assured your order has been prepared with the utmost care.</p>
 <p>Note that all gratuity is shared with the entire ${STORE_NAME} family.</p>
@@ -319,11 +322,8 @@ We are located ${LOCATION_INFO}</p>`;
 Service: ${service_title}.<br />
 Phone: ${order.customerInfo.mobileNum}<br />
 Order contents:<br />
-${cartstring.join("<br />")}
-${special_instructions_section ? '<br />' : ''}${special_instructions_section}
-${delivery_section ? '<br />' : ''}${delivery_section}
-${paymentDisplays ? '<br />' : ''}${paymentDisplays}
-${location_section ? '<br />' : ''}${location_section}We thank you for your support!`;
+${sections.join("<br />")}
+<br />We thank you for your support!`;
   return await GoogleProviderInstance.SendEmail(
     {
       name: STORE_NAME,
