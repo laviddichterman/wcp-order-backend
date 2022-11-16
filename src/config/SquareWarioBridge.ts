@@ -1,4 +1,4 @@
-import { OrderLineItem, Money, OrderLineItemModifier, Order, CatalogObject, CatalogIdMapping, OrderFulfillment, CatalogItemModifierListInfo } from 'square';
+import { OrderLineItem, Money, OrderLineItemModifier, Order, CatalogObject, CatalogIdMapping, OrderFulfillment, CatalogItemModifierListInfo, OrderLineItemDiscount } from 'square';
 import logger from '../logging';
 import { CatalogProviderInstance } from './catalog_provider';
 import { IMoney, TenderBaseStatus, PRODUCT_LOCATION, IProduct, IProductInstance, KeyValue, ICatalogSelectors, OptionPlacement, OptionQualifier, IOption, IOptionInstance, PrinterGroup, CURRENCY, CoreCartEntry, WProduct, OrderLineDiscount, OrderTax, DiscountMethod, IOptionType, ICatalog, WCPProductV2Dto, ProductModifierEntry } from '@wcp/wcpshared';
@@ -76,9 +76,9 @@ export const GenerateSquareReverseMapping = (catalog: ICatalog): Record<string, 
   Object.values(catalog.products).forEach(productEntry => {
     productEntry.instances.forEach(pIId => {
       GetSquareExternalIds(catalog.productInstances[pIId]!.externalIDs)
-          .forEach(kv => {
-            acc[kv.value] = pIId;
-          });
+        .forEach(kv => {
+          acc[kv.value] = pIId;
+        });
     });
   });
   return acc;
@@ -87,35 +87,35 @@ export const GenerateSquareReverseMapping = (catalog: ICatalog): Record<string, 
 export const LineItemsToOrderInstanceCart = (lineItems: OrderLineItem[]): CoreCartEntry<WCPProductV2Dto>[] => {
   try {
     return lineItems
-    .filter(line => line.itemType === 'ITEM')
-    .map((line) => {
-      const pIId = CatalogProviderInstance.ReverseMappings[line.catalogObjectId!];
-      if (!pIId) {
-        logger.error(`Unable to find matching product instance ID for square item variation`);
-      }
-      const warioProductInstance = CatalogProviderInstance.Catalog.productInstances[pIId]!;
-      const warioProduct = CatalogProviderInstance.Catalog.products[warioProductInstance.productId].product;
-      const modifiers: ProductModifierEntry[] = Object.values((line.modifiers ?? [])
-        .reduce((acc: Record<string, ProductModifierEntry>, lineMod) => {
-        const oId = CatalogProviderInstance.ReverseMappings[lineMod.catalogObjectId!];
-        const warioModifierOption = CatalogProviderInstance.Catalog.options[oId];
-        const mTId = warioModifierOption.modifierTypeId;
-        return { ...acc, [mTId]: { modifierTypeId: mTId, options: [{ optionId: oId, placement: OptionPlacement.WHOLE, qualifier: OptionQualifier.REGULAR }, ...(acc[mTId]?.options ?? [])] } };
-      }, {}))
-      // now sort it...
-      .sort((a, b) => CatalogProviderInstance.Catalog.modifiers[a.modifierTypeId].modifierType.ordinal - CatalogProviderInstance.Catalog.modifiers[b.modifierTypeId].modifierType.ordinal)
-      .map(x=>({...x, options: x.options.sort((a, b) => CatalogProviderInstance.Catalog.options[a.optionId].ordinal - CatalogProviderInstance.Catalog.options[b.optionId].ordinal)}))
-      // PRECONDITION: 3p products are unique to the 3p merchant and shouldn't yield a category outside of the 3p menu tree
-      const category = warioProduct.category_ids[0];
-      return {
-        categoryId: category,
-        product: {
-          pid: warioProductInstance.productId,
-          modifiers: modifiers
-        },
-        quantity: parseInt(line.quantity)
-      };
-  });   
+      .filter(line => line.itemType === 'ITEM')
+      .map((line) => {
+        const pIId = CatalogProviderInstance.ReverseMappings[line.catalogObjectId!];
+        if (!pIId) {
+          logger.error(`Unable to find matching product instance ID for square item variation`);
+        }
+        const warioProductInstance = CatalogProviderInstance.Catalog.productInstances[pIId]!;
+        const warioProduct = CatalogProviderInstance.Catalog.products[warioProductInstance.productId].product;
+        const modifiers: ProductModifierEntry[] = Object.values((line.modifiers ?? [])
+          .reduce((acc: Record<string, ProductModifierEntry>, lineMod) => {
+            const oId = CatalogProviderInstance.ReverseMappings[lineMod.catalogObjectId!];
+            const warioModifierOption = CatalogProviderInstance.Catalog.options[oId];
+            const mTId = warioModifierOption.modifierTypeId;
+            return { ...acc, [mTId]: { modifierTypeId: mTId, options: [{ optionId: oId, placement: OptionPlacement.WHOLE, qualifier: OptionQualifier.REGULAR }, ...(acc[mTId]?.options ?? [])] } };
+          }, {}))
+          // now sort it...
+          .sort((a, b) => CatalogProviderInstance.Catalog.modifiers[a.modifierTypeId].modifierType.ordinal - CatalogProviderInstance.Catalog.modifiers[b.modifierTypeId].modifierType.ordinal)
+          .map(x => ({ ...x, options: x.options.sort((a, b) => CatalogProviderInstance.Catalog.options[a.optionId].ordinal - CatalogProviderInstance.Catalog.options[b.optionId].ordinal) }))
+        // PRECONDITION: 3p products are unique to the 3p merchant and shouldn't yield a category outside of the 3p menu tree
+        const category = warioProduct.category_ids[0];
+        return {
+          categoryId: category,
+          product: {
+            pid: warioProductInstance.productId,
+            modifiers: modifiers
+          },
+          quantity: parseInt(line.quantity)
+        };
+      });
   }
   catch (err: any) {
     const errorDetail = `Got error when attempting to ingest 3p line items (${JSON.stringify(lineItems)}) got error: ${JSON.stringify(err, Object.getOwnPropertyNames(err), 2)}`;
@@ -255,15 +255,15 @@ export const CreateOrdersForPrintingFromCart = (
       locationId,
       referenceId,
       [{
-        t: DiscountMethod.CreditCodeAmount,
+        t: DiscountMethod.ManualPercentage,
         createdAt: Date.now(),
         discount: {
+          reason: 'PrintOrder',
           amount: {
             currency: CURRENCY.USD,
-            amount: cart.reduce((acc, x) => acc + (x.product.m.price.amount * x.quantity), 0)
+            amount: cart.reduce((acc, x) => acc + (x.product.m.price.amount * x.quantity), 0),
           },
-          code: "_",
-          lock: { auth: "_", enc: "_", iv: "_" }
+          percentage: 1,
         },
         status: TenderBaseStatus.AUTHORIZED
       }],
@@ -372,20 +372,42 @@ export const CreateOrderFromCart = (
       };
       return retVal;
     }),
-    discounts: [...discounts.map(discount => ({
-      type: 'VARIABLE_AMOUNT',
-      scope: 'ORDER',
-      //catalogObjectId: DISCOUNT_CATALOG_ID,
-      name: `Discount Code: ${discount.discount.code}`,
-      amountMoney: IMoneyToBigIntMoney(discount.discount.amount),
-      appliedMoney: IMoneyToBigIntMoney(discount.discount.amount),
-      metadata: {
-        enc: discount.discount.lock.enc,
-        iv: discount.discount.lock.iv,
-        auth: discount.discount.lock.auth,
-        code: discount.discount.code
+    discounts: [...discounts.map((discount): OrderLineItemDiscount => {
+      switch (discount.t) {
+        case DiscountMethod.CreditCodeAmount:
+          return {
+            type: 'VARIABLE_AMOUNT',
+            scope: 'ORDER',
+            //catalogObjectId: DISCOUNT_CATALOG_ID,
+            name: `Discount Code: ${discount.discount.code}`,
+            amountMoney: IMoneyToBigIntMoney(discount.discount.balance),
+            appliedMoney: IMoneyToBigIntMoney(discount.discount.amount),
+            metadata: {
+              enc: discount.discount.lock.enc,
+              iv: discount.discount.lock.iv,
+              auth: discount.discount.lock.auth,
+              code: discount.discount.code
+            }
+          };
+        case DiscountMethod.ManualAmount: {
+          return {
+            type: 'FIXED_AMOUNT',
+            scope: 'ORDER',
+            name: discount.discount.reason,
+            amountMoney: IMoneyToBigIntMoney(discount.discount.amount),
+            appliedMoney: IMoneyToBigIntMoney(discount.discount.amount),
+          };
+        }
+        case DiscountMethod.ManualPercentage: {
+          return {
+            type: 'FIXED_PERCENTAGE',
+            scope: 'ORDER',
+            name: discount.discount.reason,
+            percentage: (discount.discount.percentage * 100).toFixed(2),
+          };
+        }
       }
-    }))
+    })
     ],
     pricingOptions: {
       autoApplyDiscounts: true,

@@ -1,5 +1,5 @@
 import { Schema } from "mongoose";
-import { OrderPayment, PaymentMethod, TenderBaseStatus, StoreCreditPayment, CreditPayment, CashPayment } from "@wcp/wcpshared";
+import { OrderPayment, PaymentMethod, TenderBaseStatus, StoreCreditPayment, CreditPayment, CashPayment, CreditPaymentAllocated, StoreCreditPaymentAllocated, CashPaymentAllocated } from "@wcp/wcpshared";
 import { WMoney } from "../WMoney";
 import { WEncryptStringLockSchema } from "./WEncryptStringLock";
 
@@ -18,6 +18,7 @@ export const WOrderPaymentSchema = new Schema<OrderPayment>({
     enum: TenderBaseStatus,
     requred: true
   },
+  processorId: String,
   amount: {
     type: WMoney,
     required: true
@@ -35,7 +36,7 @@ export const WOrderPaymentSchema = new Schema<OrderPayment>({
 
 //export const WOrderPaymentModel = mongoose.model<OrderPayment>(path.basename(__filename).replace(path.extname(__filename), ''), WOrderPaymentSchema);
 export const WCashPaymentSchema = WOrderPaymentSchema.discriminator(PaymentMethod.Cash,
-  new Schema<CashPayment>({
+  new Schema<CashPaymentAllocated>({
     payment: {
       type: {
         amountTendered: {
@@ -46,10 +47,6 @@ export const WCashPaymentSchema = WOrderPaymentSchema.discriminator(PaymentMetho
           type: WMoney,
           required: true
         },
-        processorId: {
-          type: String,
-          required: true
-        },
       },
       _id: false,
       required: true
@@ -57,7 +54,7 @@ export const WCashPaymentSchema = WOrderPaymentSchema.discriminator(PaymentMetho
   }, { _id: false, discriminatorKey: 't', toJSON: { virtuals: true }, toObject: { virtuals: true } }));
 
 export const WStoreCreditPaymentSchema = WOrderPaymentSchema.discriminator(PaymentMethod.StoreCredit,
-  new Schema<StoreCreditPayment>({
+  new Schema<StoreCreditPaymentAllocated>({
     payment: {
       type: {
         code: {
@@ -68,10 +65,6 @@ export const WStoreCreditPaymentSchema = WOrderPaymentSchema.discriminator(Payme
           type: WEncryptStringLockSchema,
           required: true
         },
-        processorId: {
-          type: String,
-          required: true
-        },
       },
       _id: false,
       required: true
@@ -79,16 +72,12 @@ export const WStoreCreditPaymentSchema = WOrderPaymentSchema.discriminator(Payme
   }, { _id: false, discriminatorKey: 't', toJSON: { virtuals: true }, toObject: { virtuals: true } }));
 
 export const WCreditPaymentSchema = WOrderPaymentSchema.discriminator(PaymentMethod.CreditCard,
-  new Schema<CreditPayment>({
+  new Schema<CreditPaymentAllocated>({
     payment: {
       type: {
         processor: {
           type: String,
           enum: ["SQUARE"],
-          required: true
-        },
-        processorId: {
-          type: String,
           required: true
         },
         receiptUrl: {

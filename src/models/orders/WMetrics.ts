@@ -11,5 +11,6 @@ export const WMetricsSchema = new Schema<Metrics>({
     timeToServiceTime: Number,
     timeToStage: [Number],
     submitTime: Number,
-    useragent: String
+    useragent: String,
+    ipAddress: String
 }, { _id: false });

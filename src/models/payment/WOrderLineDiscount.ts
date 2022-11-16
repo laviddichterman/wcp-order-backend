@@ -1,4 +1,4 @@
-import { DiscountMethod, OrderLineDiscount, OrderLineDiscountCodeAmount, TenderBaseStatus } from "@wcp/wcpshared";
+import { DiscountMethod, OrderLineDiscount, OrderLineDiscountCodeAmount, OrderManualAmountDiscount, OrderManualPercentDiscount, TenderBaseStatus } from "@wcp/wcpshared";
 import { WMoney } from "../WMoney";
 import { Schema } from "mongoose";
 import { WEncryptStringLockSchema } from "./WEncryptStringLock";
@@ -32,6 +32,10 @@ export const WOrderLineDiscountCodeAmountSchema = WOrderLineDiscountSchema.discr
           type: WMoney,
           required: true
         },
+        balance: {
+          type: WMoney,
+          required: true
+        },
         code: {
           type: String,
           required: true
@@ -40,6 +44,50 @@ export const WOrderLineDiscountCodeAmountSchema = WOrderLineDiscountSchema.discr
           type: WEncryptStringLockSchema,
           required: true
         }
+      },
+      _id: false,
+      required: true
+    }
+  }, { _id: false, discriminatorKey: 't', toJSON: { virtuals: true }, toObject: { virtuals: true } }));
+
+export const WOrderManualPercentDiscountSchema = WOrderLineDiscountSchema.discriminator(DiscountMethod.ManualPercentage,
+  new Schema<OrderManualPercentDiscount>({
+    discount: {
+      type: {
+        reason: {
+          type: String,
+          required: true
+        },
+        percentage: {
+          type: Number,
+          required: true
+        },
+        amount: {
+          type: WMoney,
+          required: true
+        },
+      },
+      _id: false,
+      required: true
+    }
+  }, { _id: false, discriminatorKey: 't', toJSON: { virtuals: true }, toObject: { virtuals: true } }));
+
+export const WOrderManualAmountDiscountSchema = WOrderLineDiscountSchema.discriminator(DiscountMethod.ManualAmount,
+  new Schema<OrderManualAmountDiscount>({
+    discount: {
+      type: {
+        reason: {
+          type: String,
+          required: true
+        },
+        balance: {
+          type: WMoney,
+          required: true
+        },
+        amount: {
+          type: WMoney,
+          required: true
+        },
       },
       _id: false,
       required: true

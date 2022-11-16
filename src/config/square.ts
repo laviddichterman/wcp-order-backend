@@ -3,7 +3,7 @@ import { WProvider } from '../types/WProvider';
 import crypto from 'crypto';
 import logger from '../logging';
 import { DataProviderInstance } from './dataprovider';
-import { IMoney, PaymentMethod, OrderPayment, CURRENCY, TenderBaseStatus } from '@wcp/wcpshared';
+import { IMoney, PaymentMethod, CURRENCY, OrderPaymentAllocated } from '@wcp/wcpshared';
 import { parseISO } from 'date-fns';
 import { StoreCreditPayment } from '@wcp/wcpshared';
 import { BigIntMoneyToIntMoney, IMoneyToBigIntMoney, MapPaymentStatus } from './SquareWarioBridge';
@@ -297,7 +297,7 @@ export class SquareProvider implements WProvider {
     tipAmount,
     verificationToken,
     autocomplete
-  }: SquareProviderCreatePaymentRequest): Promise<SquareProviderApiCallReturnValue<OrderPayment>> => {
+  }: SquareProviderCreatePaymentRequest): Promise<SquareProviderApiCallReturnValue<OrderPaymentAllocated>> => {
     const idempotency_key = crypto.randomBytes(22).toString('hex');
     const payments_api = this.#client.paymentsApi;
     const tipMoney = tipAmount ?? { currency: CURRENCY.USD, amount: 0 };
@@ -312,12 +312,11 @@ export class SquareProvider implements WProvider {
       locationId,
       autocomplete,
       acceptPartialAuthorization: false,
-      //statementDescriptionIdentifier: `${DataProviderInstance.KeyValueConfig.STORE_NAME}`.slice(0, 19),
       verificationToken,
       idempotencyKey: idempotency_key
     };
 
-    const callFxn = async (): Promise<SquareProviderApiCallReturnValue<OrderPayment>> => {
+    const callFxn = async (): Promise<SquareProviderApiCallReturnValue<OrderPaymentAllocated>> => {
       logger.info(`sending payment request: ${JSON.stringify(request_body)}`);
       const { result, ..._ } = await payments_api.createPayment(request_body);
       if (result.payment && result.payment.status) {
@@ -329,25 +328,26 @@ export class SquareProvider implements WProvider {
           result: storeCreditPayment ? {
             ...storeCreditPayment,
             status: paymentStatus,
+            processorId,
             payment: {
               ...storeCreditPayment.payment,
-              processorId
             }
           } :
             (result.payment.sourceType === 'CASH' ? {
               t: PaymentMethod.Cash,
               createdAt,
+              processorId,
               amount: BigIntMoneyToIntMoney(result.payment.totalMoney!),
               tipAmount: tipMoney,
               status: paymentStatus,
               payment: {
-                processorId,
                 amountTendered: BigIntMoneyToIntMoney(result.payment.cashDetails!.buyerSuppliedMoney),
                 change: result.payment.cashDetails!.changeBackMoney ? BigIntMoneyToIntMoney(result.payment.cashDetails!.changeBackMoney) : { currency: amount.currency, amount: 0 },
               },
             } : {
               t: PaymentMethod.CreditCard,
               createdAt,
+              processorId,
               amount: BigIntMoneyToIntMoney(result.payment!.totalMoney!),
               tipAmount: tipMoney,
               status: paymentStatus,
@@ -358,7 +358,6 @@ export class SquareProvider implements WProvider {
                 expYear: result.payment.cardDetails?.card?.expYear?.toString(),
                 last4: result.payment.cardDetails?.card?.last4 ?? "",
                 receiptUrl: result.payment.receiptUrl ?? `https://squareup.com/receipt/preview/${result.payment.id}`,
-                processorId,
                 cardholderName: result.payment.cardDetails?.card?.cardholderName ?? undefined,
               }
             }),

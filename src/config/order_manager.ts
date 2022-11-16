@@ -1,6 +1,5 @@
 import {
   CanThisBeOrderedAtThisTimeAndFulfillment,
-  ComputeCartSubTotal,
   CategorizedRebuiltCart,
   WProduct,
   WCPProductV2Dto,
@@ -8,18 +7,10 @@ import {
   FulfillmentDto,
   DeliveryInfoDto,
   CoreCartEntry,
-  ComputeTaxAmount,
-  ComputeTipBasis,
-  ComputeTipValue,
-  ComputeTotal,
-  ComputeBalanceAfterCredits,
-  JSFECreditV2,
   CrudOrderResponse,
   WDateUtils,
   GenerateMenu,
   IMenu,
-  ComputeSubtotalPreDiscount,
-  ComputeSubtotalAfterDiscount,
   FulfillmentConfig,
   OrderPayment,
   WOrderInstancePartial,
@@ -33,12 +24,8 @@ import {
   TenderBaseStatus,
   WError,
   MoneyToDisplayString,
-  IMoney,
   DateTimeIntervalBuilder,
   ComputeMainProductCategoryCount,
-  ComputeCreditsApplied,
-  StoreCreditType,
-  StoreCreditPayment,
   WOrderStatus,
   FulfillmentTime,
   FulfillmentType,
@@ -48,7 +35,11 @@ import {
   WFulfillmentStatus,
   CustomerInfoDto,
   EventTitleStringBuilder,
-  GenerateDineInPlusString
+  GenerateDineInPlusString,
+  RecomputeTotalsResult,
+  OrderPaymentAllocated,
+  RecomputeTotals,
+  OrderPaymentProposed
 } from "@wcp/wcpshared";
 
 import { WProvider } from '../types/WProvider';
@@ -78,30 +69,6 @@ const MI_AREA_CODES = ["231", "248", "269", "313", "517", "586", "616", "734", "
 
 const BTP_AREA_CODES = IL_AREA_CODES.concat(MI_AREA_CODES);
 const WCP_AREA_CODES = IL_AREA_CODES;
-
-interface RecomputeTotalsArgs {
-  order: WOrderInstancePartial;
-  cart: CategorizedRebuiltCart;
-  creditValidations: JSFECreditV2[];
-  fulfillment: FulfillmentConfig;
-}
-
-export interface RecomputeTotalsResult {
-  mainCategoryProductCount: number;
-  cartSubtotal: IMoney;
-  serviceFee: IMoney;
-  subtotalPreDiscount: IMoney;
-  subtotalAfterDiscount: IMoney;
-  discountApplied: JSFECreditV2[];
-  taxAmount: IMoney;
-  tipBasis: IMoney;
-  tipMinimum: IMoney;
-  total: IMoney;
-  giftCartApplied: JSFECreditV2[];
-  balanceAfterCredits: IMoney;
-  tipAmount: IMoney;
-  hasBankersRoundingTaxSkew: boolean;
-}
 
 const IsNativeAreaCode = function (phone: string, area_codes: string[]) {
   const numeric_phone = phone.match(/\d/g)!.join("");
@@ -171,13 +138,17 @@ function GenerateOrderPaymentDisplay(payment: OrderPayment, isHtml: boolean) {
     case PaymentMethod.Cash:
       return `Received cash payment of ${MoneyToDisplayString(payment.amount, true)}.${lineBreak}`;
     case PaymentMethod.CreditCard:
-      return `Received payment of ${MoneyToDisplayString(payment.amount, true)} from credit card ending in ${payment.payment.last4}.
-      ${lineBreak}
-      ${payment.payment.receiptUrl ?
-          (isHtml ?
-            `<a href="${payment.payment.receiptUrl}">Receipt link</a>${lineBreak}` :
-            `Receipt: ${payment.payment.receiptUrl}${lineBreak}`) :
-          ""}`;
+      if (payment.status === TenderBaseStatus.PROPOSED) {
+        return `Received payment of ${MoneyToDisplayString(payment.amount, true)} from credit card`;
+      } else {
+        return `Received payment of ${MoneyToDisplayString(payment.amount, true)} from credit card ending in ${payment.payment.last4}.
+        ${lineBreak}
+        ${payment.payment.receiptUrl ?
+            (isHtml ?
+              `<a href="${payment.payment.receiptUrl}">Receipt link</a>${lineBreak}` :
+              `Receipt: ${payment.payment.receiptUrl}${lineBreak}`) :
+            ""}`;
+      }
     case PaymentMethod.StoreCredit:
       return `Applied store credit value ${MoneyToDisplayString(payment.amount, true)} using code ${payment.payment.code}.${lineBreak}`;
   }
@@ -186,7 +157,11 @@ function GenerateOrderPaymentDisplay(payment: OrderPayment, isHtml: boolean) {
 function GenerateOrderLineDiscountDisplay(discount: OrderLineDiscount, isHtml: boolean) {
   switch (discount.t) {
     case DiscountMethod.CreditCodeAmount:
-      return `NOTE BEFORE CLOSING OUT: Apply discount of ${MoneyToDisplayString(discount.discount.amount, true)}, pre-tax. Credit code used: ${discount.discount.code}.${isHtml ? "<br />" : "\n"}`;
+      return `Applied discount of ${MoneyToDisplayString(discount.discount.amount, true)}, pre-tax. Credit code used: ${discount.discount.code}.${isHtml ? "<br />" : "\n"}`;
+    case DiscountMethod.ManualAmount:
+      return `Applied discount of ${MoneyToDisplayString(discount.discount.amount, true)}, pre-tax.`;
+    case DiscountMethod.ManualPercentage:
+      return `Applied ${(discount.discount.percentage * 100).toFixed(2)}% discount, valuing ${MoneyToDisplayString(discount.discount.amount, true)}.`
   }
 }
 
@@ -255,47 +230,6 @@ const RebuildOrderState = function (menu: IMenu, cart: CoreCartEntry<WCPProductV
   };
 }
 
-const RecomputeTotals = function ({ cart, creditValidations, fulfillment, order }: RecomputeTotalsArgs): RecomputeTotalsResult {
-  const TAX_RATE = DataProviderInstance.Settings.config.TAX_RATE as number;
-  const AUTOGRAT_THRESHOLD = DataProviderInstance.Settings.config.AUTOGRAT_THRESHOLD as number ?? 5;
-
-  const mainCategoryProductCount = ComputeMainProductCategoryCount(fulfillment.orderBaseCategoryId, order.cart);
-  const cartSubtotal = { currency: CURRENCY.USD, amount: Object.values(cart).reduce((acc, c) => acc + ComputeCartSubTotal(c).amount, 0) };
-  const serviceFee = {
-    currency: CURRENCY.USD,
-    amount: fulfillment.serviceCharge !== null ? OrderFunctional.ProcessOrderInstanceFunction(order, CatalogProviderInstance.Catalog.orderInstanceFunctions[fulfillment.serviceCharge], CatalogProviderInstance.CatalogSelectors) as number : 0
-  };
-  const subtotalPreDiscount = ComputeSubtotalPreDiscount(cartSubtotal, serviceFee);
-  const discountApplied = ComputeCreditsApplied(subtotalPreDiscount, creditValidations.filter(x => x.validation.credit_type === StoreCreditType.DISCOUNT));
-  const amountDiscounted = { amount: discountApplied.reduce((acc, x) => acc + x.amount_used.amount, 0), currency: CURRENCY.USD };
-  const subtotalAfterDiscount = ComputeSubtotalAfterDiscount(subtotalPreDiscount, amountDiscounted);
-  const taxAmount = ComputeTaxAmount(subtotalAfterDiscount, TAX_RATE);
-  const hasBankersRoundingTaxSkew = (subtotalAfterDiscount.amount * TAX_RATE) % 1 === 0.5;
-  const tipBasis = ComputeTipBasis(subtotalPreDiscount, taxAmount);
-  const tipMinimum = mainCategoryProductCount >= AUTOGRAT_THRESHOLD ? ComputeTipValue({ isPercentage: true, isSuggestion: true, value: .2 }, tipBasis) : { currency: CURRENCY.USD, amount: 0 };
-  const tipAmount = ComputeTipValue(order.tip, tipBasis);
-  const total = ComputeTotal(subtotalAfterDiscount, taxAmount, tipAmount);
-  const giftCartApplied = ComputeCreditsApplied(total, creditValidations.filter(x => x.validation.credit_type === StoreCreditType.MONEY));
-  const amountCredited = { amount: giftCartApplied.reduce((acc, x) => acc + x.amount_used.amount, 0), currency: CURRENCY.USD };
-  const balanceAfterCredits = ComputeBalanceAfterCredits(total, amountCredited);
-  return {
-    mainCategoryProductCount,
-    cartSubtotal,
-    serviceFee,
-    subtotalPreDiscount,
-    subtotalAfterDiscount,
-    discountApplied,
-    taxAmount,
-    tipBasis,
-    tipMinimum,
-    total,
-    giftCartApplied,
-    balanceAfterCredits,
-    tipAmount,
-    hasBankersRoundingTaxSkew
-  };
-}
-
 const CreateExternalEmail = async (
   order: WOrderInstance,
   service_title: string,
@@ -305,7 +239,7 @@ const CreateExternalEmail = async (
   const ORDER_RESPONSE_PREAMBLE = DataProviderInstance.KeyValueConfig.ORDER_RESPONSE_PREAMBLE;
   const LOCATION_INFO = DataProviderInstance.KeyValueConfig.LOCATION_INFO;
   const delivery_section = order.fulfillment.deliveryInfo ? GenerateDeliverySection(order.fulfillment.deliveryInfo, true) : "";
-  const sections = [ 
+  const sections = [
     ...GenerateDisplayCartStringListFromProducts(cart),
     ...(order.specialInstructions && order.specialInstructions.length > 0 ? [`<p><strong>Special Instructions</strong>: ${order.specialInstructions} </p>`] : []),
     ...(delivery_section ? [delivery_section] : []),
@@ -403,14 +337,12 @@ async function RefundStoreCreditDebits(spends: ValidateLockAndSpendSuccess[]) {
 
 async function RefundSquarePayments(payments: OrderPayment[], reason: string) {
   return Promise.all(payments
-    .filter(x => x.status === TenderBaseStatus.COMPLETED)
-    .map(x => SquareProviderInstance.RefundPayment(x.payment.processorId, x.amount, reason)));
+    .flatMap(x => x.status === TenderBaseStatus.COMPLETED ? [SquareProviderInstance.RefundPayment(x.processorId, x.amount, reason)] : []));
 }
 
-async function CancelSquarePayments(payments: OrderPayment[]) {
+async function CancelSquarePayments(payments: OrderPaymentAllocated[]) {
   return Promise.all(payments
-    .filter(x => x.status === TenderBaseStatus.AUTHORIZED)
-    .map(x => SquareProviderInstance.CancelPayment(x.payment.processorId)));
+    .flatMap(x => x.status === TenderBaseStatus.AUTHORIZED ? [SquareProviderInstance.CancelPayment(x.processorId)] : []));
 }
 
 const GetEndOfSendingRange = (now: Date | number): Date => {
@@ -423,15 +355,6 @@ const Map3pSource = (source: string) => {
   }
   return "DD";
 }
-
-
-// WHERE WE LEFT OFF: NEED TO SAVE THE VARIOUS MESSAGE ORDERS AND THEIR PAYMENTS SO WE CAN CLOSE THOSE OUT AT THE END OF THE DAY OR TO SEND VOID ORDER MESSAGES
-/**
- * SQORDER: the main order to the main location OR the 3p order we originated from
- * SQORDER_PRINT: CSV the orders sent to ALT location to print the tickets
- * SQORDER_MSG: CSV orders sent to ALT location to print messages
- */
-
 
 export class OrderManager implements WProvider {
   constructor() {
@@ -492,16 +415,16 @@ export class OrderManager implements WProvider {
               },
               locked: null,
               metadata: [{ key: 'SQORDER', value: squareOrder.id! }],
-              payments: squareOrder.tenders?.map((x): OrderPayment => ({
+              payments: squareOrder.tenders?.map((x): OrderPaymentAllocated => ({
                 t: PaymentMethod.Cash,
                 amount: BigIntMoneyToIntMoney(x.amountMoney!),
                 createdAt: Date.now(),
                 status: TenderBaseStatus.COMPLETED,
                 tipAmount: { amount: 0, currency: CURRENCY.USD },
+                processorId: x.paymentId!,
                 payment: {
                   amountTendered: BigIntMoneyToIntMoney(x.amountMoney!),
                   change: { amount: 0, currency: CURRENCY.USD },
-                  processorId: x.paymentId!
                 }
               })) ?? [],
               refunds: [],
@@ -607,7 +530,7 @@ export class OrderManager implements WProvider {
       const eventTitle = EventTitleStringBuilder(CatalogProviderInstance.CatalogSelectors, fulfillmentConfig, customerName, lockedOrder.fulfillment, rebuiltCart, lockedOrder.specialInstructions ?? "")
 
       const SQORDER_MSG = lockedOrder.metadata.find(x => x.key === 'SQORDER_MSG')?.value?.split(',') ?? [];
-      const expoPrinters = Object.values(CatalogProviderInstance.PrinterGroups).filter(x=>x.isExpo);
+      const expoPrinters = Object.values(CatalogProviderInstance.PrinterGroups).filter(x => x.isExpo);
       if (expoPrinters.length > 0) {
         const message = [`Move to ${destination}`, ...(additionalMessage ? [additionalMessage] : [])];
         const messages = expoPrinters.map(pg => ({
@@ -699,7 +622,8 @@ export class OrderManager implements WProvider {
       }
       SQORDER_PRINT.push(...messageOrderResponses.map(x => x.id!));
 
-      const updatedOrder = { ...lockedOrder,
+      const updatedOrder = {
+        ...lockedOrder,
         ...(releaseLock ? { locked: null } : {}),
         fulfillment: { ...lockedOrder.fulfillment, status: WFulfillmentStatus.SENT },
         metadata: [
@@ -744,42 +668,34 @@ export class OrderManager implements WProvider {
 
       if (!is3pOrder) {
         // refund store credits
-        const discountCreditRefunds = lockedOrder.discounts.map(async (discount) => {
-          return StoreCreditProviderInstance.RefundStoreCredit(discount.discount.code, discount.discount.amount, 'WARIO');
-        });
+        const discountCreditRefunds = await Promise.all(lockedOrder.discounts.flatMap(async (discount) => {
+          if (discount.t === DiscountMethod.CreditCodeAmount) {
+            const refundedDiscount = await StoreCreditProviderInstance.RefundStoreCredit(discount.discount.code, discount.discount.amount, 'WARIO');
+            return [refundedDiscount];
+          }
+          return [];
+        }));
       }
-
-      // lookup Square Order for payments and version number
-      const retrieveSquareOrderResponse = await SquareProviderInstance.RetrieveOrder(squareOrderId);
-      if (!retrieveSquareOrderResponse.success) {
-        // unable to find the order
-        retrieveSquareOrderResponse.error.map(e => errors.push({ category: e.category, code: e.code, detail: e.detail ?? "" }));
-        return { status: 404, success: false, error: errors };
-      }
-
-      let orderVersion = retrieveSquareOrderResponse.result.order!.version!;
 
       // refund square payments
-      lockedOrder.payments.map(async (payment) => {
+      await Promise.all(lockedOrder.payments.map(async (payment) => {
         if (payment.t === PaymentMethod.StoreCredit) {
           // refund the credit in the store credit DB
-          StoreCreditProviderInstance.RefundStoreCredit(payment.payment.code, payment.amount, 'WARIO');
+          await StoreCreditProviderInstance.RefundStoreCredit(payment.payment.code, payment.amount, 'WARIO');
         }
         let undoPaymentResponse;
         if (lockedOrder.status === WOrderStatus.CONFIRMED) {
-          undoPaymentResponse = await SquareProviderInstance.RefundPayment(payment.payment.processorId, payment.amount, reason);
-          orderVersion += 2;
+          undoPaymentResponse = await SquareProviderInstance.RefundPayment(payment.processorId, payment.amount, reason);
         } else {
-          undoPaymentResponse = await SquareProviderInstance.CancelPayment(payment.payment.processorId);
-          orderVersion += 1;
+          undoPaymentResponse = await SquareProviderInstance.CancelPayment(payment.processorId);
         }
         if (!undoPaymentResponse.success) {
-          const errorDetail = `Failed to process payment refund for payment ID: ${payment.payment.processorId}`;
+          const errorDetail = `Failed to process payment refund for payment ID: ${payment.processorId}`;
           logger.error(errorDetail);
           undoPaymentResponse.error.map(e => errors.push({ category: e.category, code: e.code, detail: e.detail ?? "" }));
         }
         return undoPaymentResponse;
-      });
+      }));
       if (errors.length > 0) {
         // maybe this should result in some more sophisticated cleanup, but we haven't seen a failure here yet
         logger.error('Got errors when refunding payments. Sending email to the big giant head');
@@ -853,6 +769,16 @@ export class OrderManager implements WProvider {
       }
       SQORDER_MSG.push(...cancelMessageOrderResponses.map(x => x.id!));
 
+      // lookup Square Order for payments and version number
+      const retrieveSquareOrderResponse = await SquareProviderInstance.RetrieveOrder(squareOrderId);
+      if (!retrieveSquareOrderResponse.success) {
+        // unable to find the order
+        retrieveSquareOrderResponse.error.map(e => errors.push({ category: e.category, code: e.code, detail: e.detail ?? "" }));
+        return { status: 404, success: false, error: errors };
+      }
+
+      const orderVersion = retrieveSquareOrderResponse.result.order!.version!;
+      
       const squareOrder = retrieveSquareOrderResponse.result.order!;
       // cancel square fulfillment(s) and the order if it's not paid
       if (squareOrder.state === 'OPEN') {
@@ -939,7 +865,7 @@ export class OrderManager implements WProvider {
     const flatCart = Object.values(rebuiltCart).flat();
 
     // TODO: this doesn't work as it doesn't properly handle updated discounts or store credit redemptions
-    const recomputedTotals = RecomputeTotals({ cart: rebuiltCart, creditValidations: [] /*createOrderRequest.creditValidations*/, fulfillment: fulfillmentConfig, order: updatedOrder });
+    const recomputedTotals = RecomputeTotals({ cart: rebuiltCart, fulfillment: fulfillmentConfig, order: updatedOrder, payments: updatedOrder.payments, discounts: updatedOrder.discounts, config: { AUTOGRAT_THRESHOLD: DataProviderInstance.Settings.config.AUTOGRAT_THRESHOLD as number ?? 5, TAX_RATE: DataProviderInstance.Settings.config.TAX_RATE as number ?? .1025, CATALOG_SELECTORS: CatalogProviderInstance.CatalogSelectors } });
 
     // adjust calendar event
     const gCalEventId = lockedOrder.metadata.find(x => x.key === 'GCALEVENT')?.value;
@@ -1248,7 +1174,7 @@ export class OrderManager implements WProvider {
 
     const shorthandEventTitle = EventTitleStringBuilder(CatalogProviderInstance.CatalogSelectors, fulfillmentConfig, customerName, createOrderRequest.fulfillment, rebuiltCart, createOrderRequest.specialInstructions ?? "");
 
-    // 3. 'let's setup the order object reference
+    // 3. let's setup the order object reference
     const orderInstance: WOrderInstancePartial = {
       cart: createOrderRequest.cart,
       customerInfo: createOrderRequest.customerInfo,
@@ -1260,24 +1186,18 @@ export class OrderManager implements WProvider {
         selectedTime: createOrderRequest.fulfillment.selectedTime,
         status: WFulfillmentStatus.PROPOSED,
       },
-      metrics: createOrderRequest.metrics,
+      metrics: {
+        ...createOrderRequest.metrics!,
+        ipAddress
+      },
       tip: createOrderRequest.tip,
       specialInstructions: createOrderRequest.specialInstructions
     }
 
     // 3. recompute the totals to ensure everything matches up, and to get some needed computations that we don't want to pass over the wire and blindly trust
-    const recomputedTotals = RecomputeTotals({ cart: rebuiltCart, creditValidations: createOrderRequest.creditValidations, fulfillment: fulfillmentConfig, order: orderInstance });
-    if (createOrderRequest.balance.amount !== recomputedTotals.balanceAfterCredits.amount) {
-      const errorDetail = `Computed different balance of ${MoneyToDisplayString(recomputedTotals.balanceAfterCredits, true)} vs sent: ${MoneyToDisplayString(createOrderRequest.balance, true)}`;
-      logger.error(errorDetail)
-      return {
-        status: 500,
-        success: false,
-        error: [{ category: 'INVALID_REQUEST_ERROR', code: 'INSUFFICIENT_FUNDS', detail: errorDetail }]
-      };
-    }
-    if (recomputedTotals.balanceAfterCredits.amount > 0 && !createOrderRequest.nonce) {
-      const errorDetail = 'Order balance is non-zero and no payment method provided.';
+    const recomputedTotals = RecomputeTotals({ cart: rebuiltCart, payments: createOrderRequest.proposedPayments, discounts: createOrderRequest.proposedDiscounts, fulfillment: fulfillmentConfig, order: orderInstance, config: { AUTOGRAT_THRESHOLD: DataProviderInstance.Settings.config.AUTOGRAT_THRESHOLD as number ?? 5, TAX_RATE: DataProviderInstance.Settings.config.TAX_RATE as number ?? .1025, CATALOG_SELECTORS: CatalogProviderInstance.CatalogSelectors } });
+    if (recomputedTotals.balanceAfterPayments.amount > 0) {
+      const errorDetail = `Proposed payments yield balance of ${MoneyToDisplayString(recomputedTotals.balanceAfterPayments, true)}.`;
       logger.error(errorDetail)
       return {
         status: 500,
@@ -1311,210 +1231,156 @@ export class OrderManager implements WProvider {
       };
     }
 
-    // 5. enter payment subsection
-    let tipAmountRemaining = recomputedTotals.tipAmount.amount;
-    const discounts: OrderLineDiscount[] = [];
-    const moneyCreditPayments: StoreCreditPayment[] = [];
-
-    // Payment part A: attempt to process store credits, keep track of old store credit balance in case of failure
-    const storeCreditResponses: ValidateLockAndSpendSuccess[] = [];
-    let creditProcessingFailed = false;
-    try {
-      await Promise.all(createOrderRequest.creditValidations.map(async (creditUse) => {
-        // NOTE: we assume validation of the amount_used field in the RecomputeTotals method
-        if (creditUse.amount_used.amount > 0) {
-          const response = await StoreCreditProviderInstance.ValidateLockAndSpend({ code: creditUse.code, amount: creditUse.amount_used, lock: creditUse.validation.lock, updatedBy: STORE_NAME })
-          if (response.success) {
-            storeCreditResponses.push(response);
-            switch (creditUse.validation.credit_type) {
-              case 'DISCOUNT':
-                discounts.push({
-                  status: TenderBaseStatus.COMPLETED,
-                  t: DiscountMethod.CreditCodeAmount,
-                  createdAt: Date.now(),
-                  discount: {
-                    amount: creditUse.amount_used,
-                    code: creditUse.code,
-                    lock: creditUse.validation.lock
-                  }
-                });
-                break;
-              case 'MONEY':
-                const tipAmountToApply = Math.min(tipAmountRemaining, creditUse.amount_used.amount);
-                tipAmountRemaining -= tipAmountToApply;
-                moneyCreditPayments.push({
-                  tipAmount: { currency: recomputedTotals.tipAmount.currency, amount: tipAmountToApply },
-                  status: TenderBaseStatus.COMPLETED,
-                  t: PaymentMethod.StoreCredit,
-                  createdAt: Date.now(),
-                  amount: creditUse.amount_used,
-                  payment: {
-                    processorId: "", // empty until we run it past square
-                    code: creditUse.code,
-                    lock: creditUse.validation.lock
-                  }
-                });
-                break;
-            }
-            return;
-          }
-        }
-        throw `Failed processing ${JSON.stringify(creditUse)}`;
-      }));
-    } catch (err) {
-      creditProcessingFailed = true;
-    }
-
-    if (creditProcessingFailed) {
-      // unwind storeCreditResponses
-      await RefundStoreCreditDebits(storeCreditResponses);
-      logger.error("Failed to process store credit step of ordering");
-      return { status: 404, success: false, error: [{ category: 'INVALID_REQUEST_ERROR', code: 'INSUFFICIENT_FUNDS', detail: "Unable to debit store credit." }] };
-    }
-
-    const orderInstanceBeforeCharging: Omit<WOrderInstance, 'id' | 'metadata' | 'status' | 'locked'> = {
-      ...orderInstance,
-      taxes: [{ amount: recomputedTotals.taxAmount }],
-      refunds: [],
-      payments: moneyCreditPayments.slice(),
-      discounts: discounts.slice()
-    };
-
-    // Payment Part B: we've processed any credits, make an order
+    // 5. Everything checks out, start making service calls (payment and order related)
     let errors: WError[] = [];
     let squareOrder: SquareOrder | null = null;
     let squareOrderVersion = 0;
-    const squarePayments: OrderPayment[] = [];
+    const discounts: OrderLineDiscount[] = []
+    const sentPayments: OrderPaymentAllocated[] = [];
+    const storeCreditResponses: ValidateLockAndSpendSuccess[] = [];
     try {
+      // Payment part A: attempt to process discounts
+      await Promise.all(recomputedTotals.discountApplied.map(async (proposedDiscount) => {
+        // unsure if we want to validate the credit even if for some reason the amount allocated is 0
+        if (proposedDiscount.t === DiscountMethod.CreditCodeAmount /* && proposedDiscount.discount.amount.amount > 0 */) {
+          const response = await StoreCreditProviderInstance.ValidateLockAndSpend({ code: proposedDiscount.discount.code, amount: proposedDiscount.discount.amount, lock: proposedDiscount.discount.lock, updatedBy: STORE_NAME })
+          if (!response.success) {
+            errors.push({ category: 'INVALID_REQUEST_ERROR', code: 'INSUFFICIENT_FUNDS', detail: "Unable to debit store credit." });
+            throw errors;
+          }
+          storeCreditResponses.push(response);
+        }
+        discounts.push({
+          ...proposedDiscount,
+          // perhaps status should be APPROVED until the order is actually closed out
+          status: TenderBaseStatus.COMPLETED,
+        });
+      }));
+
+      // Payment Part B: make an order
       const squareOrderResponse = await SquareProviderInstance.CreateOrder(
         CreateOrderFromCart(
           DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
           referenceId,
-          orderInstanceBeforeCharging.discounts, orderInstanceBeforeCharging.taxes,
+          discounts,
+          [{ amount: recomputedTotals.taxAmount }],
           Object.values(rebuiltCart).flat(),
           recomputedTotals.hasBankersRoundingTaxSkew,
           shorthandEventTitle,
           null
         ));
-      if (squareOrderResponse.success === true) {
-        squareOrder = squareOrderResponse.result.order!;
-        const squareOrderId = squareOrder!.id!;
-        squareOrderVersion = squareOrder!.version!;
-        logger.info(`For internal id ${referenceId} created Square Order ID: ${squareOrderId}`);
-        // Payment Part C: create payments
-        //  substep i: close out the order via credit card payment or if no money credit payments either, a 0 cash money payment, 
-        if (recomputedTotals.balanceAfterCredits.amount > 0 || moneyCreditPayments.length === 0) {
-          const squarePaymentResponse = await SquareProviderInstance.CreatePayment({
-            locationId: DataProviderInstance.KeyValueConfig.SQUARE_LOCATION, // TODO: is this the right location?
-            sourceId: recomputedTotals.balanceAfterCredits.amount > 0 ? createOrderRequest.nonce! : 'CASH',
-            amount: recomputedTotals.balanceAfterCredits,
-            tipAmount: { currency: recomputedTotals.tipAmount.currency, amount: tipAmountRemaining },
-            referenceId: referenceId,
-            squareOrderId,
-            autocomplete: false
-          });
-          squareOrderVersion += 1;
-          if (squarePaymentResponse.success === true) {
-            logger.info(`For internal id ${referenceId} and Square Order ID: ${squareOrderId} payment for ${MoneyToDisplayString(squarePaymentResponse.result.amount, true)} successful.`)
-            squarePayments.push(squarePaymentResponse.result);
-          } else {
-            const errorDetail = `Failed to process payment: ${JSON.stringify(squarePaymentResponse)}`;
-            logger.error(errorDetail);
-            squarePaymentResponse.error.forEach(e => errors.push({ category: e.category, code: e.code, detail: e.detail ?? "" }))
-            // throw for flow control
-            throw errorDetail;
+      if (!squareOrderResponse.success) {
+        logger.error(`Failed to create order: ${JSON.stringify(squareOrderResponse.error)}`);
+        squareOrderResponse.error.map(e => errors.push({ category: e.category, code: e.code, detail: e.detail ?? "" }))
+        throw errors;
+      }
+
+      squareOrder = squareOrderResponse.result.order!;
+      squareOrderVersion = squareOrder!.version!;
+      logger.info(`For internal id ${referenceId} created Square Order ID: ${squareOrder.id!}`);
+
+      // Payment Part C: process payments with payment processor IN ORDER
+      // because it needs to be in order, we can't use Promise.all or map
+      for (let pIndex = 0; pIndex < recomputedTotals.paymentsApplied.length; ++pIndex) {
+        const payment = recomputedTotals.paymentsApplied[pIndex] as OrderPaymentProposed;
+        switch (payment.t) {
+          case PaymentMethod.CreditCard: {
+            const squarePaymentResponse = await SquareProviderInstance.CreatePayment({
+              locationId: DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
+              sourceId: payment.payment.sourceId,
+              amount: payment.amount,
+              tipAmount: payment.tipAmount,
+              referenceId: referenceId,
+              squareOrderId: squareOrder!.id!,
+              autocomplete: false
+            });
+            if (squarePaymentResponse.success !== true) {
+              const errorDetail = `Failed to process payment: ${JSON.stringify(squarePaymentResponse)}`;
+              logger.error(errorDetail);
+              squarePaymentResponse.error.forEach(e => (errors.push({ category: e.category, code: e.code, detail: e.detail ?? "" })));
+              throw errors;
+            }
+            squareOrderVersion += 1;
+            logger.info(`For internal id ${referenceId} and Square Order ID: ${squareOrder!.id!} payment for ${MoneyToDisplayString(squarePaymentResponse.result.amount, true)} successful.`)
+            sentPayments.push(squarePaymentResponse.result);
+            break;
           }
-        }
-        // Payment Part C, substep ii: process money store credit payments
-        await Promise.all(moneyCreditPayments.map(async (payment) => {
-          try {
+          case PaymentMethod.StoreCredit: {
+            const response = await StoreCreditProviderInstance.ValidateLockAndSpend({ code: payment.payment.code, amount: payment.amount, lock: payment.payment.lock, updatedBy: STORE_NAME })
+            if (!response.success) {
+              errors.push({ category: 'INVALID_REQUEST_ERROR', code: 'INSUFFICIENT_FUNDS', detail: "Unable to debit store credit." });
+              throw errors;
+            }
+            storeCreditResponses.push(response);
             const squareMoneyCreditPaymentResponse = await SquareProviderInstance.CreatePayment({
-              locationId: DataProviderInstance.KeyValueConfig.SQUARE_LOCATION, // IS THIS THE RIGHT LOCATION?
+              locationId: DataProviderInstance.KeyValueConfig.SQUARE_LOCATION,
               sourceId: "EXTERNAL",
               storeCreditPayment: payment,
               amount: payment.amount,
               tipAmount: payment.tipAmount,
               referenceId: payment.payment.code,
-              squareOrderId,
+              squareOrderId: squareOrder!.id!,
               autocomplete: false
             });
-            squareOrderVersion += 1;
-            if (squareMoneyCreditPaymentResponse.success === true) {
-              logger.info(`For internal id ${referenceId} and Square Order ID: ${squareOrderId} payment for ${MoneyToDisplayString(squareMoneyCreditPaymentResponse.result.amount, true)} successful.`)
-              //this next line duplicates the store credit payments, since we already have them independently processed
-              squarePayments.push(squareMoneyCreditPaymentResponse.result);
-            } else {
+            if (squareMoneyCreditPaymentResponse.success !== true) {
               const errorDetail = `Failed to process payment: ${JSON.stringify(squareMoneyCreditPaymentResponse)}`;
               logger.error(errorDetail);
               squareMoneyCreditPaymentResponse.error.forEach(e => (errors.push({ category: e.category, code: e.code, detail: e.detail ?? "" })));
+              throw errors;
             }
+            squareOrderVersion += 1;
+            logger.info(`For internal id ${referenceId} and Square Order ID: ${squareOrder!.id!} payment for ${MoneyToDisplayString(squareMoneyCreditPaymentResponse.result.amount, true)} successful.`)
+            sentPayments.push(squareMoneyCreditPaymentResponse.result);
+            break;
           }
-          catch (err: any) {
-            logger.error(`got error in processing money store credit of ${JSON.stringify(payment)} and error: ${JSON.stringify(err)}`);
-            throw err;
-          }
-        }));
-
-        // THE GOAL YALL
-        const completedOrderInstance: Omit<WOrderInstance, 'id' | 'metadata'> = {
-          ...orderInstanceBeforeCharging,
-          payments: squarePayments.slice(),
-          discounts: discounts.slice(),
-          status: WOrderStatus.OPEN,
-          locked: null
-        };
-
-        // 6. create calendar event
-        try {
-          return await GoogleProviderInstance.CreateCalendarEvent(GenerateOrderEventJson(
-            shorthandEventTitle,
-            completedOrderInstance,
-            rebuiltCart,
-            dateTimeInterval,
-            recomputedTotals))
-            .then(async (orderEvent) => {
-              return await new WOrderInstanceModel({
-                ...completedOrderInstance,
-                metadata: [
-                  { key: 'SQORDER', value: squareOrderId },
-                  { key: 'GCALEVENT', value: orderEvent.data.id }]
-              })
-                .save()
-                .then(async (dbOrderInstance): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
-                  logger.info(`Successfully saved OrderInstance to database: ${JSON.stringify(dbOrderInstance.toJSON())}`)
-                  // TODO, need to actually test the failure of these service calls and some sort of retrying
-                  // for example, the event not created error happens, and it doesn't fail the service call. it should
-
-                  // send email to customer
-                  const createExternalEmailInfo = CreateExternalEmail(
-                    dbOrderInstance,
-                    service_title,
-                    rebuiltCart);
-
-                  SocketIoProviderInstance.EmitOrder(dbOrderInstance.toObject());
-
-                  return { status: 200, success: true, result: dbOrderInstance.toObject() };
-                })
-                .catch(async (error: any) => {
-                  logger.error(`Caught error while saving order to database: ${JSON.stringify(error)}`);
-                  errors.push({ category: "INTERNAL_SERVER_ERROR", code: "INTERNAL_SERVER_ERROR", detail: "Unable to save order to database" });
-                  throw error;
-                });
-            }).catch(async (error: any) => {
-              logger.error(`Caught error while saving calendary entry: ${JSON.stringify(error)}`);
-              errors.push({ category: "INTERNAL_SERVER_ERROR", code: "INTERNAL_SERVER_ERROR", detail: "Unable to create order entry" });
-              throw error;
-            });
-        } catch (err) {
-          logger.error(JSON.stringify(err));
-          // pass, failed in creating the event?
         }
-      } else {
-        logger.error(`Failed to create order: ${JSON.stringify(squareOrderResponse.error)}`);
-        squareOrderResponse.error.map(e => errors.push({ category: e.category, code: e.code, detail: e.detail ?? "" }))
+      }
+
+      // THE GOAL YALL
+      const completedOrderInstance: Omit<WOrderInstance, 'id' | 'metadata'> = {
+        ...orderInstance,
+        payments: sentPayments.slice(),
+        discounts: discounts.slice(),
+        refunds: [],
+        taxes: [{ amount: recomputedTotals.taxAmount }],
+        status: WOrderStatus.OPEN,
+        locked: null
+      };
+      // 6. create calendar event
+      try {
+        const calendarEvent = await GoogleProviderInstance.CreateCalendarEvent(GenerateOrderEventJson(
+          shorthandEventTitle,
+          completedOrderInstance,
+          rebuiltCart,
+          dateTimeInterval,
+          recomputedTotals));
+
+        const savedOrder = (await new WOrderInstanceModel({
+          ...completedOrderInstance,
+          metadata: [
+            { key: 'SQORDER', value: squareOrder!.id! },
+            { key: 'GCALEVENT', value: calendarEvent.data.id }]
+        }).save()).toObject();
+        logger.info(`Successfully saved OrderInstance to database: ${JSON.stringify(savedOrder)}`)
+
+        // send email to customer
+        const createExternalEmailInfo = CreateExternalEmail(
+          savedOrder,
+          service_title,
+          rebuiltCart);
+
+        SocketIoProviderInstance.EmitOrder(savedOrder);
+        
+        // success!
+        return { status: 200, success: true, result: savedOrder };
+
+      } catch (error: any) {
+        const errorDetail = `Caught error while saving calendary entry: ${JSON.stringify(error)}`;
+        logger.error(errorDetail);
+        errors.push({ category: "INTERNAL_SERVER_ERROR", code: "INTERNAL_SERVER_ERROR", detail: errorDetail });
+        throw errors;
       }
     } catch (err: any) {
-      logger.error(JSON.stringify(err));
       // pass
     }
 
@@ -1527,9 +1393,9 @@ export class OrderManager implements WProvider {
           squareOrderVersion,
           "CANCELED");
       }
-      RefundSquarePayments(squarePayments, 'Refunding failed order');
-      CancelSquarePayments(squarePayments);
-      RefundStoreCreditDebits(storeCreditResponses);
+      await RefundSquarePayments(sentPayments, 'Refunding failed order');
+      await CancelSquarePayments(sentPayments);
+      await RefundStoreCreditDebits(storeCreditResponses);
     }
     catch (err: any) {
       logger.error(`Got error when unwinding the order after failure: ${JSON.stringify(err)}`);
@@ -1555,8 +1421,6 @@ export class OrderManager implements WProvider {
     }
     logger.info("Order Manager Bootstrap completed.");
   };
-
-
 }
 
 export const OrderManagerInstance = new OrderManager();

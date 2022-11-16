@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { body, param, header, query } from 'express-validator';
-import { CreateOrderRequestV2, CURRENCY, FulfillmentTime, WFulfillmentStatus, WOrderStatus } from '@wcp/wcpshared';
+import { CreateOrderRequestV2, CURRENCY, DiscountMethod, FulfillmentTime, PaymentMethod, TenderBaseStatus, WFulfillmentStatus, WOrderStatus } from '@wcp/wcpshared';
 import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
 import { DataProviderInstance } from '../config/dataprovider';
 import { OrderManagerInstance } from '../config/order_manager';
@@ -23,14 +23,25 @@ const CreateOrderValidationChain = [
   body('customerInfo.mobileNum').trim().escape().exists(),
   body('customerInfo.email').isEmail().exists(),
   body('customerInfo.referral').trim().escape(),
-  body('creditValidations').isArray(),
+  body('proposedDiscounts').isArray(),
+  body('proposedDiscounts.*.t').exists().equals(DiscountMethod.CreditCodeAmount),
+  body('proposedDiscounts.*.status').exists().equals(TenderBaseStatus.AUTHORIZED),
+  body('proposedDiscounts.*.discount.amount.amount').exists().isInt({min: 0}),
+  body('proposedDiscounts.*.discount.amount.currency').exists().isIn(Object.values(CURRENCY)),
+  body('proposedDiscounts.*.discount.balance.amount').isInt({min: 0}).exists(),
+  body('proposedDiscounts.*.discount.balance.currency').exists().isIn(Object.values(CURRENCY)),
+  body('proposedDiscounts.*.discount.code').exists().isString().isLength({min: 19, max: 19}),
+  body('proposedDiscounts.*.discount.lock.enc').exists().isString(),
+  body('proposedDiscounts.*.discount.lock.iv').exists().isString(),
+  body('proposedDiscounts.*.discount.lock.auth').exists().isString(),
+  body('proposedPayments').isArray(),
+  body('proposedPayments.*.t').exists().isIn([PaymentMethod.CreditCard, PaymentMethod.StoreCredit]),
+  body('proposedPayments.*.status').exists().equals(TenderBaseStatus.PROPOSED),
   body('cart.*.categoryId').exists().isMongoId(),
   body('cart.*.quantity').exists().isInt({ min: 1 }),
   body('cart.*.product').exists(),
   body('tip.isSuggestion').exists().toBoolean(true),
   body('tip.isPercentage').exists().toBoolean(true),
-  body('balance.amount').isInt({min: 0}).exists(),
-  body('balance.currency').exists().isIn(Object.values(CURRENCY)),
   body('specialInstructions').optional({nullable: true}).trim()
 ];
 
@@ -93,14 +104,13 @@ export class OrderController implements IExpressController {
     try {
       const reqBody: CreateOrderRequestV2 = {
         cart: req.body.cart,
-        creditValidations: req.body.creditValidations,
+        proposedDiscounts: req.body.proposedDiscounts,
+        proposedPayments: req.body.proposedPayments,
         customerInfo: req.body.customerInfo,
         fulfillment: req.body.fulfillment,
         metrics: req.body.metrics,
         specialInstructions: req.body.specialInstructions,
-        tip: req.body.tip,
-        balance: req.body.balance,
-        nonce: req.body.nonce
+        tip: req.body.tip
       };
       const ipAddress = (req.headers['x-real-ip'] as string) ?? (req.headers['x-forwarded-for'] as string) ?? req.socket.remoteAddress ?? "";
       const response = await OrderManagerInstance.CreateOrder(reqBody, ipAddress);

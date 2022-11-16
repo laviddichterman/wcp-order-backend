@@ -7,6 +7,7 @@ import { WOptionModel as WOptionModelActual } from '../models/catalog/options/WO
 import { WOptionTypeModel as WOptionTypeModelActual } from '../models/catalog/options/WOptionTypeSchema';
 import mongoose, { Schema } from "mongoose";
 import { WOrderInstanceModel } from '../models/orders/WOrderInstance';
+import { WMoney } from '../models/WMoney';
 import { parseISO } from 'date-fns';
 import { CatalogProviderInstance } from './catalog_provider';
 import { WARIO_SQUARE_ID_METADATA_KEY } from './SquareWarioBridge';
@@ -176,6 +177,65 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
     }
   }],
   "0.5.59": [{ major: 0, minor: 5, patch: 60 }, async () => {
+    // add balance to OrderLineDiscountCodeAmount.discount
+    // move OrderPaymentAllocated.payment.processorId to OrderPaymentAllocated.processorId
+    const discountSchema = new Schema({
+      discount: {
+        type: {
+          amount: {
+            type: WMoney,
+            required: true
+          },
+          balance: {
+            type: WMoney,
+            required: true
+          },
+        },
+        required: true
+      }
+    });
+    const paymentSchema = new Schema({
+      processorId: String,
+      payment: {
+        type: {
+          processorId: String
+        },
+        required: true
+      }
+    })
+    const WOrderInstanceSchema = mongoose.model('wOrderinstancE', new Schema({
+      discounts: {
+        type: [discountSchema],
+        required: true
+      },
+      payments: {
+        type: [paymentSchema],
+        required: true
+      },
+    }, { id: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }));
+    const allOrders = await WOrderInstanceSchema.find();
+    const updatedOrders = await Promise.all(allOrders.map(async (o) => {
+      o.discounts.forEach(d => {
+        d.discount.balance = d.discount.amount;
+      });
+      o.payments.forEach(p => {
+        p.processorId = p.payment.processorId;
+      })
+      return await o.save()
+        .then(doc => {
+          logger.info(`Updated WOrderInstance (${doc.id}) with new schema`);
+          return doc;
+        })
+        .catch(err => {
+          logger.error(`Failed to update WOrderInstance got error: ${JSON.stringify(err)}`);
+          return Promise.reject(err);
+        })
+    }));
+
+
+
+  }],
+  "0.5.60": [{ major: 0, minor: 5, patch: 61 }, async () => {
   }],
 }
 
