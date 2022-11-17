@@ -498,7 +498,7 @@ export class SquareProvider implements WProvider {
     let remainingObjects = objectBatches.slice();
     const responses: SquareProviderApiCallReturnSuccess<BatchUpsertCatalogObjectsResponse>[] = []
     do {
-      const leftovers = remainingObjects.splice(Math.floor(this.#catalogLimits.batchUpsertMaxTotalObjects / SQUARE_BATCH_CHUNK_SIZE));
+      const leftovers = remainingObjects.splice(Math.floor(this.#catalogLimits.batchUpsertMaxTotalObjects! / SQUARE_BATCH_CHUNK_SIZE));
       const idempotency_key = crypto.randomBytes(22).toString('hex');
       const request_body: BatchUpsertCatalogObjectsRequest = {
         idempotencyKey: idempotency_key,
@@ -534,7 +534,7 @@ export class SquareProvider implements WProvider {
     let remainingObjects = objectIds.slice();
     const responses: SquareProviderApiCallReturnSuccess<BatchDeleteCatalogObjectsResponse>[] = []
     do {
-      const leftovers = remainingObjects.splice(this.#catalogLimits.batchDeleteMaxObjectIds);
+      const leftovers = remainingObjects.splice(this.#catalogLimits.batchDeleteMaxObjectIds!);
       const request_body: BatchDeleteCatalogObjectsRequest = {
         objectIds: remainingObjects
       };
@@ -570,7 +570,7 @@ export class SquareProvider implements WProvider {
     const responses: SquareProviderApiCallReturnSuccess<BatchRetrieveCatalogObjectsResponse>[] = []
 
     do {
-      const leftovers = remainingObjects.splice(this.#catalogLimits.batchRetrieveMaxObjectIds);
+      const leftovers = remainingObjects.splice(this.#catalogLimits.batchRetrieveMaxObjectIds!);
       const request_body: BatchRetrieveCatalogObjectsRequest = {
         objectIds: remainingObjects,
         includeRelatedObjects: includeRelated
