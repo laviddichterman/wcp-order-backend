@@ -231,11 +231,23 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
           return Promise.reject(err);
         })
     }));
-
-
-
   }],
   "0.5.60": [{ major: 0, minor: 5, patch: 61 }, async () => {
+    // set displayFlags.hideFromPos to false for all WProductInstance
+    const WProductInstanceSchema = mongoose.model('WPrODUctInstanceSchema', new Schema({
+      displayFlags: {
+        hideFromPos: Boolean,
+      }
+    }));
+    const updateResponse = await WProductInstanceSchema.updateMany({}, {
+      $set: { 'displayFlags.hideFromPos': false }
+    }).exec();
+    if (updateResponse.modifiedCount > 0) {
+      logger.debug(`Updated ${updateResponse.modifiedCount} WProductInstanceSchema with disabled hideFromPos.`);
+    }
+    else {
+      logger.warn("No WProductInstanceSchema had hideFromPos set");
+    }
   }],
 }
 

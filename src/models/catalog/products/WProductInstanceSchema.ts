@@ -43,6 +43,8 @@ export const WProductInstanceSchema = new Schema<MT>({
   },
 
   displayFlags: {
+    hideFromPos: Boolean,
+    
     menu: {
       // ordering within this product instance's category in menu page
       ordinal: Number,

@@ -1,6 +1,6 @@
 {
   "name": "@wcp/wcp-order-backend",
-  "version": "0.5.60",
+  "version": "0.5.61",
   "main": "dist/src/server.js",
   "files": [
     "dist",
@@ -32,7 +32,7 @@
     "@thream/socketio-jwt": "^3.0.1",
     "@turf/invariant": "^6.5.0",
     "@turf/turf": "^6.5.0",
-    "@wcp/wcpshared": "^4.1.60",
+    "@wcp/wcpshared": "^4.1.61",
     "bluebird": "^3.7.2",
     "body-parser": "^1.20.1",
     "class-transformer": "^0.5.1",

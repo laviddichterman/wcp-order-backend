@@ -1138,26 +1138,29 @@ export class CatalogProvider implements WProvider {
   CreateProductInstance = async (instance: Omit<IProductInstance, 'id'>) => {
     // we need to filter these external IDs because it'll interfere with adding the new product to the catalog
     const filteredExternalIds = GetNonSquareExternalIds(instance.externalIDs);
-    const adjustedInstance: Omit<IProductInstance, 'id'> = { ...instance, externalIDs: filteredExternalIds };
+    let adjustedInstance: Omit<IProductInstance, 'id'> = { ...instance, externalIDs: filteredExternalIds };
 
-    // add the product instance to the square catalog here
-    const product = this.#catalog.products[adjustedInstance.productId]!.product;
-    const upsertResponse = await SquareProviderInstance.UpsertCatalogObject(ProductInstanceToSquareCatalogObject(
-      LocationsConsidering3pFlag(product.displayFlags.is3p),
-      product,
-      adjustedInstance,
-      product.printerGroup ? this.#printerGroups[product.printerGroup] : null,
-      this.CatalogSelectors,
-      [],
-      ""));
-    if (!upsertResponse.success) {
-      logger.error(`failed to add square product, got errors: ${JSON.stringify(upsertResponse.error)}`);
-      return null;
+    if (instance.displayFlags.hideFromPos !== true) {
+      // add the product instance to the square catalog here
+      const product = this.#catalog.products[adjustedInstance.productId]!.product;
+      const upsertResponse = await SquareProviderInstance.UpsertCatalogObject(ProductInstanceToSquareCatalogObject(
+        LocationsConsidering3pFlag(product.displayFlags.is3p),
+        product,
+        adjustedInstance,
+        product.printerGroup ? this.#printerGroups[product.printerGroup] : null,
+        this.CatalogSelectors,
+        [],
+        ""));
+      if (!upsertResponse.success) {
+        logger.error(`failed to add square product, got errors: ${JSON.stringify(upsertResponse.error)}`);
+        return null;
+      }
+      adjustedInstance = {
+        ...adjustedInstance,
+        externalIDs: [...adjustedInstance.externalIDs, ...IdMappingsToExternalIds(upsertResponse.result.idMappings, "")]
+      };
     }
-    const doc = new WProductInstanceModel({
-      ...adjustedInstance,
-      externalIDs: [...adjustedInstance.externalIDs, ...IdMappingsToExternalIds(upsertResponse.result.idMappings, "")]
-    });
+    const doc = new WProductInstanceModel(adjustedInstance);
     await doc.save();
     await this.SyncProductInstances();
     this.RecomputeCatalogAndEmit();
@@ -1180,20 +1183,24 @@ export class CatalogProvider implements WProvider {
       existingSquareObjects = batchRetrieveCatalogObjectsResponse.result.objects ?? [];
     }
 
-    const catalogObjects = batches.map((b, i) =>
-      ProductInstanceToSquareCatalogObject(
+    const mappings: CatalogIdMapping[] = [];
+    const catalogObjects = batches.map((b, i) => {
+      const mergedInstance = { ...oldProductInstances[i], ...b.productInstance };
+      return mergedInstance.displayFlags.hideFromPos === true ? [] : [ProductInstanceToSquareCatalogObject(
         LocationsConsidering3pFlag(b.product.displayFlags.is3p),
         b.product,
-        { ...oldProductInstances[i], ...b.productInstance },
+        mergedInstance,
         b.product.printerGroup ? this.#printerGroups[b.product.printerGroup] : null,
-        this.CatalogSelectors, existingSquareObjects, ('000' + i).slice(-3)));
-    const upsertResponse = await SquareProviderInstance.BatchUpsertCatalogObjects(chunk(catalogObjects, SQUARE_BATCH_CHUNK_SIZE).map(x => ({ objects: x })));
-    if (!upsertResponse.success) {
-      logger.error(`Failed to update square product, got errors: ${JSON.stringify(upsertResponse.error)}`);
-      return batches.map(_ => null);
+        this.CatalogSelectors, existingSquareObjects, ('000' + i).slice(-3))];
+      }).flat();
+    if (catalogObjects.length > 0) {
+      const upsertResponse = await SquareProviderInstance.BatchUpsertCatalogObjects(chunk(catalogObjects, SQUARE_BATCH_CHUNK_SIZE).map(x => ({ objects: x })));
+      if (!upsertResponse.success) {
+        logger.error(`Failed to update square product, got errors: ${JSON.stringify(upsertResponse.error)}`);
+        return batches.map(_ => null);
+      }
+      mappings.push(...(upsertResponse.result.idMappings ?? []))
     }
-    const mappings = (upsertResponse.result.idMappings ?? []);
-
 
     const updated = await Promise.all(batches.map(async (b, i) => {
       const doc = await WProductInstanceModel

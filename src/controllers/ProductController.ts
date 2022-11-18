@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { body, param } from 'express-validator';
-import { CURRENCY, IProduct, OptionPlacement, OptionQualifier, PriceDisplay } from '@wcp/wcpshared';
+import { CURRENCY, IProduct, IProductDisplayFlags, OptionPlacement, OptionQualifier, PriceDisplay } from '@wcp/wcpshared';
 import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
 import logger from '../logging';
 
@@ -24,6 +24,7 @@ const ProductInstanceValidationChain = (prefix: string) => [
   body(`${prefix}externalIDs`).isArray(),
   body(`${prefix}externalIDs.*.key`).exists(),
   body(`${prefix}externalIDs.*.value`).exists(),
+  body(`${prefix}displayFlags.hideFromPos`).toBoolean(true),
   body(`${prefix}displayFlags.menu.ordinal`).exists().isInt({ min: 0 }),
   body(`${prefix}displayFlags.menu.hide`).toBoolean(true),
   body(`${prefix}displayFlags.menu.price_display`).exists().isIn(Object.keys(PriceDisplay)),
@@ -180,6 +181,25 @@ export class ProductController implements IExpressController {
 
   private postProductInstance = async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const displayFlags = { 
+        hideFromPos: req.body.displayFlags.hideFromPos,
+        menu: {
+          adornment: req.body.displayFlags.menu.adornment,
+          hide: req.body.displayFlags.menu.hide,
+          ordinal: req.body.displayFlags.menu.ordinal,
+          price_display: req.body.displayFlags.menu.price_display,
+          show_modifier_options: req.body.displayFlags.menu.show_modifier_options,
+          suppress_exhaustive_modifier_list: req.body.displayFlags.menu.suppress_exhaustive_modifier_list,
+        },
+        order: {
+          adornment: req.body.displayFlags.order.adornment,
+          hide: req.body.displayFlags.order.hide,
+          ordinal: req.body.displayFlags.order.ordinal,
+          price_display: req.body.displayFlags.order.price_display,
+          skip_customization: req.body.displayFlags.order.skip_customization,
+          suppress_exhaustive_modifier_list: req.body.displayFlags.order.suppress_exhaustive_modifier_list,
+        }
+      } satisfies IProductDisplayFlags
       const doc = await CatalogProviderInstance.CreateProductInstance({
         productId: req.params.pid,
         description: req.body.description,
@@ -188,7 +208,7 @@ export class ProductController implements IExpressController {
         ordinal: req.body.ordinal,
         externalIDs: req.body.externalIDs ?? [],
         modifiers: req.body.modifiers,
-        displayFlags: req.body.displayFlags
+        displayFlags
       });
       if (!doc) {
         logger.info(`Unable to find parent product id: ${req.params.pid} to create new product instance`);
