@@ -249,6 +249,8 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
       logger.warn("No WProductInstanceSchema had hideFromPos set");
     }
   }],
+  "0.5.61": [{ major: 0, minor: 5, patch: 62 }, async () => {
+  }],
 }
 
 export class DatabaseManager implements WProvider {
