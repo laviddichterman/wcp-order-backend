@@ -1330,13 +1330,13 @@ export class OrderManager implements WProvider {
               squareOrderId: squareOrder!.id!,
               autocomplete: false
             });
+            squareOrderVersion += 1;
             if (squarePaymentResponse.success !== true) {
               const errorDetail = `Failed to process payment: ${JSON.stringify(squarePaymentResponse)}`;
               logger.error(errorDetail);
               squarePaymentResponse.error.forEach(e => (errors.push({ category: e.category, code: e.code, detail: e.detail ?? "" })));
               throw errors;
             }
-            squareOrderVersion += 1;
             logger.info(`For internal id ${referenceId} and Square Order ID: ${squareOrder!.id!} payment for ${MoneyToDisplayString(squarePaymentResponse.result.amount, true)} successful.`)
             sentPayments.push(squarePaymentResponse.result);
             break;
@@ -1358,13 +1358,13 @@ export class OrderManager implements WProvider {
               squareOrderId: squareOrder!.id!,
               autocomplete: false
             });
+            squareOrderVersion += 1;
             if (squareMoneyCreditPaymentResponse.success !== true) {
               const errorDetail = `Failed to process payment: ${JSON.stringify(squareMoneyCreditPaymentResponse)}`;
               logger.error(errorDetail);
               squareMoneyCreditPaymentResponse.error.forEach(e => (errors.push({ category: e.category, code: e.code, detail: e.detail ?? "" })));
               throw errors;
             }
-            squareOrderVersion += 1;
             logger.info(`For internal id ${referenceId} and Square Order ID: ${squareOrder!.id!} payment for ${MoneyToDisplayString(squareMoneyCreditPaymentResponse.result.amount, true)} successful.`)
             sentPayments.push(squareMoneyCreditPaymentResponse.result);
             break;
