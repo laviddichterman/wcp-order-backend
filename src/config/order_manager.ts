@@ -44,7 +44,7 @@ import {
 
 import { WProvider } from '../types/WProvider';
 
-import { formatRFC3339, format, Interval, isSameMinute, formatISO, addHours, isSameDay, subMinutes, setSeconds, setMilliseconds, isBefore } from 'date-fns';
+import { formatRFC3339, format, Interval, isSameMinute, formatISO, addHours, isSameDay, subMinutes, setSeconds, setMilliseconds, isBefore, subDays } from 'date-fns';
 import { GoogleProviderInstance } from "./google";
 import { SquareProviderInstance } from "./square";
 import { StoreCreditProviderInstance } from "./store_credit_provider";
@@ -359,6 +359,42 @@ const Map3pSource = (source: string) => {
 export class OrderManager implements WProvider {
   constructor() {
   }
+
+  private ClearPastOrders = async () => {
+    try {
+      const now = Date.now();
+      const timeSpanAgo = subDays(zonedTimeToUtc(now, process.env.TZ!), 1);
+      const locationsToSearch = DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_3P ? [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE, DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_3P] : [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE];
+      const oldOrdersResults = await SquareProviderInstance.SearchOrders(locationsToSearch, {
+        filter: { dateTimeFilter: { updatedAt: { startAt: formatRFC3339(subDays(timeSpanAgo, 1)) } }, stateFilter: { states: ['OPEN'] } }, sort: { sortField: 'UPDATED_AT', sortOrder: 'ASC' }
+      });
+      if (oldOrdersResults.success) {
+        const ordersToClose = (oldOrdersResults.result.orders ?? []).filter(x => (x.fulfillments ?? []).length === 1 && isBefore(utcToZonedTime(x.fulfillments![0].pickupDetails!.pickupAt!, process.env.TZ!), timeSpanAgo));
+        for (let i = 0; i < ordersToClose.length; ++i) {
+          const squareOrder = ordersToClose[i];
+          try {
+            const orderUpdateResponse = await SquareProviderInstance.OrderUpdate(squareOrder.locationId, squareOrder.id!, squareOrder.version!, {
+              state: 'CLOSED',
+              fulfillments: squareOrder.fulfillments?.map(x => ({
+                uid: x.uid,
+                state: 'COMPLETED'
+              }))
+            }, []);
+            if (orderUpdateResponse.success) {
+              logger.debug(`Marked order ${squareOrder.id!} as completed`);
+            }
+          } catch (err1: any) {
+            logger.error(`Skipping ${squareOrder.id!} due to error ingesting: ${JSON.stringify(err1, Object.getOwnPropertyNames(err1), 2)}`);
+          }
+        }
+      }
+    }
+    catch (err: any) {
+      const errorDetail = `Got error when attempting to ingest 3p orders: ${JSON.stringify(err, Object.getOwnPropertyNames(err), 2)}`;
+      logger.error(errorDetail);
+    }
+  }
+
 
   private Query3pOrders = async () => {
     try {
@@ -1410,6 +1446,10 @@ export class OrderManager implements WProvider {
     const _SEND_ORDER_INTERVAL = setInterval(() => {
       this.SendOrders();
     }, 60000);
+
+    const _CLEAR_OLD_ORDERS_INTERVAL = setInterval(() => {
+      this.ClearPastOrders();
+    }, 1000 * 60 * 60 * 24); // every 24 hours
 
     if (DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_3P) {
       const _QUERY_3P_ORDERS = setInterval(() => {
