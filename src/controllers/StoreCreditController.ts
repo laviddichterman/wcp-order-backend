@@ -98,9 +98,9 @@ export class StoreCreditController implements IExpressController {
       const typedRequest : ValidateLockAndSpendRequest = req.body; 
       const spending_result = await StoreCreditProviderInstance.ValidateLockAndSpend(typedRequest);
       if (!spending_result.success) {
-        return res.status(422).json({success: false} as SpendCreditResponse);
+        return res.status(422).json({success: false} satisfies SpendCreditResponse);
       }
-      return res.status(200).json({success: true, balance: { currency: CURRENCY.USD, amount: spending_result.entry[3]-typedRequest.amount.amount } } as SpendCreditResponse)
+      return res.status(200).json({success: true, balance: { currency: CURRENCY.USD, amount: (spending_result.entry[3] * 100) - typedRequest.amount.amount } } satisfies SpendCreditResponse)
     } catch (error) {
       GoogleProviderInstance.SendEmail(
         EMAIL_ADDRESS,
