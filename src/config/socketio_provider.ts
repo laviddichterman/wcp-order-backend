@@ -52,18 +52,17 @@ export class SocketIoProvider implements WProvider {
         socket.client.request.headers["x-real-ip"] ?
           logger.info(`CONNECTION: Client at IP: ${socket.client.request.headers["x-real-ip"]}, UA: ${socket.client.request.headers['user-agent']}.`) :
           logger.info(`CONNECTION: Client info: ${JSON.stringify(socket.client.request.headers)}.`);
-        logger.info(`Num Connected: ${app.getSocketIoServer().engine.clientsCount}`);
+        // logger.info(`Num Connected: ${app.getSocketIoServer().engine.clientsCount}`);
         socket.emit('WCP_SERVER_TIME', { time: format(connect_time, WDateUtils.ISODateTimeNoOffset), tz: process.env.TZ! });
         this.EmitFulfillmentsTo(socket, DataProviderInstance.Fulfillments);
         this.EmitSettingsTo(socket, DataProviderInstance.Settings);
         this.EmitCatalogTo(socket, CatalogProviderInstance.Catalog);
         socket.on('disconnect', (reason: string) => {
           const formattedDuration = formatDuration(intervalToDuration({ start: connect_time, end: zonedTimeToUtc(Date.now(), process.env.TZ!) }));
-
           socket.client.request.headers["x-real-ip"] ?
             logger.info(`DISCONNECT: ${reason} after ${formattedDuration}. IP: ${socket.client.request.headers["x-real-ip"]}`) :
             logger.info(`DISCONNECT: ${reason} after ${formattedDuration}.\nClient: ${JSON.stringify(socket.client.request.headers)}`);
-          logger.info(`Num Connected: ${app.getSocketIoServer().engine.clientsCount}`);
+          // logger.info(`Num Connected: ${app.getSocketIoServer().engine.clientsCount}`);
         });
       });
     }

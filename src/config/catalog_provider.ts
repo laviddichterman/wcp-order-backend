@@ -584,7 +584,7 @@ export class CatalogProvider implements WProvider {
     }
     await Promise.all(Object.values(this.#categories).map(async (cat) => {
       if (cat.parent_id && cat.parent_id === category_id) {
-        await WCategoryModel.findByIdAndUpdate(cat.id, { parent_id: null }).exec();
+        await WCategoryModel.findByIdAndUpdate(cat.id, { parent_id: null }, { new: true }).exec();
       }
     }));
     const products_update = await WProductModel.updateMany({}, { $pull: { category_ids: category_id } }).exec();
@@ -1170,6 +1170,7 @@ export class CatalogProvider implements WProvider {
   BatchUpdateProductInstance = async (batches: UpdateProductInstanceProps[], suppress_catalog_recomputation: boolean = false): Promise<(IProductInstance | null)[]> => {
     logger.info(`Updating product instance(s) ${batches.map(x => `ID: ${x.piid}, changes: ${JSON.stringify(x.productInstance)}`).join(", ")}, ${suppress_catalog_recomputation ? "and suppressing the catalog recomputation" : ""}`);
 
+    // TODO: if switching from hideFromPos === false to hideFromPos === true, we need to delete the product in square
     const oldProductInstances = batches.map(b => this.Catalog.productInstances[b.piid]!);
     const newExternalIdses = batches.map((b, i) => b.productInstance.externalIDs ?? oldProductInstances[i].externalIDs);
     const existingSquareExternalIds = newExternalIdses.map((ids) => GetSquareExternalIds(ids)).flat();

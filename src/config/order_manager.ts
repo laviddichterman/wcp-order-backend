@@ -25,7 +25,6 @@ import {
   WError,
   MoneyToDisplayString,
   DateTimeIntervalBuilder,
-  ComputeMainProductCategoryCount,
   WOrderStatus,
   FulfillmentTime,
   FulfillmentType,
@@ -39,7 +38,8 @@ import {
   RecomputeTotalsResult,
   OrderPaymentAllocated,
   RecomputeTotals,
-  OrderPaymentProposed
+  OrderPaymentProposed,
+  DetermineCartBasedLeadTime
 } from "@wcp/wcpshared";
 
 import { WProvider } from '../types/WProvider';
@@ -421,8 +421,8 @@ export class OrderManager implements WProvider {
             const cart = LineItemsToOrderInstanceCart(squareOrder.lineItems!);
 
             // determine what available time we have for this order
-            const mainCategoryProductCount = ComputeMainProductCategoryCount(fulfillmentConfig.orderBaseCategoryId, cart);
-            const availabilityMap = WDateUtils.GetInfoMapForAvailabilityComputation([fulfillmentConfig], requestedFulfillmentTime.selectedDate, { cart_based_lead_time: 0, size: mainCategoryProductCount });
+            const cartLeadTime = DetermineCartBasedLeadTime(cart, CatalogProviderInstance.CatalogSelectors.productEntry);
+            const availabilityMap = WDateUtils.GetInfoMapForAvailabilityComputation([fulfillmentConfig], requestedFulfillmentTime.selectedDate, cartLeadTime);
             const optionsForSelectedDate = WDateUtils.GetOptionsForDate(availabilityMap, requestedFulfillmentTime.selectedDate, formatISO(now))
             const foundTimeOptionIndex = optionsForSelectedDate.findIndex(x => x.value >= fulfillmentTimeClampedRounded);
             if (foundTimeOptionIndex === -1 || optionsForSelectedDate[foundTimeOptionIndex].disabled) {
@@ -901,7 +901,7 @@ export class OrderManager implements WProvider {
     const flatCart = Object.values(rebuiltCart).flat();
 
     // TODO: this doesn't work as it doesn't properly handle updated discounts or store credit redemptions
-    const recomputedTotals = RecomputeTotals({ cart: rebuiltCart, fulfillment: fulfillmentConfig, order: updatedOrder, payments: updatedOrder.payments, discounts: updatedOrder.discounts, config: { AUTOGRAT_THRESHOLD: DataProviderInstance.Settings.config.AUTOGRAT_THRESHOLD as number ?? 5, TAX_RATE: DataProviderInstance.Settings.config.TAX_RATE as number ?? .1025, CATALOG_SELECTORS: CatalogProviderInstance.CatalogSelectors } });
+    const recomputedTotals = RecomputeTotals({ cart: rebuiltCart, fulfillment: fulfillmentConfig, order: updatedOrder, payments: updatedOrder.payments, discounts: updatedOrder.discounts, config: { SERVICE_CHARGE: 0, AUTOGRAT_THRESHOLD: DataProviderInstance.Settings.config.AUTOGRAT_THRESHOLD as number ?? 5, TAX_RATE: DataProviderInstance.Settings.config.TAX_RATE as number ?? .1025, CATALOG_SELECTORS: CatalogProviderInstance.CatalogSelectors } });
 
     // adjust calendar event
     const gCalEventId = lockedOrder.metadata.find(x => x.key === 'GCALEVENT')?.value;
@@ -1231,7 +1231,7 @@ export class OrderManager implements WProvider {
     }
 
     // 3. recompute the totals to ensure everything matches up, and to get some needed computations that we don't want to pass over the wire and blindly trust
-    const recomputedTotals = RecomputeTotals({ cart: rebuiltCart, payments: createOrderRequest.proposedPayments, discounts: createOrderRequest.proposedDiscounts, fulfillment: fulfillmentConfig, order: orderInstance, config: { AUTOGRAT_THRESHOLD: DataProviderInstance.Settings.config.AUTOGRAT_THRESHOLD as number ?? 5, TAX_RATE: DataProviderInstance.Settings.config.TAX_RATE as number ?? .1025, CATALOG_SELECTORS: CatalogProviderInstance.CatalogSelectors } });
+    const recomputedTotals = RecomputeTotals({ cart: rebuiltCart, payments: createOrderRequest.proposedPayments, discounts: createOrderRequest.proposedDiscounts, fulfillment: fulfillmentConfig, order: orderInstance, config: { SERVICE_CHARGE: 0, AUTOGRAT_THRESHOLD: DataProviderInstance.Settings.config.AUTOGRAT_THRESHOLD as number ?? 5, TAX_RATE: DataProviderInstance.Settings.config.TAX_RATE as number ?? .1025, CATALOG_SELECTORS: CatalogProviderInstance.CatalogSelectors } });
     if (recomputedTotals.balanceAfterPayments.amount > 0) {
       const errorDetail = `Proposed payments yield balance of ${MoneyToDisplayString(recomputedTotals.balanceAfterPayments, true)}.`;
       logger.error(errorDetail)
@@ -1253,7 +1253,8 @@ export class OrderManager implements WProvider {
     }
 
     // 4. check the availability of the requested service date/time
-    const availabilityMap = WDateUtils.GetInfoMapForAvailabilityComputation([DataProviderInstance.Fulfillments[createOrderRequest.fulfillment.selectedService]], createOrderRequest.fulfillment.selectedDate, { cart_based_lead_time: 0, size: recomputedTotals.mainCategoryProductCount });
+    const cartLeadTime = DetermineCartBasedLeadTime(createOrderRequest.cart, CatalogProviderInstance.CatalogSelectors.productEntry);
+    const availabilityMap = WDateUtils.GetInfoMapForAvailabilityComputation([DataProviderInstance.Fulfillments[createOrderRequest.fulfillment.selectedService]], createOrderRequest.fulfillment.selectedDate, cartLeadTime);
     const optionsForSelectedDate = WDateUtils.GetOptionsForDate(availabilityMap, createOrderRequest.fulfillment.selectedDate, formatISO(requestTime))
     const foundTimeOptionIndex = optionsForSelectedDate.findIndex(x => x.value === createOrderRequest.fulfillment.selectedTime);
     if (foundTimeOptionIndex === -1 || optionsForSelectedDate[foundTimeOptionIndex].disabled) {

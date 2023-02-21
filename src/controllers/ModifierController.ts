@@ -175,6 +175,7 @@ export class ModifierController implements IExpressController {
         metadata: req.body.metadata,
         enable: req.body.enable,
         displayFlags: req.body.displayFlags,
+        availability: req.body.availability
       });
       if (!new_option) {
         logger.info(`Unable to find ModifierType ${req.params.mtid} to create Modifier Option`);
@@ -206,6 +207,7 @@ export class ModifierController implements IExpressController {
             metadata: req.body.metadata,
             enable: req.body.enable,
             displayFlags: req.body.displayFlags,
+            availability: req.body.availability
           }
         });
         if (doc) {

@@ -251,6 +251,70 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
   }],
   "0.5.61": [{ major: 0, minor: 5, patch: 62 }, async () => {
   }],
+  "0.5.62": [{ major: 0, minor: 5, patch: 63 }, async () => {
+    {
+      // add null availability to all products
+      // add null timing to all products
+      const WProductModel = mongoose.model('wproduCtsChema', new Schema({
+        availability: Schema.Types.Mixed,
+        timing: Schema.Types.Mixed,
+      }));
+
+      const updateResponse = await WProductModel.updateMany({}, {
+        $set: { 'availability': null, 'timing': null }
+      }).exec();
+      if (updateResponse.modifiedCount > 0) {
+        logger.debug(`Updated ${updateResponse.modifiedCount} IProduct with null availability, null timimng.`);
+      }
+      else {
+        logger.warn("No IProduct had availability and timing set to null");
+      }
+    }
+
+    {
+      // add null availability to all modifier options
+      const WOptionModel = mongoose.model('woPtioNschEma', new Schema({
+        availability: Schema.Types.Mixed
+      }));
+      const updateResponse = await WOptionModel.updateMany({}, {
+        $set: { 'availability': null }
+      }).exec();
+      if (updateResponse.modifiedCount > 0) {
+        logger.debug(`Updated ${updateResponse.modifiedCount} IOption with null availability.`);
+      }
+      else {
+        logger.warn("No options had availability set to null");
+      }
+    }
+
+    {
+      // add null availability to all modifier options
+      const WOptionModel = mongoose.model('woPtioNschema', new Schema({
+        availability: Schema.Types.Mixed
+      }));
+      const updateResponse = await WOptionModel.updateMany({}, {
+        $set: { 'availability': null }
+      }).exec();
+      if (updateResponse.modifiedCount > 0) {
+        logger.debug(`Updated ${updateResponse.modifiedCount} IOption with null availability.`);
+      }
+      else {
+        logger.warn("No options had availability set to null");
+      }
+    }
+
+    {
+      // set allowTipping to true
+      const WFulfillmentSchema = mongoose.model('fulFIlLmEntSCHEMA', new Schema({
+        allowTipping: {
+          type: Boolean,
+          required: true
+        }
+      }, { id: true }));
+      const updatedFulfillments = await WFulfillmentSchema.updateMany({}, { allowTipping: true }, { new: true });
+      logger.info(`Updated fulfillments, setting allowTipping to true, got result: ${JSON.stringify(updatedFulfillments)}`);
+    }
+  }],
 }
 
 export class DatabaseManager implements WProvider {

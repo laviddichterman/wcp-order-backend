@@ -3,6 +3,8 @@ import mongoose, {Schema} from "mongoose";
 import { WMoney } from "../../WMoney";
 import path from 'path';
 import { KeyValueEntrySchema } from "../../settings/KeyValueSchema";
+import { PrepTimingSchema } from "../../PrepTimingSchema";
+import { RecurringIntervalSchema } from "../../RecurringIntervalSchema";
 
 type MT = Omit<IProduct, "id">;
 export const ProductModifierSchema = new Schema({ 
@@ -59,12 +61,10 @@ const WProductSchema = new Schema<MT>({
     }
   },
 
-  // TODO: implement timing information across products and modifier options that
-  // informs the prep time for the product and for any additional items
-  timing: {
-    min_prep_time: Number,
-    additional_unit_prep_time: Number
-  },
+  // preparation timing info, or null if not considered
+  timing: PrepTimingSchema,
+
+  availability: RecurringIntervalSchema,
 
   // list of option type IDs and nullable product instance function IDs
   modifiers: [ProductModifierSchema],

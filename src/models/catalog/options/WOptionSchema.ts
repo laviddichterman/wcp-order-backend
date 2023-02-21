@@ -4,6 +4,7 @@ import { IOption } from "@wcp/wcpshared";
 import { WMoney } from "../../WMoney";
 import { IntervalSchema } from "../../IntervalSchema";
 import { KeyValueEntrySchema } from "../../settings/KeyValueSchema";
+import { RecurringIntervalSchema } from "../../RecurringIntervalSchema";
 
 type MT = Omit<IOption, "id">;
 
@@ -40,6 +41,8 @@ export const WOptionSchema = new Schema<MT>({
   //   disabled not defined: means enabled
   disabled: IntervalSchema,
 
+  availability: RecurringIntervalSchema,
+  
   // placement index
   ordinal: {
     type: Number,

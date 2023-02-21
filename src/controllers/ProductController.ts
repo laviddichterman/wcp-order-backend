@@ -68,6 +68,9 @@ const ProductClassValidationChain = [
   body('displayFlags.order_guide.warnings.*').trim().escape().exists().isMongoId(),
   body('displayFlags.order_guide.suggestions.*').trim().escape().exists().isMongoId(),
   body('printerGroup').optional({ nullable: true }).isMongoId(),
+  // TODO need proper deep validation of availability and timing fields
+  body('availability').optional({ nullable: true }).isObject(),
+  body('timing').optional({ nullable: true }).isObject(),
 ];
 
 const AddProductClassValidationChain = [
@@ -119,7 +122,9 @@ export class ProductController implements IExpressController {
         modifiers: req.body.modifiers,
         category_ids: req.body.category_ids,
         displayFlags: req.body.displayFlags,
-        printerGroup: req.body.printerGroup ?? null
+        printerGroup: req.body.printerGroup ?? null,
+        availability: req.body.availability,
+        timing: req.body.timing,
       };
       const instances = req.body.instances;
       const newProduct = await CatalogProviderInstance.CreateProduct(
@@ -151,7 +156,9 @@ export class ProductController implements IExpressController {
         modifiers: req.body.modifiers,
         category_ids: req.body.category_ids,
         displayFlags: req.body.displayFlags,
-        printerGroup: req.body.printerGroup ?? null
+        printerGroup: req.body.printerGroup ?? null,
+        availability: req.body.availability,
+        timing: req.body.timing,
       });
       if (!doc) {
         logger.info(`Unable to update Product: ${productId}`);

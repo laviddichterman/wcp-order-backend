@@ -48,6 +48,10 @@ export const FulfillmentSchema = new Schema<MT>({
     type: Boolean,
     required: true
   },
+  allowTipping: {
+    type: Boolean,
+    required: true
+  },
   menuBaseCategoryId: {
     type: String,
     required: true,
