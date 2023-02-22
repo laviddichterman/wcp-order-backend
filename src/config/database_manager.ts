@@ -315,6 +315,9 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
       logger.info(`Updated fulfillments, setting allowTipping to true, got result: ${JSON.stringify(updatedFulfillments)}`);
     }
   }],
+  "0.5.63": [{ major: 0, minor: 5, patch: 64 }, async () => {
+  }],
+
 }
 
 export class DatabaseManager implements WProvider {
