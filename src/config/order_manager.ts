@@ -248,8 +248,6 @@ const CreateExternalEmail = async (
     ...(delivery_section ? [] : [`<p><strong>Location Information:</strong> We are located ${LOCATION_INFO}</p>`])
   ];
   const emailbody = `<p>${ORDER_RESPONSE_PREAMBLE}</p>
-<p>We take your health seriously; be assured your order has been prepared with the utmost care.</p>
-<p>Note that all gratuity is shared with the entire ${STORE_NAME} family.</p>
 <p>Please take some time to ensure the details of your order as they were entered are correct. If the order is fine, there is no need to respond to this message. If you need to make a correction or have a question, please respond to this message as soon as possible.</p>
     
 <b>Order information:</b><br />
@@ -362,12 +360,14 @@ export class OrderManager implements WProvider {
 
   private ClearPastOrders = async () => {
     try {
+      logger.info("Clearing old orders...");
       const now = Date.now();
       const timeSpanAgo = subDays(zonedTimeToUtc(now, process.env.TZ!), 1);
       const locationsToSearch = DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_3P ? [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE, DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_3P] : [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE];
       const oldOrdersResults = await SquareProviderInstance.SearchOrders(locationsToSearch, {
         filter: { dateTimeFilter: { updatedAt: { startAt: formatRFC3339(subDays(timeSpanAgo, 1)) } }, stateFilter: { states: ['OPEN'] } }, sort: { sortField: 'UPDATED_AT', sortOrder: 'ASC' }
       });
+      logger.info({oldOrdersResults});
       if (oldOrdersResults.success) {
         const ordersToClose = (oldOrdersResults.result.orders ?? []).filter(x => (x.fulfillments ?? []).length === 1 && isBefore(utcToZonedTime(x.fulfillments![0].pickupDetails!.pickupAt!, process.env.TZ!), timeSpanAgo));
         for (let i = 0; i < ordersToClose.length; ++i) {
