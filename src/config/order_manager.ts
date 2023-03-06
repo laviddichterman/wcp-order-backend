@@ -1129,7 +1129,7 @@ export class OrderManager implements WProvider {
 
   public GetOrders = async (queryDate: string | null, queryStatus: WOrderStatus | null): Promise<WOrderInstance[]> => {
     // find orders and return
-    const dateConstraint = queryDate ? { 'fulfillment.selectedDate': queryDate } : {};
+    const dateConstraint = queryDate ? { 'fulfillment.selectedDate': { $gte: queryDate } } : {};
     const statusConstraint = queryStatus ? { 'status': queryStatus } : {};
     return await WOrderInstanceModel.find({
       ...(dateConstraint),
@@ -1184,6 +1184,8 @@ export class OrderManager implements WProvider {
 
   public CreateOrder = async (createOrderRequest: CreateOrderRequestV2, ipAddress: string): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
     const requestTime = Date.now();
+
+    logger.debug(`From ${ipAddress}, Create Order Request: ${JSON.stringify(createOrderRequest)}`);
 
     // 1. get the fulfillment and other needed constants from the DataProvider, generate a reference ID, quick computations
     if (!Object.hasOwn(DataProviderInstance.Fulfillments, createOrderRequest.fulfillment.selectedService)) {
