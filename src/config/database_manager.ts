@@ -317,6 +317,8 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
   }],
   "0.5.63": [{ major: 0, minor: 5, patch: 64 }, async () => {
   }],
+  "0.5.64": [{ major: 0, minor: 5, patch: 65 }, async () => {
+  }],
 
 }
 
