@@ -695,7 +695,7 @@ export class OrderManager implements WProvider {
   }
 
   private CancelLockedOrder = async (lockedOrder: WOrderInstance, reason: string, emailCustomer: boolean): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
-    logger.debug(`Found order to cancel: ${JSON.stringify(lockedOrder, null, 2)}, lock applied.`);
+    logger.debug(`Found order to cancel for ${JSON.stringify(lockedOrder.customerInfo, null, 2)}, order ID: ${lockedOrder.id}. lock applied.`);
     const errors: WError[] = [];
     try {
       const fulfillmentConfig = DataProviderInstance.Fulfillments[lockedOrder.fulfillment.selectedService];
