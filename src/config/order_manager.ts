@@ -568,7 +568,12 @@ export class OrderManager implements WProvider {
       const SQORDER_MSG = lockedOrder.metadata.find(x => x.key === 'SQORDER_MSG')?.value?.split(',') ?? [];
       const expoPrinters = Object.values(CatalogProviderInstance.PrinterGroups).filter(x => x.isExpo);
       if (expoPrinters.length > 0) {
-        const message = [`Move to ${destination}`, ...(additionalMessage ? [additionalMessage] : [])];
+        
+        const message: string[] = [
+          ...Object.values(rebuiltCart).flat().map(x => `CANCEL ${x.quantity}x: ${x.product.m.name}`),
+          `Move to ${destination}`, 
+          ...(additionalMessage ? [additionalMessage] : []),
+        ];
         const messages = expoPrinters.map(pg => ({
           squareItemVariationId: GetSquareIdFromExternalIds(pg.externalIDs, 'ITEM_VARIATION')!,
           message: message

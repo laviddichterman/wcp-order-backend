@@ -8,7 +8,7 @@ import { parseISO } from 'date-fns';
 import { StoreCreditPayment } from '@wcp/wcpshared';
 import { BigIntMoneyToIntMoney, IMoneyToBigIntMoney, MapPaymentStatus } from './SquareWarioBridge';
 import { ExponentialBackoff, IS_PRODUCTION } from '../utils';
-import { RetryConfiguration } from 'square/dist/core';
+import { RetryConfiguration } from 'square/dist/types/core';
 
 export const SQUARE_BATCH_CHUNK_SIZE = process.env.WARIO_SQUARE_BATCH_CHUNK_SIZE ? parseInt(process.env.WARIO_SQUARE_BATCH_CHUNK_SIZE) : 25;
 
