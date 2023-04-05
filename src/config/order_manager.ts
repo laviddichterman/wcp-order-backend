@@ -570,7 +570,7 @@ export class OrderManager implements WProvider {
       if (expoPrinters.length > 0) {
         
         const message: string[] = [
-          ...Object.values(rebuiltCart).flat().map(x => `CANCEL ${x.quantity}x: ${x.product.m.name}`),
+          ...Object.values(rebuiltCart).flat().map(x => `${x.quantity}x: ${x.product.m.name}`),
           `Move to ${destination}`, 
           ...(additionalMessage ? [additionalMessage] : []),
         ];
