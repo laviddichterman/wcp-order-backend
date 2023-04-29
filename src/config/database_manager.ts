@@ -325,6 +325,23 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
   }],
   "0.5.67": [{ major: 0, minor: 5, patch: 68 }, async () => {
   }],
+  "0.5.68": [{ major: 0, minor: 5, patch: 69 }, async () => {
+    // mass set posName to empty string on WProductInstance
+    const WProductInstanceSchema = mongoose.model('WPrODUcTInstanceSchema', new Schema({
+      displayFlags: {
+        posName: String,
+      }
+    }));
+    const updateResponse = await WProductInstanceSchema.updateMany({}, {
+      $set: { 'displayFlags.posName': "" }
+    }).exec();
+    if (updateResponse.modifiedCount > 0) {
+      logger.debug(`Updated ${updateResponse.modifiedCount} WProductInstanceSchema with empty posName.`);
+    }
+    else {
+      logger.warn("No WProductInstanceSchema had posName set to empty string");
+    }
+  }],
 }
 
 export class DatabaseManager implements WProvider {

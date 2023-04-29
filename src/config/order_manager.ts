@@ -369,12 +369,12 @@ export class OrderManager implements WProvider {
       });
       logger.info({oldOrdersResults});
       if (oldOrdersResults.success) {
-        const ordersToClose = (oldOrdersResults.result.orders ?? []).filter(x => (x.fulfillments ?? []).length === 1 && isBefore(utcToZonedTime(x.fulfillments![0].pickupDetails!.pickupAt!, process.env.TZ!), timeSpanAgo));
-        for (let i = 0; i < ordersToClose.length; ++i) {
-          const squareOrder = ordersToClose[i];
+        const ordersToComplete = (oldOrdersResults.result.orders ?? []).filter(x => (x.fulfillments ?? []).length === 1 && isBefore(utcToZonedTime(x.fulfillments![0].pickupDetails!.pickupAt!, process.env.TZ!), timeSpanAgo));
+        for (let i = 0; i < ordersToComplete.length; ++i) {
+          const squareOrder = ordersToComplete[i];
           try {
             const orderUpdateResponse = await SquareProviderInstance.OrderUpdate(squareOrder.locationId, squareOrder.id!, squareOrder.version!, {
-              state: 'CLOSED',
+              state: 'COMPLETED',
               fulfillments: squareOrder.fulfillments?.map(x => ({
                 uid: x.uid,
                 state: 'COMPLETED'

@@ -45,6 +45,10 @@ export const WProductInstanceSchema = new Schema<MT>({
   displayFlags: {
     hideFromPos: Boolean,
     
+    // name used internally in the POS, so things like BEERNAME pint and BEERNAME growler fill can exist without muddying up the menu names
+    // eg: ABT 12 growler fill
+    posName:  String,
+    
     menu: {
       // ordering within this product instance's category in menu page
       ordinal: Number,

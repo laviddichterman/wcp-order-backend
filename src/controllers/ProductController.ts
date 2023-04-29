@@ -24,6 +24,7 @@ const ProductInstanceValidationChain = (prefix: string) => [
   body(`${prefix}externalIDs`).isArray(),
   body(`${prefix}externalIDs.*.key`).exists(),
   body(`${prefix}externalIDs.*.value`).exists(),
+  body(`${prefix}displayFlags.posName`).optional({nullable: true}).trim(),
   body(`${prefix}displayFlags.hideFromPos`).toBoolean(true),
   body(`${prefix}displayFlags.menu.ordinal`).exists().isInt({ min: 0 }),
   body(`${prefix}displayFlags.menu.hide`).toBoolean(true),
@@ -190,6 +191,7 @@ export class ProductController implements IExpressController {
     try {
       const displayFlags = { 
         hideFromPos: req.body.displayFlags.hideFromPos,
+        posName: req.body.displayFlags.posName,
         menu: {
           adornment: req.body.displayFlags.menu.adornment,
           hide: req.body.displayFlags.menu.hide,
