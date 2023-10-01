@@ -342,6 +342,8 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
       logger.warn("No WProductInstanceSchema had posName set to empty string");
     }
   }],
+  "0.5.69": [{ major: 0, minor: 5, patch: 70 }, async () => {
+  }],
 }
 
 export class DatabaseManager implements WProvider {

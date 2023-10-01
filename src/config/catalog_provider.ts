@@ -886,6 +886,7 @@ export class CatalogProvider implements WProvider {
   };
 
   // TODO: MAKE SURE NONE OF THE BATCHES ARE FROM THE SAME SINGLE SELECT MODIFIER TYPE
+  // TODO: BUG!!!! if you change the price of modifiers, any product with a modifier pre-selected will need their price updated in Square!
   BatchUpdateModifierOption = async (batches: UpdateModifierOptionProps[], suppress_catalog_recomputation: boolean = false) => {
     logger.info(`Request to update ModifierOption(s) ${batches.map(b => `ID: ${b.id}, updates: ${JSON.stringify(b.modifierOption)}`).join(", ")}${suppress_catalog_recomputation ? " suppressing catalog recomputation" : ""}`);
 
@@ -1330,6 +1331,27 @@ export class CatalogProvider implements WProvider {
       this.RecomputeCatalogAndEmit();
     }
     return doc.toObject();
+  }
+
+  /**
+   * Checks and removes fulfullment ID from ICategory.serviceDisable and IProduct.serviceDisable and IProduct.modifiers.serviceDisable 
+   * performed BEFORE a fulfillment is deleted from the DataProvider
+   *  */
+  BackfillRemoveFulfillment = async (id: string) => {
+    logger.debug(`Removing fulfillment ID ${id} references, if any exist.`);
+    const products_update = await WProductModel.updateMany({}, { $pull: { serviceDisable: id, "modifiers.$[].serviceDisable": id } }).exec();
+    if (products_update.modifiedCount > 0) {
+      logger.debug(`Removed serviceDisable fulfillment ID from ${products_update.modifiedCount} products and modifiers.`);
+      await this.SyncProducts();
+    }
+    const category_update = await WCategoryModel.updateMany({}, { $pull: { serviceDisable: id } }).exec();
+    if (category_update.modifiedCount > 0) {
+      logger.debug(`Removed serviceDisable fulfillment ID from ${category_update.modifiedCount} categories.`);
+      await this.SyncCategories();
+    }
+    if (products_update.modifiedCount > 0 || category_update.modifiedCount > 0) {
+      this.RecomputeCatalogAndEmit();
+    }
   }
 }
 

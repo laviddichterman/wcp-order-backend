@@ -9,7 +9,7 @@ import IExpressController from '../types/IExpressController';
 import { CheckJWT, ScopeDeleteCatalog, ScopeWriteCatalog } from '../config/authorization';
 import { DataProviderInstance } from '../config/dataprovider';
 import { SocketIoProviderInstance } from '../config/socketio_provider';
-//import { CatalogProviderInstance } from '../config/catalog_provider';
+import { CatalogProviderInstance } from '../config/catalog_provider';
 
 
 const FulfillmentConfigByIdValidationChain = [
@@ -37,6 +37,7 @@ const FulfillmentValidationChain = [
   body('autograt.percentage').optional({nullable: true}).isFloat({ gt: 0 }),
   body('serviceCharge').optional({nullable: true}).isMongoId(),
   body('leadTime').exists().isInt({min: 1}),
+  body('leadTimeOffset').exists().isInt({min: -100, max: 1440}),
   body('operatingHours').isObject().exists(),
   body('operatingHours.*').isArray(),
   body('operatingHours.*.*.start').isInt({ min: 0, max: 1440 }),
@@ -94,6 +95,7 @@ export class FulfillmentController implements IExpressController {
         autograt: req.body.autograt,
         serviceCharge: req.body.serviceCharge,
         leadTime: req.body.leadTime,
+        leadTimeOffset: req.body.leadTimeOffset,
         
         operatingHours: req.body.operatingHours,
         specialHours: req.body.specialHours,
@@ -143,6 +145,7 @@ export class FulfillmentController implements IExpressController {
         autograt: req.body.autograt,
         serviceCharge: req.body.serviceCharge,
         leadTime: req.body.leadTime,
+        leadTimeOffset: req.body.leadTimeOffset,
         
         operatingHours: req.body.operatingHours,
         specialHours: req.body.specialHours,
@@ -174,13 +177,10 @@ export class FulfillmentController implements IExpressController {
   private deleteFulfillment = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const fulfillmentId = req.params.fid;
-      //CatalogProviderInstance.
-
+      await CatalogProviderInstance.BackfillRemoveFulfillment(fulfillmentId);
       DataProviderInstance.deleteFulfillment(fulfillmentId)
       .then(async (doc) => {
         logger.info(`Successfully deleted Fulfillment ${doc}`);
-        // TODO: make catalog consistent
-        // REQUIRED BEFORE LAUNCH
         await DataProviderInstance.syncFulfillments();
         SocketIoProviderInstance.EmitFulfillments(DataProviderInstance.Fulfillments);
         return res.status(200).send(doc);

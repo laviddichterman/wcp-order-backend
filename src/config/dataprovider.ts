@@ -7,7 +7,6 @@ import { SettingsModel } from '../models/settings/SettingsSchema';
 import { FulfillmentModel } from '../models/settings/FulfillmentSchema';
 import { Promise } from 'bluebird';
 
-
 export class DataProvider implements WProvider {
   #settings: IWSettings;
   #fulfillments: Record<string, FulfillmentConfig>;
@@ -133,6 +132,7 @@ export class DataProvider implements WProvider {
       });
   }
 
+  /** precondition: references to this fulfillment have already been removed from the catalog! */
   deleteFulfillment = async (id: string) => {
     return FulfillmentModel.findByIdAndDelete(id)
       .then(doc => {
