@@ -563,7 +563,7 @@ export class CatalogProvider implements WProvider {
     return response!.toObject();
   };
 
-  DeleteCategory = async (category_id: string) => {
+  DeleteCategory = async (category_id: string, delete_contained_products: boolean) => {
     logger.debug(`Removing ${category_id}`);
     // first make sure this isn't used in a fulfillment
     Object.values(DataProviderInstance.Fulfillments).map((x) => {
@@ -587,10 +587,15 @@ export class CatalogProvider implements WProvider {
         await WCategoryModel.findByIdAndUpdate(cat.id, { parent_id: null }, { new: true }).exec();
       }
     }));
-    const products_update = await WProductModel.updateMany({}, { $pull: { category_ids: category_id } }).exec();
-    if (products_update.modifiedCount > 0) {
-      logger.debug(`Removed Category ID from ${products_update.modifiedCount} products.`);
-      await this.SyncProducts();
+    if (delete_contained_products) {
+      await this.BatchDeleteProduct(this.#catalog.categories[category_id]!.products, true);
+    }
+    else {
+      const products_update = await WProductModel.updateMany({}, { $pull: { category_ids: category_id } }).exec();
+      if (products_update.modifiedCount > 0) {
+        logger.debug(`Removed Category ID from ${products_update.modifiedCount} products.`);
+        await this.SyncProducts();
+      }
     }
     await this.SyncCategories();
     this.RecomputeCatalogAndEmit();
@@ -1049,7 +1054,7 @@ export class CatalogProvider implements WProvider {
     const mappings = (upsertResponse.result.idMappings ?? []);
 
     const productDoc = new WProductModel(adjustedProduct);
-    const instancesDocs = adjustedInstances.map((x, i)=> new WProductInstanceModel({
+    const instancesDocs = adjustedInstances.map((x, i) => new WProductInstanceModel({
       ...x,
       productId: productDoc.id,
       externalIDs: [...x.externalIDs, ...IdMappingsToExternalIds(mappings, ('000' + i).slice(-3))]
@@ -1114,6 +1119,30 @@ export class CatalogProvider implements WProvider {
     this.RecomputeCatalogAndEmit();
     return updated.toObject();
   };
+
+  BatchDeleteProduct = async (p_ids: string[], suppress_catalog_recomputation: boolean = false) => {
+    logger.debug(`Removing Product(s) ${p_ids.join(", ")}`);
+    const productEntries = p_ids.map(x => this.#catalog.products[x]!);
+
+    // needs to be ._id, NOT .id
+    const doc = await WProductModel.deleteMany({ _id: { $in: p_ids } }).exec();
+    if (!doc) {
+      return null;
+    }
+    // removing ALL product instances from Square
+    await BatchDeleteCatalogObjectsFromExternalIds(productEntries.reduce((acc, pe) => [...acc, ...pe.instances], []).reduce((acc, pi) => [...acc, ...this.#catalog.productInstances[pi]!.externalIDs], []));
+
+    const product_instance_delete = await WProductInstanceModel.deleteMany({ productId: { $in: p_ids } }).exec();
+    if (product_instance_delete.deletedCount > 0) {
+      logger.debug(`Removed ${product_instance_delete.deletedCount} Product Instances.`);
+      await this.SyncProductInstances();
+    }
+    await this.SyncProducts();
+    if (!suppress_catalog_recomputation) {
+      this.RecomputeCatalogAndEmit();
+    }
+    return doc;
+  }
 
   DeleteProduct = async (p_id: string) => {
     logger.debug(`Removing Product ${p_id}`);
@@ -1194,7 +1223,7 @@ export class CatalogProvider implements WProvider {
         mergedInstance,
         b.product.printerGroup ? this.#printerGroups[b.product.printerGroup] : null,
         this.CatalogSelectors, existingSquareObjects, ('000' + i).slice(-3))];
-      }).flat();
+    }).flat();
     if (catalogObjects.length > 0) {
       const upsertResponse = await SquareProviderInstance.BatchUpsertCatalogObjects(chunk(catalogObjects, SQUARE_BATCH_CHUNK_SIZE).map(x => ({ objects: x })));
       if (!upsertResponse.success) {

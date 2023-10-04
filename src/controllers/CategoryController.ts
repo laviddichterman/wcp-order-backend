@@ -32,6 +32,11 @@ const EditCategoryValidationChain = [
   ...CategoryValidationChain
 ]
 
+const DeleteCategoryValidationChain = [
+  ...CategoryByIdValidationChain,
+  body('delete_contained_products').optional().toBoolean(true),
+]
+
 export class CategoryController implements IExpressController {
   public path = "/api/v1/menu/category";
   public router = Router({ mergeParams: true });
@@ -43,7 +48,7 @@ export class CategoryController implements IExpressController {
   private initializeRoutes() {
     this.router.post(`${this.path}`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(CategoryValidationChain), this.postCategory);
     this.router.patch(`${this.path}/:catid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(EditCategoryValidationChain), this.patchCategory);
-    this.router.delete(`${this.path}/:catid`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware(CategoryByIdValidationChain), this.deleteCategory);
+    this.router.delete(`${this.path}/:catid`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware(DeleteCategoryValidationChain), this.deleteCategory);
   };
   private postCategory = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -96,7 +101,8 @@ export class CategoryController implements IExpressController {
 
   private deleteCategory = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const doc = await CatalogProviderInstance.DeleteCategory(req.params.catid);
+      const delete_contained_products = req.body.delete_contained_products ?? false;
+      const doc = await CatalogProviderInstance.DeleteCategory(req.params.catid, delete_contained_products);
       if (!doc) {
         logger.info(`Unable to delete category: ${req.params.catid}`);
         return res.status(404).send(`Unable to delete category: ${req.params.catid}`);

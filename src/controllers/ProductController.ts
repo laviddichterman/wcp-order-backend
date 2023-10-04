@@ -9,6 +9,11 @@ import { CheckJWT, ScopeDeleteCatalog, ScopeWriteCatalog } from '../config/autho
 import { CatalogProviderInstance } from '../config/catalog_provider';
 import { isFulfillmentDefined, isValidDisabledValue } from '../types/Validations';
 
+const ProductClassesByIdsInBodyValidationChain = [
+  body('pids').isArray({ min: 1 }),
+  body('pids.*.').trim().escape().exists().isMongoId(),
+];
+
 const ProductClassByIdValidationChain = [
   param('pid').trim().escape().exists().isMongoId(),
 ];
@@ -109,6 +114,7 @@ export class ProductController implements IExpressController {
     this.router.post(`${this.path}`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(AddProductClassValidationChain), this.postProductClass);
     this.router.patch(`${this.path}/:pid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(EditProductClassValidationChain), this.patchProductClass);
     this.router.delete(`${this.path}/:pid`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware(ProductClassByIdValidationChain), this.deleteProductClass);
+    // this.router.post(`${this.path}/batchDelete`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware(ProductClassesByIdsInBodyValidationChain), this.batchDeleteProductClasses);
     this.router.post(`${this.path}/:pid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(AddProductInstanceValidationChain), this.postProductInstance);
     this.router.patch(`${this.path}/:pid/:piid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(EditProductInstanceValidationChain), this.patchProductInstance);
     this.router.delete(`${this.path}/:pid/:piid`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware([...ProductClassByIdValidationChain, ...ProductInstanceByIdValidationChain]), this.deleteProductInstance);
@@ -166,6 +172,21 @@ export class ProductController implements IExpressController {
         return res.status(404).send(`Unable to update Product: ${productId}`);
       }
       logger.info(`Successfully updated ${JSON.stringify(doc)}`);
+      return res.status(200).send(doc);
+    } catch (error) {
+      return next(error)
+    }
+  }
+
+  private batchDeleteProductClasses = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const productIds = req.body.pids;
+      const doc = await CatalogProviderInstance.BatchDeleteProduct(productIds);
+      if (!doc) {
+        logger.info(`Unable to delete Products: ${productIds.join(', ')}`);
+        return res.status(404).send(`Unable to delete Products: ${productIds.join(', ')}`);
+      }
+      logger.info(`Successfully deleted ${JSON.stringify(doc)}`);
       return res.status(200).send(doc);
     } catch (error) {
       return next(error)
