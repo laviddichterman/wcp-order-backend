@@ -1031,7 +1031,7 @@ export class CatalogProvider implements WProvider {
   }
 
   CreateProduct = async (product: Omit<IProduct, 'id' | 'baseProductId'>, instances: Omit<IProductInstance, 'id' | 'productId'>[]) => {
-    if (!ValidateProductModifiersFunctionsCategories(product.modifiers, product.category_ids, this) && instances.length >= 1) {
+    if (!ValidateProductModifiersFunctionsCategories(product.modifiers, product.category_ids, this) || instances.length === 0) {
       return null;
     }
     // we need to filter these external IDs because it'll interfere with adding the new product to the catalog
@@ -1073,6 +1073,57 @@ export class CatalogProvider implements WProvider {
     this.RecomputeCatalogAndEmit();
     return productDoc.toObject();
   };
+
+  // BulkUpsertProduct = async (batches: { 
+  //   product: Omit<IProduct, 'id' | 'baseProductId'> & Partial<Pick<IProduct, 'id' | 'baseProductId'>>, 
+  //   instances: (Omit<IProductInstance, 'id' | 'productId'> & Partial<Pick<IProductInstance, 'id' | 'productId'>>)[] 
+  // }[]) => {
+  //   if (!ValidateProductModifiersFunctionsCategories(
+  //     batches.flatMap(x=>x.product.modifiers), 
+  //     batches.flatMap(x=>x.product.category_ids), this) || 
+  //     batches.reduce((acc, b)=> acc || ((b.product.id === undefined || b.product.baseProductId === undefined) && b.instances.length === 0), false)) {
+  //     return null;
+  //   }
+  //   // we need to filter these external IDs because it'll interfere with adding the new product to the catalog
+
+  //   const adjustedProduct: Omit<IProduct, 'id' | 'baseProductId'> = { ...product, externalIDs: GetNonSquareExternalIds(product.externalIDs) };
+  //   const adjustedInstances: Omit<IProductInstance, 'id' | 'productId'>[] = instances.map(x => ({ ...x, externalIDs: GetNonSquareExternalIds(x.externalIDs) }))
+
+  //   // first add the stuff to square so we can write to the DB in two operations
+  //   const catalogObjects = adjustedInstances.map((pi, i) =>
+  //     ProductInstanceToSquareCatalogObject(
+  //       LocationsConsidering3pFlag(product.displayFlags.is3p),
+  //       adjustedProduct,
+  //       pi,
+  //       product.printerGroup ? this.#printerGroups[product.printerGroup] : null,
+  //       this.CatalogSelectors, [], ('000' + i).slice(-3)));
+  //   const upsertResponse = await SquareProviderInstance.BatchUpsertCatalogObjects(chunk(catalogObjects, SQUARE_BATCH_CHUNK_SIZE).map(x => ({ objects: x })));
+  //   if (!upsertResponse.success) {
+  //     logger.error(`Failed to save square products, got errors: ${JSON.stringify(upsertResponse.error)}`);
+  //     return null;
+  //   }
+  //   const mappings = (upsertResponse.result.idMappings ?? []);
+
+  //   const productDoc = new WProductModel(adjustedProduct);
+  //   const instancesDocs = adjustedInstances.map((x, i) => new WProductInstanceModel({
+  //     ...x,
+  //     productId: productDoc.id,
+  //     externalIDs: [...x.externalIDs, ...IdMappingsToExternalIds(mappings, ('000' + i).slice(-3))]
+  //   }))
+  //   productDoc.baseProductId = instancesDocs[0].id;
+  //   await productDoc.save();
+  //   logger.debug(`Saved new WProductModel: ${JSON.stringify(productDoc.toObject())}`);
+  //   const bulkWriteResult = await WProductInstanceModel.bulkWrite(instancesDocs.map(o => ({
+  //     insertOne: {
+  //       document: o
+  //     }
+  //   })));
+  //   logger.debug(`Instances creation result: ${JSON.stringify(bulkWriteResult)}`);
+  //   await Promise.all([this.SyncProducts(), this.SyncProductInstances()]);
+
+  //   this.RecomputeCatalogAndEmit();
+  //   return productDoc.toObject();
+  // };
 
   UpdateProduct = async (pid: string, product: Partial<Omit<IProduct, 'id'>>) => {
     if (!ValidateProductModifiersFunctionsCategories(product.modifiers ?? [], product.category_ids ?? [], this)) {

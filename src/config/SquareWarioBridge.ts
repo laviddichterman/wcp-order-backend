@@ -8,7 +8,6 @@ import { IS_PRODUCTION } from '../utils';
 // TODOS FOR TODAY: 
 // * add versioning to mongoose?
 // * add note to payment or whatever so the SQ receipt makes some sense, see https://squareup.com/receipt/preview/jXnAjUa3wdk6al0EofHUg8PUZzFZY 
-// * fix bug discovered with anna last night
 export const SQUARE_TAX_RATE_CATALOG_ID = IS_PRODUCTION ? "TMG7E3E5E45OXHJTBOHG2PMS" : "LOFKVY5UC3SLKPT2WANSBPZQ";
 export const SQUARE_WARIO_EXTERNAL_ID = IS_PRODUCTION ? 'L75RYR2NI3ED7VM7VKXO2DKO' : 'NDV2QHR54XWVXCKOHXK43ZLE';
 export const SQUARE_BANKERS_ADJUSTED_TAX_RATE_CATALOG_ID = IS_PRODUCTION ? "R77FWA4SNHB4RWNY4KNNQHJD" : "HIUHEOWWVR6MB3PP7ORCUVZW"
@@ -556,7 +555,7 @@ export const ProductInstanceToSquareCatalogObject = (
     id: squareItemId,
     type: 'ITEM',
     presentAtAllLocations: false,
-    presentAtLocationIds: isBlanketDisabled ? [] : locationIds,
+    presentAtLocationIds: locationIds,
     ...(versionItem !== null ? { version: versionItem } : {}),
     itemData: {
       ...(printerGroup ? { categoryId: GetSquareIdFromExternalIds(printerGroup.externalIDs, 'CATEGORY')! } : {}),
@@ -564,6 +563,7 @@ export const ProductInstanceToSquareCatalogObject = (
       availableElectronically: true,
       availableForPickup: true,
       availableOnline: true,
+      isArchived: isBlanketDisabled,
       descriptionHtml: productInstance.description,
       name: productInstance.displayFlags.posName ? productInstance.displayFlags.posName : productInstance.displayName,
       productType: "REGULAR",
@@ -574,7 +574,7 @@ export const ProductInstanceToSquareCatalogObject = (
         id: squareItemVariationId,
         type: 'ITEM_VARIATION',
         presentAtAllLocations: false,
-        presentAtLocationIds: isBlanketDisabled ? [] : locationIds,
+        presentAtLocationIds: locationIds,
         ...(versionItemVariation !== null ? { version: versionItemVariation } : {}),
         itemVariationData: {
           itemId: squareItemId,
@@ -612,6 +612,7 @@ export const ModifierOptionPlacementsAndQualifiersToSquareCatalogObjects = (loca
     ...(versionLite !== null ? { version: versionLite } : {}),
     modifierData: {
       name: `LITE ${option.displayName}`,
+      // todo kitchenName: `LITE ${option.shortcode}`,
       ordinal: baseOrdinal + 4,
       modifierListId: modifierListId,
       priceMoney: IMoneyToBigIntMoney(option.price),
@@ -625,6 +626,7 @@ export const ModifierOptionPlacementsAndQualifiersToSquareCatalogObjects = (loca
     ...(versionHeavy !== null ? { version: versionHeavy } : {}),
     modifierData: {
       name: `HEAVY ${option.displayName}`,
+      // todo kitchenName: `HEAVY ${option.shortcode}`,
       ordinal: baseOrdinal + 5,
       modifierListId: modifierListId,
       priceMoney: IMoneyToBigIntMoney({ currency: option.price.currency, amount: option.price.amount * 2 }),
@@ -638,6 +640,7 @@ export const ModifierOptionPlacementsAndQualifiersToSquareCatalogObjects = (loca
     ...(versionOts !== null ? { version: versionOts } : {}),
     modifierData: {
       name: `OTS ${option.displayName}`,
+      // todo kitchenName: `OTS ${option.shortcode}`,
       ordinal: baseOrdinal + 6,
       modifierListId: modifierListId,
       priceMoney: IMoneyToBigIntMoney(option.price),

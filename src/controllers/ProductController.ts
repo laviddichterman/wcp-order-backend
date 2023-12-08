@@ -52,42 +52,47 @@ const ProductInstanceValidationChain = (prefix: string) => [
   body(`${prefix}modifiers.*.options.*.qualifier`).exists().isIn(Object.values(OptionQualifier))
 ];
 
-const ProductClassValidationChain = [
-  body('price.amount').isInt({ min: 0 }).exists(),
-  body('price.currency').exists().isIn(Object.values(CURRENCY)),
-  body('disabled').custom(isValidDisabledValue),
-  body('serviceDisable.*').custom(isFulfillmentDefined),
-  body('externalIDs').isArray(),
-  body('externalIDs.*.key').exists(),
-  body('externalIDs.*.value').exists(),
-  body('modifiers.*.mtid').trim().escape().exists().isMongoId(),
-  body('modifiers.*.enable').optional({ nullable: true }).isMongoId(),
-  body('modifiers.*.serviceDisable.*').custom(isFulfillmentDefined),
-  body('category_ids.*').trim().escape().exists().isMongoId(),
-  body('displayFlags.flavor_max').isFloat({ min: 0 }),
-  body('displayFlags.bake_max').isFloat({ min: 0 }),
-  body('displayFlags.bake_differential').isFloat({ min: 0 }),
+const ProductClassValidationChain = (prefix: string) => [
+  body(`${prefix}price.amount`).isInt({ min: 0 }).exists(),
+  body(`${prefix}price.currency`).exists().isIn(Object.values(CURRENCY)),
+  body(`${prefix}disabled`).custom(isValidDisabledValue),
+  body(`${prefix}serviceDisable.*`).custom(isFulfillmentDefined),
+  body(`${prefix}externalIDs`).isArray(),
+  body(`${prefix}externalIDs.*.key`).exists(),
+  body(`${prefix}externalIDs.*.value`).exists(),
+  body(`${prefix}modifiers.*.mtid`).trim().escape().exists().isMongoId(),
+  body(`${prefix}modifiers.*.enable`).optional({ nullable: true }).isMongoId(),
+  body(`${prefix}modifiers.*.serviceDisable.*`).custom(isFulfillmentDefined),
+  body(`${prefix}category_ids.*`).trim().escape().exists().isMongoId(),
+  body(`${prefix}displayFlags.flavor_max`).isFloat({ min: 0 }),
+  body(`${prefix}displayFlags.bake_max`).isFloat({ min: 0 }),
+  body(`${prefix}displayFlags.bake_differential`).isFloat({ min: 0 }),
   // TODO: ensure show_name_of_base_product is TRUE if modifier list length === 0
-  body('displayFlags.show_name_of_base_product').toBoolean(true),
-  body('displayFlags.singular_noun').trim(),
-  body('displayFlags.is3p').exists().toBoolean(true),
-  body('displayFlags.order_guide.warnings.*').trim().escape().exists().isMongoId(),
-  body('displayFlags.order_guide.suggestions.*').trim().escape().exists().isMongoId(),
-  body('printerGroup').optional({ nullable: true }).isMongoId(),
+  body(`${prefix}displayFlags.show_name_of_base_product`).toBoolean(true),
+  body(`${prefix}displayFlags.singular_noun`).trim(),
+  body(`${prefix}displayFlags.is3p`).exists().toBoolean(true),
+  body(`${prefix}displayFlags.order_guide.warnings.*`).trim().escape().exists().isMongoId(),
+  body(`${prefix}displayFlags.order_guide.suggestions.*`).trim().escape().exists().isMongoId(),
+  body(`${prefix}printerGroup`).optional({ nullable: true }).isMongoId(),
   // TODO need proper deep validation of availability and timing fields
-  body('availability').optional({ nullable: true }).isObject(),
-  body('timing').optional({ nullable: true }).isObject(),
+  body(`${prefix}availability`).optional({ nullable: true }).isObject(),
+  body(`${prefix}timing`).optional({ nullable: true }).isObject(),
 ];
 
-const AddProductClassValidationChain = [
-  ...ProductClassValidationChain,
-  body('instances').isArray({ min: 1 }),
-  ...ProductInstanceValidationChain('instances.*.')
-]
+const AddProductClassValidationChain = (prefix: string) => [
+  ...ProductClassValidationChain(prefix),
+  body(`${prefix}instances`).isArray({ min: 1 }),
+  ...ProductInstanceValidationChain(`${prefix}instances.*.`)
+];
+
+const BatchAddProductClassValidationChain = [
+  body().isArray({min: 1}),
+  ...AddProductClassValidationChain('*.')
+];
 
 const EditProductClassValidationChain = [
   ...ProductClassByIdValidationChain,
-  ...ProductClassValidationChain
+  ...ProductClassValidationChain('')
 ];
 
 const AddProductInstanceValidationChain = [
@@ -111,10 +116,11 @@ export class ProductController implements IExpressController {
   }
 
   private initializeRoutes() {
-    this.router.post(`${this.path}`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(AddProductClassValidationChain), this.postProductClass);
+    this.router.post(`${this.path}`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(AddProductClassValidationChain('')), this.postProductClass);
+    //this.router.post(`${this.path}batch`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(BatchAddProductClassValidationChain), this.postProductClass);
     this.router.patch(`${this.path}/:pid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(EditProductClassValidationChain), this.patchProductClass);
     this.router.delete(`${this.path}/:pid`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware(ProductClassByIdValidationChain), this.deleteProductClass);
-    // this.router.post(`${this.path}/batchDelete`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware(ProductClassesByIdsInBodyValidationChain), this.batchDeleteProductClasses);
+    this.router.post(`${this.path}batch/batchDelete`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware(ProductClassesByIdsInBodyValidationChain), this.batchDeleteProductClasses);
     this.router.post(`${this.path}/:pid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(AddProductInstanceValidationChain), this.postProductInstance);
     this.router.patch(`${this.path}/:pid/:piid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(EditProductInstanceValidationChain), this.patchProductInstance);
     this.router.delete(`${this.path}/:pid/:piid`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware([...ProductClassByIdValidationChain, ...ProductInstanceByIdValidationChain]), this.deleteProductInstance);
