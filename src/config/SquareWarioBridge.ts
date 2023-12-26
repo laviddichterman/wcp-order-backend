@@ -733,7 +733,7 @@ export const ModifierTypeToSquareCatalogObject = (
       name: squareName,
       ordinal: modifierType.ordinal * 1024,
       selectionType: 'MULTIPLE', // this should always be MULTIPLE otherwise square autoselects a modifier
-      modifiers: options.map((o, i) => ModifierOptionPlacementsAndQualifiersToSquareCatalogObjects(locationIds, modifierListId, o, currentObjects, `${batch}S${('000' + i).slice(-3)}S`)).flat()
+      modifiers: options.sort((a, b) => a.ordinal - b.ordinal).map((o, i) => ModifierOptionPlacementsAndQualifiersToSquareCatalogObjects(locationIds, modifierListId, o, currentObjects, `${batch}S${('000' + i).slice(-3)}S`)).flat()
     }
   };
 }
