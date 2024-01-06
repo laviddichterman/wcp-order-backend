@@ -1180,6 +1180,16 @@ export class OrderManager implements WProvider {
     );
   }
 
+  public AdjustOrder = async (idempotencyKey: string, orderId: string, orderUpdate: Partial<Pick<WOrderInstance, 'customerInfo' | 'cart' | 'discounts' | 'fulfillment' | 'specialInstructions' | 'tip'>>): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
+    return await this.LockAndActOnOrder(idempotencyKey, orderId,
+      {
+        status: { $in: [WOrderStatus.OPEN, WOrderStatus.CONFIRMED, WOrderStatus.PROCESSING] },
+        'fulfillment.status': { $in: [WFulfillmentStatus.PROPOSED, WFulfillmentStatus.SENT] }
+      },
+      (o) => this.ModifyLockedOrder(o, orderUpdate)
+    );
+  }
+
   public ConfirmOrder = async (idempotencyKey: string, orderId: string, messageToCustomer: string): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
     return await this.LockAndActOnOrder(idempotencyKey, orderId,
       { status: WOrderStatus.OPEN },

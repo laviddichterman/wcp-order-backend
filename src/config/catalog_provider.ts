@@ -886,17 +886,19 @@ export class CatalogProvider implements WProvider {
     return this.Catalog.options[doc.id]!;
   };
 
-  UpdateModifierOption = async (props: UpdateModifierOptionProps, suppress_catalog_recomputation: boolean = false) => {
-    return (await this.BatchUpdateModifierOption([props], suppress_catalog_recomputation))[0];
+  UpdateModifierOption = async (props: UpdateModifierOptionProps) => {
+    return (await this.BatchUpdateModifierOption([props]))[0];
   };
 
-  // TODO: MAKE SURE NONE OF THE BATCHES ARE FROM THE SAME SINGLE SELECT MODIFIER TYPE
-  // TODO: BUG!!!! if you change the price of modifiers, any product with a modifier pre-selected will need their price updated in Square!
-  BatchUpdateModifierOption = async (batches: UpdateModifierOptionProps[], suppress_catalog_recomputation: boolean = false) => {
-    logger.info(`Request to update ModifierOption(s) ${batches.map(b => `ID: ${b.id}, updates: ${JSON.stringify(b.modifierOption)}`).join(", ")}${suppress_catalog_recomputation ? " suppressing catalog recomputation" : ""}`);
-
-    //TODO: post update: rebuild all products with the said modifier option since the ordinal might have changed
-
+  BatchUpdateModifierOption = async (batches: UpdateModifierOptionProps[]) => {
+    logger.info(`Request to update ModifierOption(s) ${batches.map(b => `ID: ${b.id}, updates: ${JSON.stringify(b.modifierOption)}`).join(", ")}`);
+    if (batches.length !== new Set(batches.map(b=>b.modifierTypeId)).size) {
+      // Note: this checks for duplicate modifier types in the batches, but at some point the thought was that we couldn't be updating two single select modifier options in the same type. 
+      // If the next error fails too many cases, revisit the scope of the check on the next line.
+      const errorDetail = `Request for multiple option update batches from the same modifier type.`;
+      logger.error(errorDetail);
+      throw errorDetail;
+    }
     const batchesInfo = batches.map((b, i) => {
       const oldOption = this.#catalog.options[b.id]!;
       return {
@@ -988,10 +990,29 @@ export class CatalogProvider implements WProvider {
       return doc.toObject();
     }));
 
-    if (!suppress_catalog_recomputation) {
-      await this.SyncOptions();
-      this.RecomputeCatalogAndEmit();
+    const updatedOptions = batchesInfo.map(x=>x.batch.id);
+    // After we've updated the modifiers, we need to rebuild all products with the said modifier option(s) since the ordinal and price might have changed
+    // TODO: verify we don't need to update products that could add that modifier too, like any product class with the modifier type enabled on it
+    const product_instances_to_update = await WProductInstanceModel.find(
+      { "modifiers.options": { $elemMatch: { "optionId": { $in: updatedOptions } } } }).exec();
+      product_instances_to_update.map(x=>x.id)
+    const batchProductInstanceUpdates = product_instances_to_update.map((pi) => ({
+        piid: pi.id,
+        product: this.#catalog.products[pi.productId]!.product,
+        productInstance: {
+          modifiers: pi.modifiers
+        }
+      }));
+
+    await this.SyncOptions();
+    if (batchProductInstanceUpdates.length > 0) {
+      this.RecomputeCatalog();
+      await this.BatchUpdateProductInstance(batchProductInstanceUpdates, true);
+      await this.SyncProductInstances();
     }
+
+    this.RecomputeCatalogAndEmit();
+    
     return updated;
   };
 

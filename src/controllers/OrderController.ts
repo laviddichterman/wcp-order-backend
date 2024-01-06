@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { body, param, header, query } from 'express-validator';
-import { CreateOrderRequestV2, CURRENCY, DiscountMethod, FulfillmentTime, PaymentMethod, TenderBaseStatus, WFulfillmentStatus, WOrderStatus } from '@wcp/wcpshared';
+import { CreateOrderRequestV2, CURRENCY, DiscountMethod, FulfillmentTime, PaymentMethod, TenderBaseStatus, WFulfillmentStatus, WOrderInstance, WOrderStatus } from '@wcp/wcpshared';
 import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
 import { DataProviderInstance } from '../config/dataprovider';
 import { OrderManagerInstance } from '../config/order_manager';
@@ -26,11 +26,11 @@ const CreateOrderValidationChain = [
   body('proposedDiscounts').isArray(),
   body('proposedDiscounts.*.t').exists().equals(DiscountMethod.CreditCodeAmount),
   body('proposedDiscounts.*.status').exists().equals(TenderBaseStatus.AUTHORIZED),
-  body('proposedDiscounts.*.discount.amount.amount').exists().isInt({min: 0}),
+  body('proposedDiscounts.*.discount.amount.amount').exists().isInt({ min: 0 }),
   body('proposedDiscounts.*.discount.amount.currency').exists().isIn(Object.values(CURRENCY)),
-  body('proposedDiscounts.*.discount.balance.amount').isInt({min: 0}).exists(),
+  body('proposedDiscounts.*.discount.balance.amount').isInt({ min: 0 }).exists(),
   body('proposedDiscounts.*.discount.balance.currency').exists().isIn(Object.values(CURRENCY)),
-  body('proposedDiscounts.*.discount.code').exists().isString().isLength({min: 19, max: 19}),
+  body('proposedDiscounts.*.discount.code').exists().isString().isLength({ min: 19, max: 19 }),
   body('proposedDiscounts.*.discount.lock.enc').exists().isString(),
   body('proposedDiscounts.*.discount.lock.iv').exists().isString(),
   body('proposedDiscounts.*.discount.lock.auth').exists().isString(),
@@ -42,7 +42,7 @@ const CreateOrderValidationChain = [
   body('cart.*.product').exists(),
   body('tip.isSuggestion').exists().toBoolean(true),
   body('tip.isPercentage').exists().toBoolean(true),
-  body('specialInstructions').optional({nullable: true}).trim()
+  body('specialInstructions').optional({ nullable: true }).trim()
 ];
 
 const IdempotentOrderIdPutValidationChain = [
@@ -75,10 +75,25 @@ const RescheduleOrderValidationChain = [
   body('additionalMessage').trim().exists(),
 ]
 
-const QueryOrdersValidationChain = [
-  query('date').optional({nullable: true, checkFalsy: true}).isISO8601(),
-  query('status').optional({nullable: true, checkFalsy: true}).isIn(Object.values(WOrderStatus)),
+const AdjustOrderValidationChain = [
+  ...IdempotentOrderIdPutValidationChain,
+  // HASN'T EVEN BEEN LOOKED AT EVEN A LITTLE BIT. DO NOT SUBMIT THIS CODE UNTIL IT'S VALIDATED OR THE PATCH METHOD IS COMMENTED OUT
 ]
+
+const QueryOrdersValidationChain = [
+  query('date').optional({ nullable: true, checkFalsy: true }).isISO8601(),
+  query('status').optional({ nullable: true, checkFalsy: true }).isIn(Object.values(WOrderStatus)),
+]
+
+const SendFailureNoticeOnErrorCatch = (req: Request, error: any) => {
+  const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
+  GoogleProviderInstance.SendEmail(
+    EMAIL_ADDRESS,
+    { name: EMAIL_ADDRESS, address: "dave@windycitypie.com" },
+    "ERROR IN ORDER PROCESSING. CONTACT DAVE IMMEDIATELY",
+    "dave@windycitypie.com",
+    `<p>Request: ${JSON.stringify(req.body)}</p><p>Error info:${JSON.stringify(error)}</p>`);
+}
 
 export class OrderController implements IExpressController {
   public path = "/api/v1/order";
@@ -98,6 +113,7 @@ export class OrderController implements IExpressController {
     this.router.put(`${this.path}/:oId/confirm`, CheckJWT, ScopeWriteOrders, expressValidationMiddleware(ConfirmOrderValidationChain), this.putConfirmOrder);
     this.router.put(`${this.path}/:oId/move`, CheckJWT, ScopeWriteOrders, expressValidationMiddleware(MoveOrderValidationChain), this.putMoveOrder);
     this.router.put(`${this.path}/:oId/reschedule`, CheckJWT, ScopeWriteOrders, expressValidationMiddleware(RescheduleOrderValidationChain), this.putRescheduleOrder);
+    // this.router.patch(`${this.path}/:oId`, CheckJWT, ScopeWriteOrders, expressValidationMiddleware(AdjustOrderValidationChain), this.patchAdjustOrder);
   };
 
   private postOrder = async (req: Request, res: Response, next: NextFunction) => {
@@ -116,13 +132,7 @@ export class OrderController implements IExpressController {
       const response = await OrderManagerInstance.CreateOrder(reqBody, ipAddress);
       res.status(response.status).json(response);
     } catch (error) {
-      const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
-      GoogleProviderInstance.SendEmail(
-        EMAIL_ADDRESS,
-        { name: EMAIL_ADDRESS, address: "dave@windycitypie.com" },
-        "ERROR IN ORDER PROCESSING. CONTACT DAVE IMMEDIATELY",
-        "dave@windycitypie.com",
-        `<p>Order request: ${JSON.stringify(req.body)}</p><p>Error info:${JSON.stringify(error)}</p>`);
+      SendFailureNoticeOnErrorCatch(req, error);
       next(error)
     }
   }
@@ -136,13 +146,7 @@ export class OrderController implements IExpressController {
       const response = await OrderManagerInstance.CancelOrder(idempotencyKey, orderId, reason, emailCustomer);
       res.status(response.status).json(response);
     } catch (error) {
-      const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
-      GoogleProviderInstance.SendEmail(
-        EMAIL_ADDRESS,
-        { name: EMAIL_ADDRESS, address: "dave@windycitypie.com" },
-        "ERROR IN ORDER PROCESSING. CONTACT DAVE IMMEDIATELY",
-        "dave@windycitypie.com",
-        `<p>Order request: ${JSON.stringify(req.body)}</p><p>Error info:${JSON.stringify(error)}</p>`);
+      SendFailureNoticeOnErrorCatch(req, error);
       next(error)
     }
   }
@@ -155,13 +159,7 @@ export class OrderController implements IExpressController {
       const response = await OrderManagerInstance.ConfirmOrder(idempotencyKey, orderId, additionalMessage);
       res.status(response.status).json(response);
     } catch (error) {
-      const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
-      GoogleProviderInstance.SendEmail(
-        EMAIL_ADDRESS,
-        { name: EMAIL_ADDRESS, address: "dave@windycitypie.com" },
-        "ERROR IN ORDER PROCESSING. CONTACT DAVE IMMEDIATELY",
-        "dave@windycitypie.com",
-        `<p>Order request: ${JSON.stringify(req.body)}</p><p>Error info:${JSON.stringify(error)}</p>`);
+      SendFailureNoticeOnErrorCatch(req, error);
       next(error)
     }
   }
@@ -175,13 +173,7 @@ export class OrderController implements IExpressController {
       const response = await OrderManagerInstance.SendMoveOrderTicket(idempotencyKey, orderId, destination, additionalMessage);
       res.status(response.status).json(response);
     } catch (error) {
-      const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
-      GoogleProviderInstance.SendEmail(
-        EMAIL_ADDRESS,
-        { name: EMAIL_ADDRESS, address: "dave@windycitypie.com" },
-        "ERROR IN ORDER PROCESSING. CONTACT DAVE IMMEDIATELY",
-        "dave@windycitypie.com",
-        `<p>Order request: ${JSON.stringify(req.body)}</p><p>Error info:${JSON.stringify(error)}</p>`);
+      SendFailureNoticeOnErrorCatch(req, error);
       next(error)
     }
   }
@@ -195,13 +187,20 @@ export class OrderController implements IExpressController {
       const response = await OrderManagerInstance.AdjustOrderTime(idempotencyKey, orderId, newTime, emailCustomer, req.body.additionalMessage);
       res.status(response.status).json(response);
     } catch (error) {
-      const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
-      GoogleProviderInstance.SendEmail(
-        EMAIL_ADDRESS,
-        { name: EMAIL_ADDRESS, address: "dave@windycitypie.com" },
-        "ERROR IN ORDER PROCESSING. CONTACT DAVE IMMEDIATELY",
-        "dave@windycitypie.com",
-        `<p>Order request: ${JSON.stringify(req.body)}</p><p>Error info:${JSON.stringify(error)}</p>`);
+      SendFailureNoticeOnErrorCatch(req, error);
+      next(error)
+    }
+  }
+
+  private patchAdjustOrder = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const idempotencyKey = req.get('idempotency-key')!;
+      const orderId = req.params.oId;
+      const orderUpdate = req.body.order as Partial<Pick<WOrderInstance, 'customerInfo' | 'cart' | 'discounts' | 'fulfillment' | 'specialInstructions' | 'tip'>>;
+      const response = await OrderManagerInstance.AdjustOrder(idempotencyKey, orderId, orderUpdate);
+      res.status(response.status).json(response);
+    } catch (error) {
+      SendFailureNoticeOnErrorCatch(req, error);
       next(error)
     }
   }
@@ -209,15 +208,9 @@ export class OrderController implements IExpressController {
   private putUnlock = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const response = await OrderManagerInstance.ObliterateLocks();
-        res.status(200).json({ ok: "yay!" });
+      res.status(200).json({ ok: "yay!" });
     } catch (error) {
-      const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
-      GoogleProviderInstance.SendEmail(
-        EMAIL_ADDRESS,
-        { name: EMAIL_ADDRESS, address: "dave@windycitypie.com" },
-        "ERROR IN ORDER PROCESSING. CONTACT DAVE IMMEDIATELY",
-        "dave@windycitypie.com",
-        `<p>Order request: ${JSON.stringify(req.body)}</p><p>Error info:${JSON.stringify(error)}</p>`);
+      SendFailureNoticeOnErrorCatch(req, error);
       next(error)
     }
   }
@@ -228,19 +221,13 @@ export class OrderController implements IExpressController {
       const idempotencyKey = req.get('idempotency-key')!;
 
       const response = await OrderManagerInstance.SendOrder(idempotencyKey, orderId);
-      if (response) { 
+      if (response) {
         res.status(200).json(response);
       } else {
         res.status(404).json(null);
       }
     } catch (error) {
-      const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
-      GoogleProviderInstance.SendEmail(
-        EMAIL_ADDRESS,
-        { name: EMAIL_ADDRESS, address: "dave@windycitypie.com" },
-        "ERROR IN ORDER PROCESSING. CONTACT DAVE IMMEDIATELY",
-        "dave@windycitypie.com",
-        `<p>Order request: ${JSON.stringify(req.body)}</p><p>Error info:${JSON.stringify(error)}</p>`);
+      SendFailureNoticeOnErrorCatch(req, error);
       next(error)
     }
   }
@@ -249,19 +236,13 @@ export class OrderController implements IExpressController {
     try {
       const orderId = req.params.oId;
       const response = await OrderManagerInstance.GetOrder(orderId);
-      if (response) { 
+      if (response) {
         res.status(200).json(response);
       } else {
         res.status(404).json(null);
       }
     } catch (error) {
-      const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
-      GoogleProviderInstance.SendEmail(
-        EMAIL_ADDRESS,
-        { name: EMAIL_ADDRESS, address: "dave@windycitypie.com" },
-        "ERROR IN ORDER PROCESSING. CONTACT DAVE IMMEDIATELY",
-        "dave@windycitypie.com",
-        `<p>Order request: ${JSON.stringify(req.body)}</p><p>Error info:${JSON.stringify(error)}</p>`);
+      SendFailureNoticeOnErrorCatch(req, error);
       next(error)
     }
   }
@@ -273,13 +254,7 @@ export class OrderController implements IExpressController {
       const response = await OrderManagerInstance.GetOrders(queryDate, queryStatus);
       res.status(200).json(response);
     } catch (error) {
-      const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
-      GoogleProviderInstance.SendEmail(
-        EMAIL_ADDRESS,
-        { name: EMAIL_ADDRESS, address: "dave@windycitypie.com" },
-        "ERROR IN ORDER PROCESSING. CONTACT DAVE IMMEDIATELY",
-        "dave@windycitypie.com",
-        `<p>Order request: ${JSON.stringify(req.body)}</p><p>Error info:${JSON.stringify(error)}</p>`);
+      SendFailureNoticeOnErrorCatch(req, error);
       next(error)
     }
   }

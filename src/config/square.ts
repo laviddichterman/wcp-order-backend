@@ -1,4 +1,4 @@
-import { Error as SquareError, Client, CreateOrderRequest, CreateOrderResponse, CreatePaymentRequest, Environment, UpdateOrderRequest, ApiError, UpdateOrderResponse, PaymentRefund, RefundPaymentRequest, PayOrderRequest, PayOrderResponse, Payment, RetrieveOrderResponse, Order, UpsertCatalogObjectRequest, BatchUpsertCatalogObjectsRequest, CatalogObjectBatch, CatalogObject, BatchUpsertCatalogObjectsResponse, UpsertCatalogObjectResponse, BatchDeleteCatalogObjectsRequest, BatchDeleteCatalogObjectsResponse, BatchRetrieveCatalogObjectsRequest, BatchRetrieveCatalogObjectsResponse, CatalogInfoResponseLimits, SearchCatalogItemsRequest, SearchCatalogItemsResponse, SearchCatalogObjectsRequest, SearchCatalogObjectsResponse, ListCatalogResponse, SearchOrdersResponse, SearchOrdersRequest, SearchOrdersQuery, BatchRetrieveOrdersResponse } from 'square';
+import { Error as SquareError, Client, CreateOrderRequest, CreateOrderResponse, CreatePaymentRequest, Environment, UpdateOrderRequest, UpdateOrderResponse, PaymentRefund, RefundPaymentRequest, PayOrderRequest, PayOrderResponse, Payment, RetrieveOrderResponse, Order, UpsertCatalogObjectRequest, BatchUpsertCatalogObjectsRequest, CatalogObjectBatch, CatalogObject, BatchUpsertCatalogObjectsResponse, UpsertCatalogObjectResponse, BatchDeleteCatalogObjectsRequest, BatchDeleteCatalogObjectsResponse, BatchRetrieveCatalogObjectsRequest, BatchRetrieveCatalogObjectsResponse, CatalogInfoResponseLimits, SearchCatalogItemsRequest, SearchCatalogItemsResponse, SearchCatalogObjectsRequest, SearchCatalogObjectsResponse, ListCatalogResponse, SearchOrdersResponse, SearchOrdersRequest, SearchOrdersQuery, BatchRetrieveOrdersResponse, CreatePaymentResponse, RefundPaymentResponse, CancelPaymentResponse, CatalogInfoResponse } from 'square';
 import { WProvider } from '../types/WProvider';
 import crypto from 'crypto';
 import logger from '../logging';
@@ -7,8 +7,8 @@ import { IMoney, PaymentMethod, CURRENCY, OrderPaymentAllocated } from '@wcp/wcp
 import { parseISO } from 'date-fns';
 import { StoreCreditPayment } from '@wcp/wcpshared';
 import { BigIntMoneyToIntMoney, IMoneyToBigIntMoney, MapPaymentStatus } from './SquareWarioBridge';
-import { ExponentialBackoff, IS_PRODUCTION } from '../utils';
-import { RetryConfiguration } from 'square/dist/types/core';
+import { IS_PRODUCTION } from '../utils';
+import { ApiResponse, RetryConfiguration } from 'square/dist/types/core';
 
 export const SQUARE_BATCH_CHUNK_SIZE = process.env.WARIO_SQUARE_BATCH_CHUNK_SIZE ? parseInt(process.env.WARIO_SQUARE_BATCH_CHUNK_SIZE) : 25;
 
@@ -35,7 +35,6 @@ const DEFAULT_LIMITS: Required<CatalogInfoResponseLimits> = {
 /**
  * CURRENTLY:
  * - need to bootstrap square catalog in SquareConfigSchema
- * - need to switch to an exponential backoff situation that works
  */
 
 export interface SquareProviderProcessPaymentRequest {
@@ -53,27 +52,6 @@ export interface SquareProviderCreatePaymentRequest extends SquareProviderProces
   autocomplete: boolean;
 };
 
-
-const SquareRequestHandler = async <T>(apiRequestMaker: () => Promise<SquareProviderApiCallReturnValue<T>>) => {
-  const call_fxn = async (): Promise<{ success: true; result: T; error: SquareError[]; } |
-  { success: false; result: null; error: SquareError[]; }> => {
-    try {
-      return await apiRequestMaker();
-    }
-    catch (error) {
-      try {
-        return { success: false, result: null, error: error.errors as SquareError[] };
-      }
-      catch (_) {
-        const errorDetail = `Got unknown error: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`;
-        logger.error(errorDetail)
-        return { success: false, result: null, error: [{ category: "API_ERROR", code: "INTERNAL_SERVER_ERROR", detail: 'Internal Server Error. Please reach out for assistance.' }] };
-      }
-    }
-  }
-  return await call_fxn();
-}
-
 const SQUARE_RETRY_CONFIG: RetryConfiguration = {
   maxNumberOfRetries: 5,
   retryOnTimeout: true,
@@ -81,8 +59,35 @@ const SQUARE_RETRY_CONFIG: RetryConfiguration = {
   maximumRetryWaitTime: 0,
   backoffFactor: 3,
   httpStatusCodesToRetry: [408, 413, 429, 500, 502, 503, 504, 521, 522, 524],
-  httpMethodsToRetry: ['GET', 'PUT']
+  httpMethodsToRetry: ['GET', 'DELETE', 'HEAD', 'OPTIONS', 'POST', 'PUT', 'PATCH', 'LINK', 'UNLINK']
 };
+
+interface SquareResponseBase {
+  errors?: SquareError[];
+}
+
+const SquareCallFxnWrapper = async<T extends SquareResponseBase>(apiRequestMaker: () => Promise<ApiResponse<T>>, retry = 0): Promise<SquareProviderApiCallReturnValue<T>> => {
+  try {
+    const { result, ...httpResponse } = await apiRequestMaker();
+    if (SQUARE_RETRY_CONFIG.httpStatusCodesToRetry.includes(httpResponse.statusCode)) {
+      if (retry < SQUARE_RETRY_CONFIG.maxNumberOfRetries) {
+        const waittime = (2 ** (retry + 1) * 10) + 1000 * (Math.random());
+        logger.warn(`Waiting ${waittime} on retry ${retry + 1} of ${SQUARE_RETRY_CONFIG.maxNumberOfRetries}`);
+        await new Promise((res) => setTimeout(res, waittime));
+        return await SquareCallFxnWrapper(apiRequestMaker, retry + 1);
+      }
+    }
+    if (result.errors && result.errors.length > 0) {
+      return { success: false, result: null, error: result.errors ?? [] }
+    }
+    return { success: true, result: result, error: [] };
+  } catch (error) {
+    const errorDetail = `Got unknown error: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`;
+    logger.error(errorDetail);
+    return { success: false, result: null, error: [{ category: "API_ERROR", code: "INTERNAL_SERVER_ERROR", detail: 'Internal Server Error. Please reach out for assistance.' }] };
+  }
+}
+
 
 export class SquareProvider implements WProvider {
   #client: Client;
@@ -94,7 +99,7 @@ export class SquareProvider implements WProvider {
     this.#catalogIdsToDelete = [];
     this.#obliterateModifiersOnLoad = false;
   }
-  
+
   set CatalogIdsToDeleteOnLoad(value: string[]) {
     this.#catalogIdsToDelete = value.slice();
   }
@@ -204,12 +209,19 @@ export class SquareProvider implements WProvider {
 
   GetCatalogInfo = async (): Promise<SquareProviderApiCallReturnValue<CatalogInfoResponseLimits>> => {
     const api = this.#client.catalogApi;
-    const call_fxn = async (): Promise<SquareProviderApiCallReturnSuccess<CatalogInfoResponseLimits>> => {
+    const call_fxn = async (): Promise<ApiResponse<CatalogInfoResponse>> => {
       logger.info('sending Catalog Info request to Square API');
-      const { result, ...httpResponse } = await api.catalogInfo();
-      return { success: true, result: result.limits!, error: [] };
+      return await api.catalogInfo();
     }
-    return await SquareRequestHandler(call_fxn);
+    const response = await SquareCallFxnWrapper(call_fxn);
+    if (response.success && response.result.limits) {
+      return { success: true, result: response.result.limits, error: [] };
+    }
+    return {
+      success: false,
+      result: null,
+      error: response.error ?? []
+    };
   }
 
   CreateOrder = async (order: Order): Promise<SquareProviderApiCallReturnValue<CreateOrderResponse>> => {
@@ -220,12 +232,11 @@ export class SquareProvider implements WProvider {
       idempotencyKey: idempotency_key,
       order: order
     };
-    const call_fxn = async (): Promise<SquareProviderApiCallReturnSuccess<CreateOrderResponse>> => {
+    const call_fxn = async (): Promise<ApiResponse<CreateOrderResponse>> => {
       logger.info(`sending order request: ${JSON.stringify(request_body)}`);
-      const { result, ...httpResponse } = await orders_api.createOrder(request_body);
-      return { success: true, result: result, error: [] };
+      return await orders_api.createOrder(request_body);
     }
-    return await SquareRequestHandler(call_fxn);
+    return await SquareCallFxnWrapper(call_fxn);
   }
 
   OrderUpdate = async (locationId: string, orderId: string, version: number, updatedOrder: Omit<Partial<Order>, 'locationId' | 'version' | 'id'>, fieldsToClear: string[]) => {
@@ -241,12 +252,11 @@ export class SquareProvider implements WProvider {
       }
     };
 
-    const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<UpdateOrderResponse>> => {
+    const callFxn = async (): Promise<ApiResponse<UpdateOrderResponse>> => {
       logger.info(`sending order update request for order ${orderId}: ${JSON.stringify(request_body)}`);
-      const { result, ...httpResponse } = await orders_api.updateOrder(orderId, request_body);
-      return { success: true, result: result, error: [] };
+      return await orders_api.updateOrder(orderId, request_body);
     }
-    return await SquareRequestHandler(callFxn);
+    return await SquareCallFxnWrapper(callFxn);
   }
 
   OrderStateChange = async (locationId: string, orderId: string, version: number, new_state: string) => {
@@ -255,23 +265,21 @@ export class SquareProvider implements WProvider {
 
   RetrieveOrder = async (squareOrderId: string) => {
     const orders_api = this.#client.ordersApi;
-    const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<RetrieveOrderResponse>> => {
+    const callFxn = async (): Promise<ApiResponse<RetrieveOrderResponse>> => {
       logger.info(`Getting Square Order with ID: ${squareOrderId}`);
-      const { result, ...httpResponse } = await orders_api.retrieveOrder(squareOrderId);
-      return { success: true, result: result, error: [] };
+      return await orders_api.retrieveOrder(squareOrderId);
     }
-    return await SquareRequestHandler(callFxn);
+    return await SquareCallFxnWrapper(callFxn);
   }
 
 
   BatchRetrieveOrders = async (locationId: string, orderIds: string[]) => {
     const orders_api = this.#client.ordersApi;
-    const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<BatchRetrieveOrdersResponse>> => {
+    const callFxn = async (): Promise<ApiResponse<BatchRetrieveOrdersResponse>> => {
       logger.debug(`Getting Square Orders: ${orderIds.join(", ")}`);
-      const { result, ...httpResponse } = await orders_api.batchRetrieveOrders({ orderIds, locationId });
-      return { success: true, result: result, error: [] };
+      return await orders_api.batchRetrieveOrders({ orderIds, locationId });
     }
-    return await SquareRequestHandler(callFxn);
+    return await SquareCallFxnWrapper(callFxn);
   }
 
   SearchOrders = async (locationIds: string[], query: SearchOrdersQuery) => {
@@ -280,12 +288,11 @@ export class SquareProvider implements WProvider {
       query,
       locationIds
     };
-    const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<SearchOrdersResponse>> => {
+    const callFxn = async (): Promise<ApiResponse<SearchOrdersResponse>> => {
       logger.debug(`Searching Square Orders with: ${JSON.stringify(request_body)}`);
-      const { result, ...httpResponse } = await orders_api.searchOrders(request_body);
-      return { success: true, result: result, error: [] };
+      return await orders_api.searchOrders(request_body);
     }
-    return await SquareRequestHandler(callFxn);
+    return await SquareCallFxnWrapper(callFxn);
   }
 
 
@@ -306,7 +313,7 @@ export class SquareProvider implements WProvider {
     const request_body: CreatePaymentRequest = {
       sourceId: storeCreditPayment ? "EXTERNAL" : sourceId,
       externalDetails: storeCreditPayment ? { type: 'STORED_BALANCE', source: "WARIO", sourceId: storeCreditPayment.payment.code } : undefined,
-      ...(sourceId === 'CASH' ? { cashDetails: { buyerSuppliedMoney: IMoneyToBigIntMoney(amount), changeBackMoney: { amount: 0n, currency: amount.currency }}} : {}),
+      ...(sourceId === 'CASH' ? { cashDetails: { buyerSuppliedMoney: IMoneyToBigIntMoney(amount), changeBackMoney: { amount: 0n, currency: amount.currency } } } : {}),
       amountMoney: IMoneyToBigIntMoney({ currency: amount.currency, amount: amount.amount - tipMoney.amount }),
       tipMoney: IMoneyToBigIntMoney(tipMoney),
       referenceId: storeCreditPayment ? storeCreditPayment.payment.code : referenceId,
@@ -318,68 +325,68 @@ export class SquareProvider implements WProvider {
       idempotencyKey: idempotency_key
     };
 
-    const callFxn = async (): Promise<SquareProviderApiCallReturnValue<OrderPaymentAllocated>> => {
+    const callFxn = async (): Promise<ApiResponse<CreatePaymentResponse>> => {
       logger.info(`sending payment request: ${JSON.stringify(request_body)}`);
-      const { result, ..._ } = await payments_api.createPayment(request_body);
-      if (result.payment && result.payment.status) {
-        const paymentStatus = MapPaymentStatus(result.payment.status);
-        const createdAt = parseISO(result.payment.createdAt!).valueOf();
-        const processorId = result.payment.id!;
-        return {
-          success: true,
-          result: storeCreditPayment ? {
-            ...storeCreditPayment,
-            status: paymentStatus,
-            processorId,
-            payment: {
-              ...storeCreditPayment.payment,
-            }
-          } :
-            (result.payment.sourceType === 'CASH' ? {
-              t: PaymentMethod.Cash,
-              createdAt,
-              processorId,
-              amount: BigIntMoneyToIntMoney(result.payment.totalMoney!),
-              tipAmount: tipMoney,
-              status: paymentStatus,
-              payment: {
-                amountTendered: BigIntMoneyToIntMoney(result.payment.cashDetails!.buyerSuppliedMoney),
-                change: result.payment.cashDetails!.changeBackMoney ? BigIntMoneyToIntMoney(result.payment.cashDetails!.changeBackMoney) : { currency: amount.currency, amount: 0 },
-              },
-            } : {
-              t: PaymentMethod.CreditCard,
-              createdAt,
-              processorId,
-              amount: BigIntMoneyToIntMoney(result.payment!.totalMoney!),
-              tipAmount: tipMoney,
-              status: paymentStatus,
-              payment: {
-                processor: 'SQUARE',
-                billingZip: result.payment.billingAddress?.postalCode ?? undefined,
-                cardBrand: result.payment.cardDetails?.card?.cardBrand ?? undefined,
-                expYear: result.payment.cardDetails?.card?.expYear?.toString(),
-                last4: result.payment.cardDetails?.card?.last4 ?? "",
-                receiptUrl: result.payment.receiptUrl ?? `https://squareup.com/receipt/preview/${result.payment.id}`,
-                cardholderName: result.payment.cardDetails?.card?.cardholderName ?? undefined,
-              }
-            }),
-          error: []
-        };
-      }
+      return await payments_api.createPayment(request_body);
+    }
+    const response = await SquareCallFxnWrapper(callFxn);
+    if (response.success && response.result.payment && response.result.payment.status) {
+      const paymentStatus = MapPaymentStatus(response.result.payment.status);
+      const createdAt = parseISO(response.result.payment.createdAt!).valueOf();
+      const processorId = response.result.payment.id!;
       return {
-        success: false,
-        result: null,
-        error: result.errors ?? []
+        success: true,
+        result: storeCreditPayment ? {
+          ...storeCreditPayment,
+          status: paymentStatus,
+          processorId,
+          payment: {
+            ...storeCreditPayment.payment,
+          }
+        } :
+          (response.result.payment.sourceType === 'CASH' ? {
+            t: PaymentMethod.Cash,
+            createdAt,
+            processorId,
+            amount: BigIntMoneyToIntMoney(response.result.payment.totalMoney!),
+            tipAmount: tipMoney,
+            status: paymentStatus,
+            payment: {
+              amountTendered: BigIntMoneyToIntMoney(response.result.payment.cashDetails!.buyerSuppliedMoney),
+              change: response.result.payment.cashDetails!.changeBackMoney ? BigIntMoneyToIntMoney(response.result.payment.cashDetails!.changeBackMoney) : { currency: amount.currency, amount: 0 },
+            },
+          } : {
+            t: PaymentMethod.CreditCard,
+            createdAt,
+            processorId,
+            amount: BigIntMoneyToIntMoney(response.result.payment!.totalMoney!),
+            tipAmount: tipMoney,
+            status: paymentStatus,
+            payment: {
+              processor: 'SQUARE',
+              billingZip: response.result.payment.billingAddress?.postalCode ?? undefined,
+              cardBrand: response.result.payment.cardDetails?.card?.cardBrand ?? undefined,
+              expYear: response.result.payment.cardDetails?.card?.expYear?.toString(),
+              last4: response.result.payment.cardDetails?.card?.last4 ?? "",
+              receiptUrl: response.result.payment.receiptUrl ?? `https://squareup.com/receipt/preview/${response.result.payment.id}`,
+              cardholderName: response.result.payment.cardDetails?.card?.cardholderName ?? undefined,
+            }
+          }),
+        error: []
       };
     }
-    return await SquareRequestHandler(callFxn);
+    return {
+      success: false,
+      result: null,
+      error: response.error
+    };
   }
 
   ProcessPayment = async ({ locationId, sourceId, amount, referenceId, squareOrderId, verificationToken }: SquareProviderProcessPaymentRequest) => {
     return await this.CreatePayment({ locationId, sourceId, amount, referenceId, squareOrderId, verificationToken, autocomplete: true });
   }
 
-  PayOrder = async (square_order_id: string, paymentIds: string[]) => {
+  PayOrder = async (square_order_id: string, paymentIds: string[]): Promise<SquareProviderApiCallReturnValue<PayOrderResponse>> => {
     const idempotency_key = crypto.randomBytes(22).toString('hex');
     const orders_api = this.#client.ordersApi;
     const request_body: PayOrderRequest = {
@@ -387,12 +394,11 @@ export class SquareProvider implements WProvider {
       paymentIds
     };
 
-    const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<PayOrderResponse>> => {
+    const callFxn = async (): Promise<ApiResponse<PayOrderResponse>> => {
       logger.info(`sending order payment request ${square_order_id}: ${JSON.stringify(request_body)}`);
-      const { result, ...httpResponse } = await orders_api.payOrder(square_order_id, request_body);
-      return { success: true, result: result, error: [] };
+      return await orders_api.payOrder(square_order_id, request_body);
     }
-    return await SquareRequestHandler(callFxn);
+    return await SquareCallFxnWrapper(callFxn);
   }
 
   RefundPayment = async (squarePaymentId: string, amount: IMoney, reason: string): Promise<SquareProviderApiCallReturnValue<PaymentRefund>> => {
@@ -405,44 +411,44 @@ export class SquareProvider implements WProvider {
       paymentId: squarePaymentId,
     };
 
-    const callFxn = async (): Promise<SquareProviderApiCallReturnValue<PaymentRefund>> => {
+    const callFxn = async (): Promise<ApiResponse<RefundPaymentResponse>> => {
       logger.info(`sending payment REFUND request: ${JSON.stringify(request_body)}`);
-      const { result, ...httpResponse } = await refundsApi.refundPayment(request_body);
-      if (result.refund && result.refund.status !== 'REJECTED' && result.refund.status !== 'FAILED') {
-        return {
-          success: true,
-          result: result.refund,
-          error: []
-        };
-      }
+      return await refundsApi.refundPayment(request_body);
+    }
+    const response = await SquareCallFxnWrapper(callFxn);
+    if (response.success && response.result.refund && response.result.refund.status !== 'REJECTED' && response.result.refund.status !== 'FAILED') {
       return {
-        success: false,
-        result: null,
-        error: result.errors ?? []
+        success: true,
+        result: response.result.refund,
+        error: []
       };
     }
-    return await SquareRequestHandler(callFxn);
+    return {
+      success: false,
+      result: null,
+      error: response.error ?? []
+    };
   }
 
   CancelPayment = async (squarePaymentId: string): Promise<SquareProviderApiCallReturnValue<Payment>> => {
     const paymentsApi = this.#client.paymentsApi;
-    const callFxn = async (): Promise<SquareProviderApiCallReturnValue<Payment>> => {
+    const callFxn = async (): Promise<ApiResponse<CancelPaymentResponse>> => {
       logger.info(`sending payment CANCEL request for: ${squarePaymentId}`);
-      const { result, ...httpResponse } = await paymentsApi.cancelPayment(squarePaymentId);
-      if (result.payment && result.payment.status === 'CANCELED') {
-        return {
-          success: true,
-          result: result.payment,
-          error: []
-        };
-      }
+      return await paymentsApi.cancelPayment(squarePaymentId);
+    }
+    const response = await SquareCallFxnWrapper(callFxn);
+    if (response.success && response.result.payment && response.result.payment.status === 'CANCELED') {
       return {
-        success: false,
-        result: null,
-        error: result.errors ?? []
+        success: true,
+        result: response.result.payment,
+        error: []
       };
     }
-    return await SquareRequestHandler(callFxn);
+    return {
+      success: false,
+      result: null,
+      error: response.error ?? []
+    };
   }
 
   UpsertCatalogObject = async (object: CatalogObject) => {
@@ -453,45 +459,41 @@ export class SquareProvider implements WProvider {
       object
     };
 
-    const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<UpsertCatalogObjectResponse>> => {
+    const callFxn = async (): Promise<ApiResponse<UpsertCatalogObjectResponse>> => {
       logger.info(`sending catalog upsert: ${JSON.stringify(request_body)}`);
-      const { result, ...httpResponse } = await catalogApi.upsertCatalogObject(request_body);
-      return { success: true, result: result, error: [] };
+      return await catalogApi.upsertCatalogObject(request_body);
     }
-    return await SquareRequestHandler(callFxn);
+    return await SquareCallFxnWrapper(callFxn);
   }
 
   SearchCatalogItems = async (searchRequest: Omit<SearchCatalogItemsRequest, 'limit'>) => {
     const catalogApi = this.#client.catalogApi;
 
-    const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<SearchCatalogItemsResponse>> => {
+    const callFxn = async (): Promise<ApiResponse<SearchCatalogItemsResponse>> => {
       logger.info(`sending catalog item search: ${JSON.stringify(searchRequest)}`);
-      const { result, ...httpResponse } = await catalogApi.searchCatalogItems(searchRequest);
-      return { success: true, result: result, error: [] };
+      return await catalogApi.searchCatalogItems(searchRequest);
     }
-    return await SquareRequestHandler(callFxn);
+    return await SquareCallFxnWrapper(callFxn);
   }
 
   SearchCatalogObjects = async (searchRequest: Omit<SearchCatalogObjectsRequest, 'limit'>) => {
     const catalogApi = this.#client.catalogApi;
 
-    const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<SearchCatalogObjectsResponse>> => {
+    const callFxn = async (): Promise<ApiResponse<SearchCatalogObjectsResponse>> => {
       logger.info(`sending catalog search: ${JSON.stringify(searchRequest)}`);
-      const { result, ...httpResponse } = await catalogApi.searchCatalogObjects(searchRequest);
-      return { success: true, result: result, error: [] };
+      return await catalogApi.searchCatalogObjects(searchRequest);
     }
-    return await SquareRequestHandler(callFxn);
+    return await SquareCallFxnWrapper(callFxn);
   }
 
   ListCatalogObjects = async (types: string[], cursor?: string | undefined) => {
     const catalogApi = this.#client.catalogApi;
 
-    const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<ListCatalogResponse>> => {
+    const callFxn = async (): Promise<ApiResponse<ListCatalogResponse>> => {
       logger.info(`sending catalog list request for types: ${types.join(', ')} with cursor: ${cursor}`);
-      const { result, ...httpResponse } = await catalogApi.listCatalog(cursor, types.join(', '));
-      return { success: true, result: result, error: [] };
+      return await catalogApi.listCatalog(cursor, types.join(', '));
     }
-    return await SquareRequestHandler(callFxn);
+    return await SquareCallFxnWrapper(callFxn);
   }
 
   BatchUpsertCatalogObjects = async (objectBatches: CatalogObjectBatch[]): Promise<SquareProviderApiCallReturnValue<BatchUpsertCatalogObjectsResponse>> => {
@@ -507,27 +509,26 @@ export class SquareProvider implements WProvider {
         batches: remainingObjects
       };
 
-      const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<BatchUpsertCatalogObjectsResponse>> => {
+      const callFxn = async (): Promise<ApiResponse<BatchUpsertCatalogObjectsResponse>> => {
         logger.info(`sending catalog upsert batch: ${JSON.stringify(request_body)}`);
-        const { result, ...httpResponse } = await catalogApi.batchUpsertCatalogObjects(request_body);
-        return { success: true, result: result, error: [] };
-      }  
-      const response = await SquareRequestHandler(callFxn);
+        return await catalogApi.batchUpsertCatalogObjects(request_body);
+      }
+      const response = await SquareCallFxnWrapper(callFxn);
       if (!response.success) {
         return response;
       }
       remainingObjects = leftovers;
       responses.push(response);
     } while (remainingObjects.length > 0);
-    return { 
-      error: responses.flatMap(x=>x.error), 
+    return {
+      error: responses.flatMap(x => x.error),
       result: {
-        errors: responses.flatMap(x=>(x.result.errors ?? [])),
-        idMappings: responses.flatMap(x=>(x.result.idMappings ?? [])),
-        objects: responses.flatMap(x=>(x.result.objects ?? [])),
-        updatedAt: responses[0].result.updatedAt, 
-      }, 
-      success: true 
+        errors: responses.flatMap(x => (x.result.errors ?? [])),
+        idMappings: responses.flatMap(x => (x.result.idMappings ?? [])),
+        objects: responses.flatMap(x => (x.result.objects ?? [])),
+        updatedAt: responses[0].result.updatedAt,
+      },
+      success: true
     };
   }
 
@@ -541,12 +542,11 @@ export class SquareProvider implements WProvider {
         objectIds: remainingObjects
       };
 
-      const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<BatchDeleteCatalogObjectsResponse>> => {
+      const callFxn = async (): Promise<ApiResponse<BatchDeleteCatalogObjectsResponse>> => {
         logger.info(`sending catalog delete batch: ${JSON.stringify(request_body)}`);
-        const { result, ...httpResponse } = await catalogApi.batchDeleteCatalogObjects(request_body);
-        return { success: true, result: result, error: [] };
+        return await catalogApi.batchDeleteCatalogObjects(request_body);
       }
-      const response = await SquareRequestHandler(callFxn);
+      const response = await SquareCallFxnWrapper(callFxn);
       if (!response.success) {
         return response;
       }
@@ -554,20 +554,21 @@ export class SquareProvider implements WProvider {
       responses.push(response);
     } while (remainingObjects.length > 0);
 
-    return { 
-      error: responses.flatMap(x=>x.error), 
-      result: { deletedAt: responses[0].result.deletedAt, 
-        deletedObjectIds: responses.flatMap(x=>(x.result.deletedObjectIds ?? [])), 
-        errors: responses.flatMap(x=>(x.result.errors ?? [])) 
-      }, 
-      success: true 
+    return {
+      error: responses.flatMap(x => x.error),
+      result: {
+        deletedAt: responses[0].result.deletedAt,
+        deletedObjectIds: responses.flatMap(x => (x.result.deletedObjectIds ?? [])),
+        errors: responses.flatMap(x => (x.result.errors ?? []))
+      },
+      success: true
     };
 
   }
 
   BatchRetrieveCatalogObjects = async (objectIds: string[], includeRelated: boolean): Promise<SquareProviderApiCallReturnValue<BatchRetrieveCatalogObjectsResponse>> => {
     const catalogApi = this.#client.catalogApi;
-    
+
     let remainingObjects = objectIds.slice();
     const responses: SquareProviderApiCallReturnSuccess<BatchRetrieveCatalogObjectsResponse>[] = []
 
@@ -578,12 +579,11 @@ export class SquareProvider implements WProvider {
         includeRelatedObjects: includeRelated
       };
 
-      const callFxn = async (): Promise<SquareProviderApiCallReturnSuccess<BatchRetrieveCatalogObjectsResponse>> => {
+      const callFxn = async (): Promise<ApiResponse<BatchRetrieveCatalogObjectsResponse>> => {
         logger.info(`sending catalog retrieve batch: ${JSON.stringify(request_body)}`);
-        const { result, ...httpResponse } = await catalogApi.batchRetrieveCatalogObjects(request_body);
-        return { success: true, result: result, error: [] };
+        return await catalogApi.batchRetrieveCatalogObjects(request_body);
       }
-      const response = await SquareRequestHandler(callFxn);
+      const response = await SquareCallFxnWrapper(callFxn);
       if (!response.success) {
         return response;
       }
@@ -591,13 +591,14 @@ export class SquareProvider implements WProvider {
       responses.push(response);
     } while (remainingObjects.length > 0);
 
-    return { 
-      error: responses.flatMap(x=>x.error), 
-      result: { objects: responses.flatMap(x=>(x.result.objects ?? [])), 
-        relatedObjects: responses.flatMap(x=>(x.result.relatedObjects ?? [])), 
-        errors: responses.flatMap(x=>(x.result.errors ?? [])) 
-      }, 
-      success: true 
+    return {
+      error: responses.flatMap(x => x.error),
+      result: {
+        objects: responses.flatMap(x => (x.result.objects ?? [])),
+        relatedObjects: responses.flatMap(x => (x.result.relatedObjects ?? [])),
+        errors: responses.flatMap(x => (x.result.errors ?? []))
+      },
+      success: true
     };
   }
 
