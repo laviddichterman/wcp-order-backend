@@ -68,23 +68,37 @@ interface SquareResponseBase {
 
 const SquareCallFxnWrapper = async<T extends SquareResponseBase>(apiRequestMaker: () => Promise<ApiResponse<T>>, retry = 0): Promise<SquareProviderApiCallReturnValue<T>> => {
   try {
-    const { result, ...httpResponse } = await apiRequestMaker();
-    if (SQUARE_RETRY_CONFIG.httpStatusCodesToRetry.includes(httpResponse.statusCode)) {
+    const result = await apiRequestMaker();
+    if (SQUARE_RETRY_CONFIG.httpStatusCodesToRetry.includes(result.statusCode)) {
       if (retry < SQUARE_RETRY_CONFIG.maxNumberOfRetries) {
         const waittime = (2 ** (retry + 1) * 10) + 1000 * (Math.random());
-        logger.warn(`Waiting ${waittime} on retry ${retry + 1} of ${SQUARE_RETRY_CONFIG.maxNumberOfRetries}`);
+        logger.warn(`In normal control flow: Waiting ${waittime} on retry ${retry + 1} of ${SQUARE_RETRY_CONFIG.maxNumberOfRetries}`);
         await new Promise((res) => setTimeout(res, waittime));
         return await SquareCallFxnWrapper(apiRequestMaker, retry + 1);
       }
     }
-    if (result.errors && result.errors.length > 0) {
-      return { success: false, result: null, error: result.errors ?? [] }
+    if (result.result.errors && result.result.errors.length > 0) {
+      logger.debug("Got to the case that we're not sure ever happens. Do we always get an exception on failure? TRAXXXSTRING");
+      return { success: false, result: null, error: result.result.errors ?? [] }
     }
-    return { success: true, result: result, error: [] };
+    return { success: true, result: result.result, error: [] };
   } catch (error) {
-    const errorDetail = `Got unknown error: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`;
-    logger.error(errorDetail);
-    return { success: false, result: null, error: [{ category: "API_ERROR", code: "INTERNAL_SERVER_ERROR", detail: 'Internal Server Error. Please reach out for assistance.' }] };
+    try {
+      if (SQUARE_RETRY_CONFIG.httpStatusCodesToRetry.includes(error.statusCode)) {
+        if (retry < SQUARE_RETRY_CONFIG.maxNumberOfRetries) {
+          const waittime = (2 ** (retry + 1) * 10) + 1000 * (Math.random());
+          logger.warn(`In catch control flow: Waiting ${waittime} on retry ${retry + 1} of ${SQUARE_RETRY_CONFIG.maxNumberOfRetries}`);
+          await new Promise((res) => setTimeout(res, waittime));
+          return await SquareCallFxnWrapper(apiRequestMaker, retry + 1);
+        }
+      }
+      return { success: false, result: null, error: error.errors as SquareError[] };
+    }
+    catch (_) {
+      const errorDetail = `Got unknown error: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`;
+      logger.error(errorDetail)
+      return { success: false, result: null, error: [{ category: "API_ERROR", code: "INTERNAL_SERVER_ERROR", detail: 'Internal Server Error. Please reach out for assistance.' }] };
+    }
   }
 }
 
