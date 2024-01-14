@@ -7,7 +7,7 @@ import { IMoney, PaymentMethod, CURRENCY, OrderPaymentAllocated } from '@wcp/wcp
 import { parseISO } from 'date-fns';
 import { StoreCreditPayment } from '@wcp/wcpshared';
 import { BigIntMoneyToIntMoney, IMoneyToBigIntMoney, MapPaymentStatus } from './SquareWarioBridge';
-import { IS_PRODUCTION } from '../utils';
+import { IS_PRODUCTION, ExponentialBackoffWaitFunction } from '../utils';
 import { ApiResponse, RetryConfiguration } from 'square/dist/types/core';
 
 export const SQUARE_BATCH_CHUNK_SIZE = process.env.WARIO_SQUARE_BATCH_CHUNK_SIZE ? parseInt(process.env.WARIO_SQUARE_BATCH_CHUNK_SIZE) : 25;
@@ -71,9 +71,7 @@ const SquareCallFxnWrapper = async<T extends SquareResponseBase>(apiRequestMaker
     const result = await apiRequestMaker();
     if (SQUARE_RETRY_CONFIG.httpStatusCodesToRetry.includes(result.statusCode)) {
       if (retry < SQUARE_RETRY_CONFIG.maxNumberOfRetries) {
-        const waittime = (2 ** (retry + 1) * 10) + 1000 * (Math.random());
-        logger.warn(`In normal control flow: Waiting ${waittime} on retry ${retry + 1} of ${SQUARE_RETRY_CONFIG.maxNumberOfRetries}`);
-        await new Promise((res) => setTimeout(res, waittime));
+        await ExponentialBackoffWaitFunction(retry, SQUARE_RETRY_CONFIG.maxNumberOfRetries);
         return await SquareCallFxnWrapper(apiRequestMaker, retry + 1);
       }
     }
@@ -86,9 +84,7 @@ const SquareCallFxnWrapper = async<T extends SquareResponseBase>(apiRequestMaker
     try {
       if (SQUARE_RETRY_CONFIG.httpStatusCodesToRetry.includes(error.statusCode)) {
         if (retry < SQUARE_RETRY_CONFIG.maxNumberOfRetries) {
-          const waittime = (2 ** (retry + 1) * 10) + 1000 * (Math.random());
-          logger.warn(`In catch control flow: Waiting ${waittime} on retry ${retry + 1} of ${SQUARE_RETRY_CONFIG.maxNumberOfRetries}`);
-          await new Promise((res) => setTimeout(res, waittime));
+          await ExponentialBackoffWaitFunction(retry, SQUARE_RETRY_CONFIG.maxNumberOfRetries);
           return await SquareCallFxnWrapper(apiRequestMaker, retry + 1);
         }
       }

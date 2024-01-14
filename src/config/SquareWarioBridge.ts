@@ -454,7 +454,8 @@ export const PrinterGroupToSquareCatalogObjectPlusDummyProduct = (locationIds: s
     presentAtLocationIds: locationIds,
     ...(versionItem !== null ? { version: versionItem } : {}),
     itemData: {
-      categoryId: squareCategoryId,
+      categories: [ {id: squareCategoryId } ],
+      reportingCategory: {id: squareCategoryId },
       availableElectronically: true,
       availableForPickup: true,
       availableOnline: true,
@@ -558,7 +559,7 @@ export const ProductInstanceToSquareCatalogObject = (
     presentAtLocationIds: locationIds,
     ...(versionItem !== null ? { version: versionItem } : {}),
     itemData: {
-      ...(printerGroup ? { categoryId: GetSquareIdFromExternalIds(printerGroup.externalIDs, 'CATEGORY')! } : {}),
+      ...(printerGroup ? { categories: [ { id: GetSquareIdFromExternalIds(printerGroup.externalIDs, 'CATEGORY')! } ], reportingCategory: { id: GetSquareIdFromExternalIds(printerGroup.externalIDs, 'CATEGORY')!} } : {}),
       abbreviation: productInstance.shortcode.slice(0, 24),
       availableElectronically: true,
       availableForPickup: true,
@@ -655,6 +656,7 @@ export const ModifierOptionPlacementsAndQualifiersToSquareCatalogObjects = (loca
     ...(versionLeft !== null ? { version: versionLeft } : {}),
     modifierData: {
       name: `L) ${option.displayName}`,
+      // todo kitchenName: `L) ${option.shortcode}`,
       ordinal: baseOrdinal + 1,
       modifierListId: modifierListId,
       priceMoney: IMoneyToBigIntMoney(option.price),
@@ -667,6 +669,7 @@ export const ModifierOptionPlacementsAndQualifiersToSquareCatalogObjects = (loca
     ...(versionRight !== null ? { version: versionRight } : {}),
     modifierData: {
       name: `R) ${option.displayName}`,
+      // todo kitchenName: `R) ${option.shortcode}`,
       ordinal: baseOrdinal + 3,
       modifierListId: modifierListId,
       priceMoney: IMoneyToBigIntMoney(option.price),
@@ -681,6 +684,7 @@ export const ModifierOptionPlacementsAndQualifiersToSquareCatalogObjects = (loca
     ...(versionWhole !== null ? { version: versionWhole } : {}),
     modifierData: {
       name: option.displayName,
+      // todo kitchenName: `${option.shortcode}`,
       ordinal: baseOrdinal + 2,
       modifierListId: modifierListId,
       priceMoney: IMoneyToBigIntMoney(option.price),
