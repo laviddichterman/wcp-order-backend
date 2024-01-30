@@ -104,8 +104,9 @@ export class WApp {
   private initializeMiddlewares() {
     this.app.use(idempotency());
     this.app.use(cors({ origin: ORIGINS }));
-    this.app.use(express.json());
-    this.app.use(express.urlencoded({ extended: false }));
+    this.app.use(express.json({ limit: '5mb' }));
+    this.app.use(express.urlencoded({ extended: false, limit: '5mb' }));
+
     this.app.use(expressWinston.logger({
       winstonInstance: logger,
       msg: '{{res.statusCode}} {{req.method}} {{req.url}} {{res.responseTime}}ms',

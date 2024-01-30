@@ -17,7 +17,9 @@ import {
   CatalogGenerator,
   ICatalogSelectorWrapper,
   KeyValue,
-  PrinterGroup
+  PrinterGroup,
+  IProductModifier,
+  ProductModifierEntry
 } from "@wcp/wcpshared";
 import DBVersionModel from '../models/DBVersionSchema';
 import { WCategoryModel } from '../models/catalog/category/WCategorySchema';
@@ -37,16 +39,42 @@ import { SquareProviderInstance, SQUARE_BATCH_CHUNK_SIZE } from "./square";
 import { GenerateSquareReverseMapping, GetNonSquareExternalIds, GetSquareExternalIds, GetSquareIdIndexFromExternalIds, IdMappingsToExternalIds, ModifierTypeToSquareCatalogObject, PrinterGroupToSquareCatalogObjectPlusDummyProduct, ProductInstanceToSquareCatalogObject } from "./SquareWarioBridge";
 import { CatalogIdMapping, CatalogObject } from "square";
 import { FilterQuery } from "mongoose";
+import { IsSetOfUniqueStrings } from "../utils";
 
+type CreateIProduct = Omit<IProduct, 'id' | 'baseProductId'>; // CompleteProductWithoutIDs
+type UpdateIProduct = (Pick<IProduct, 'id'> & Partial<Omit<IProduct, 'id'>>); // PartialProductWithIDs
+// aka CompleteProductInstanceWithoutIDsOrPartialProductInstanceWithIDs
+type CreateIProductInstance = Omit<IProductInstance, 'id' | 'productId'>;
+type UpdateIProductUpdateIProductInstance = Pick<IProductInstance, 'id'> & Partial<Omit<IProductInstance, 'id' | 'productId'>>;
+type CreateProductBatch = { product: CreateIProduct; instances: CreateIProductInstance[] };
+type UpdateProductBatch = { product: UpdateIProduct; instances: (CreateIProductInstance | UpdateIProductUpdateIProductInstance)[] };
+export type UpsertProductBatch = (CreateProductBatch | UpdateProductBatch);
+function isUpdateProduct(batch: (CreateProductBatch | UpdateProductBatch)): batch is UpdateProductBatch {
+  return (batch.product as UpdateIProduct).id !== undefined;
+}
+function isUpdateProductInstance(instance: (CreateIProductInstance | UpdateIProductUpdateIProductInstance)): instance is UpdateIProductUpdateIProductInstance {
+  return (instance as UpdateIProductUpdateIProductInstance).id !== undefined;
+}
 const SUPPRESS_SQUARE_SYNC = process.env.WARIO_SUPPRESS_SQUARE_INIT_SYNC === '1' || process.env.WARIO_SUPPRESS_SQUARE_INIT_SYNC === 'true';
 const FORCE_SQUARE_CATALOG_REBUILD_ON_LOAD = process.env.WARIO_FORCE_SQUARE_CATALOG_REBUILD_ON_LOAD === '1' || process.env.WARIO_SUPPRESS_SQUARE_INIT_SYNC === 'true';
 
-const ValidateProductModifiersFunctionsCategories = function (modifiers: { mtid: string; enable: string | null; }[], category_ids: string[], catalog: CatalogProvider) {
+/** checks that all passed categories, modifiers, functions, printer group ids exist */
+const ValidateProductModifiersFunctionsCategoriesPrinterGroups = function (modifiers: { mtid: string; enable: string | null; }[], category_ids: string[], printer_group_ids: string[], catalog: CatalogProvider) {
   const found_all_modifiers = modifiers.map(entry =>
     catalog.ModifierTypes.some(x => x.id === entry.mtid) &&
     (entry.enable === null || Object.hasOwn(catalog.ProductInstanceFunctions, entry.enable))).every(x => x === true);
   const found_all_categories = category_ids.map(cid => Object.hasOwn(catalog.Categories, cid)).every(x => x === true);
-  return found_all_categories && found_all_modifiers;
+  const found_all_printer_groups = printer_group_ids.map(pgid => Object.hasOwn(catalog.PrinterGroups, pgid)).every(x => x === true);
+  return found_all_categories && found_all_modifiers && found_all_printer_groups;
+}
+/**
+ * checks that a passed instance doesn't explicitly declare a modifier that isn't allowed
+ * TODO: move this to WCPShared 
+ */
+const ValidateModifiersForInstance = function (productModifierSpecification: IProductModifier[], instanceModifierSpecification: ProductModifierEntry[]) {
+  const mtidsInInstanceSpec = new Set(...instanceModifierSpecification.map((x) => x.modifierTypeId));
+  const mtidsInProductSpec = new Set(...productModifierSpecification.map(x => x.mtid));
+  return new Array(...mtidsInInstanceSpec).filter(x => !mtidsInProductSpec.has(x)).length === 0;
 }
 
 const LocationsConsidering3pFlag = (is3p: boolean) => [
@@ -892,7 +920,7 @@ export class CatalogProvider implements WProvider {
 
   BatchUpdateModifierOption = async (batches: UpdateModifierOptionProps[]) => {
     logger.info(`Request to update ModifierOption(s) ${batches.map(b => `ID: ${b.id}, updates: ${JSON.stringify(b.modifierOption)}`).join(", ")}`);
-    if (batches.length !== new Set(batches.map(b=>b.modifierTypeId)).size) {
+    if (IsSetOfUniqueStrings(batches.map(b => b.modifierTypeId))) {
       // Note: this checks for duplicate modifier types in the batches, but at some point the thought was that we couldn't be updating two single select modifier options in the same type. 
       // If the next error fails too many cases, revisit the scope of the check on the next line.
       const errorDetail = `Request for multiple option update batches from the same modifier type.`;
@@ -990,19 +1018,19 @@ export class CatalogProvider implements WProvider {
       return doc.toObject();
     }));
 
-    const updatedOptions = batchesInfo.map(x=>x.batch.id);
+    const updatedOptions = batchesInfo.map(x => x.batch.id);
     // After we've updated the modifiers, we need to rebuild all products with the said modifier option(s) since the ordinal and price might have changed
     // TODO: verify we don't need to update products that could add that modifier too, like any product class with the modifier type enabled on it
     const product_instances_to_update = await WProductInstanceModel.find(
       { "modifiers.options": { $elemMatch: { "optionId": { $in: updatedOptions } } } }).exec();
-      product_instances_to_update.map(x=>x.id)
+    product_instances_to_update.map(x => x.id)
     const batchProductInstanceUpdates = product_instances_to_update.map((pi) => ({
-        piid: pi.id,
-        product: this.#catalog.products[pi.productId]!.product,
-        productInstance: {
-          modifiers: pi.modifiers
-        }
-      }));
+      piid: pi.id,
+      product: this.#catalog.products[pi.productId]!.product,
+      productInstance: {
+        modifiers: pi.modifiers
+      }
+    }));
 
     await this.SyncOptions();
     if (batchProductInstanceUpdates.length > 0) {
@@ -1012,7 +1040,7 @@ export class CatalogProvider implements WProvider {
     }
 
     this.RecomputeCatalogAndEmit();
-    
+
     return updated;
   };
 
@@ -1052,145 +1080,260 @@ export class CatalogProvider implements WProvider {
   }
 
   CreateProduct = async (product: Omit<IProduct, 'id' | 'baseProductId'>, instances: Omit<IProductInstance, 'id' | 'productId'>[]) => {
-    if (!ValidateProductModifiersFunctionsCategories(product.modifiers, product.category_ids, this) || instances.length === 0) {
-      return null;
-    }
-    // we need to filter these external IDs because it'll interfere with adding the new product to the catalog
-    const adjustedProduct: Omit<IProduct, 'id' | 'baseProductId'> = { ...product, externalIDs: GetNonSquareExternalIds(product.externalIDs) };
-    const adjustedInstances: Omit<IProductInstance, 'id' | 'productId'>[] = instances.map(x => ({ ...x, externalIDs: GetNonSquareExternalIds(x.externalIDs) }))
-
-    // first add the stuff to square so we can write to the DB in two operations
-    const catalogObjects = adjustedInstances.map((pi, i) =>
-      ProductInstanceToSquareCatalogObject(
-        LocationsConsidering3pFlag(product.displayFlags.is3p),
-        adjustedProduct,
-        pi,
-        product.printerGroup ? this.#printerGroups[product.printerGroup] : null,
-        this.CatalogSelectors, [], ('000' + i).slice(-3)));
-    const upsertResponse = await SquareProviderInstance.BatchUpsertCatalogObjects(chunk(catalogObjects, SQUARE_BATCH_CHUNK_SIZE).map(x => ({ objects: x })));
-    if (!upsertResponse.success) {
-      logger.error(`Failed to save square products, got errors: ${JSON.stringify(upsertResponse.error)}`);
-      return null;
-    }
-    const mappings = (upsertResponse.result.idMappings ?? []);
-
-    const productDoc = new WProductModel(adjustedProduct);
-    const instancesDocs = adjustedInstances.map((x, i) => new WProductInstanceModel({
-      ...x,
-      productId: productDoc.id,
-      externalIDs: [...x.externalIDs, ...IdMappingsToExternalIds(mappings, ('000' + i).slice(-3))]
-    }))
-    productDoc.baseProductId = instancesDocs[0].id;
-    await productDoc.save();
-    logger.debug(`Saved new WProductModel: ${JSON.stringify(productDoc.toObject())}`);
-    const bulkWriteResult = await WProductInstanceModel.bulkWrite(instancesDocs.map(o => ({
-      insertOne: {
-        document: o
-      }
-    })));
-    logger.debug(`Instances creation result: ${JSON.stringify(bulkWriteResult)}`);
-    await Promise.all([this.SyncProducts(), this.SyncProductInstances()]);
-
-    this.RecomputeCatalogAndEmit();
-    return productDoc.toObject();
+    const result = await this.BatchUpsertProduct([{ product: product, instances }]);
+    return result ? result[0] : null;
   };
 
-  // BulkUpsertProduct = async (batches: { 
-  //   product: Omit<IProduct, 'id' | 'baseProductId'> & Partial<Pick<IProduct, 'id' | 'baseProductId'>>, 
-  //   instances: (Omit<IProductInstance, 'id' | 'productId'> & Partial<Pick<IProductInstance, 'id' | 'productId'>>)[] 
-  // }[]) => {
-  //   if (!ValidateProductModifiersFunctionsCategories(
-  //     batches.flatMap(x=>x.product.modifiers), 
-  //     batches.flatMap(x=>x.product.category_ids), this) || 
-  //     batches.reduce((acc, b)=> acc || ((b.product.id === undefined || b.product.baseProductId === undefined) && b.instances.length === 0), false)) {
-  //     return null;
-  //   }
-  //   // we need to filter these external IDs because it'll interfere with adding the new product to the catalog
+  /**
+   * Upsert of multiple products classes and their instances. 
+   * an IProduct to update can only appear once in a set of batches
+   * an IProductInstance being updated must belong to its parent IProduct
+   * an IProductInstance being updated must only appear once in the instances array
+   * If any of these preconditions are not met, the whole batch operation is rejected 
+   * NOTE: UNSUPPORTED doing an update which adds product instances and setting one of those instances to the new base product instance
+   * @param batches 
+   * @returns null in case that request validation fails, otherwise returns the updated products and instances
+   */
+  BatchUpsertProduct = async (batches: UpsertProductBatch[]): Promise<{ product: IProduct; instances: IProductInstance[] }[] | null> => {
+    if (!ValidateProductModifiersFunctionsCategoriesPrinterGroups(
+      batches.flatMap(x => x.product.modifiers || []), // check invalid mods
+      batches.flatMap(x => x.product.category_ids || []), // check invalid categories
+      batches.reduce((pgids, x) => x.product.printerGroup ? [...pgids, x.product.printerGroup] : pgids, [] satisfies string[]), // check invalid printer groups
+      this)) {
+      return null;
+    }
+    // split out the two classes of operations
+    // keep track by using indexed batches
+    const indexedBatches = batches.map((x, i) => ({ ...x, index: i }));
+    const updateBatches = (indexedBatches.filter(b => isUpdateProduct(b)) as (UpdateProductBatch & { index: number; })[]);
+    const insertBatches = (indexedBatches.filter(b => !isUpdateProduct(b)) as (CreateProductBatch & { index: number; })[]);
+    if (!IsSetOfUniqueStrings(updateBatches.map(x => x.product.id)) || //an IProduct to update can only appear once, otherwise an error is returned.
+      updateBatches.reduce((acc, b) => {
+        const updateIProductInstances = (b.instances.filter(b => isUpdateProductInstance(b)) as UpdateIProductUpdateIProductInstance[]);
+        const insertInstances = b.instances.filter(b => !isUpdateProductInstance(b)) as CreateIProductInstance[];
+        return (acc || this.#catalog.products[b.product.id] === undefined || // check product being updated exists
+          updateIProductInstances.reduce((instanceParentAcc, ins) => instanceParentAcc ||
+            this.#catalog.productInstances[ins.id] === undefined || // IProductInstance being updated must exist
+            this.#catalog.productInstances[ins.id].productId !== b.product.id, false) || // IProductInstance being updated must belong to its parent IProduct
+          !IsSetOfUniqueStrings(updateIProductInstances.map(x => x.id)) || // IProductInstance being updated must only appear once in the instances array
+          updateIProductInstances.reduce((instanceAcc, ins) => instanceAcc || !ValidateModifiersForInstance((b.product.modifiers ?? this.#catalog.products[b.product.id].product.modifiers ?? []), this.#catalog.productInstances[ins.id].modifiers ?? ins.modifiers ?? []), false) || // for product update check product update instances have valid modifier spec
+          insertInstances.reduce((instanceAcc, ins) => instanceAcc || !ValidateModifiersForInstance((b.product.modifiers ?? this.#catalog.products[b.product.id].product.modifiers ?? []), ins.modifiers ?? []), false) || // for product update check product insert instances have valid modifier spec
+          insertBatches.reduce((acc, b) => acc || b.instances.length === 0 || // check product add has at least one instance
+            b.instances.reduce((instanceAcc, ins) => instanceAcc || !ValidateModifiersForInstance(b.product.modifiers, ins.modifiers), false), false)); // for product add check product instances have valid modifier spec
+      }, false)) {
+      return null;
+    }
+    // validation passed! on to the work
 
-  //   const adjustedProduct: Omit<IProduct, 'id' | 'baseProductId'> = { ...product, externalIDs: GetNonSquareExternalIds(product.externalIDs) };
-  //   const adjustedInstances: Omit<IProductInstance, 'id' | 'productId'>[] = instances.map(x => ({ ...x, externalIDs: GetNonSquareExternalIds(x.externalIDs) }))
+    const catalogObjectsForUpsert: CatalogObject[] = [];
+    const existingSquareObjects: CatalogObject[] = [];
+    const existingSquareExternalIds: KeyValue[] = [];
+    // these need to be deleted from square since they were previously not hidden from POS and now they are
+    const externalIdsToDelete: KeyValue[] = [];
 
-  //   // first add the stuff to square so we can write to the DB in two operations
-  //   const catalogObjects = adjustedInstances.map((pi, i) =>
-  //     ProductInstanceToSquareCatalogObject(
-  //       LocationsConsidering3pFlag(product.displayFlags.is3p),
-  //       adjustedProduct,
-  //       pi,
-  //       product.printerGroup ? this.#printerGroups[product.printerGroup] : null,
-  //       this.CatalogSelectors, [], ('000' + i).slice(-3)));
-  //   const upsertResponse = await SquareProviderInstance.BatchUpsertCatalogObjects(chunk(catalogObjects, SQUARE_BATCH_CHUNK_SIZE).map(x => ({ objects: x })));
-  //   if (!upsertResponse.success) {
-  //     logger.error(`Failed to save square products, got errors: ${JSON.stringify(upsertResponse.error)}`);
-  //     return null;
-  //   }
-  //   const mappings = (upsertResponse.result.idMappings ?? []);
+    // gather IProducts needing update in our DB, IProductInstances needing update in our DB, and products needing upsert in the square catalog
+    const adjustedUpdateBatches = updateBatches.map((b, i) => {
+      const oldProductEntry = this.Catalog.products[b.product.id];
+      let removedModifierTypes: string[] = [];
+      let addedModifierTypes = false;
+      const adjustedPrice = b.product.price && b.product.price !== oldProductEntry.product.price ? b.product.price : null;
+      const adjustedPrinterGroup = b.product.printerGroup !== oldProductEntry.product.printerGroup;
+      if (b.product.modifiers) {
+        const oldModifierTypes = oldProductEntry.product.modifiers.map(x => x.mtid);
+        const newModifierTypes = b.product.modifiers.map(x => x.mtid);
+        removedModifierTypes = oldModifierTypes.filter(x => !newModifierTypes.includes(x));
+        addedModifierTypes = newModifierTypes.filter(x => !oldModifierTypes.includes(x)).length > 0;
+      }
+      const mergedProduct = { ...oldProductEntry.product, ...b.product };
 
-  //   const productDoc = new WProductModel(adjustedProduct);
-  //   const instancesDocs = adjustedInstances.map((x, i) => new WProductInstanceModel({
-  //     ...x,
-  //     productId: productDoc.id,
-  //     externalIDs: [...x.externalIDs, ...IdMappingsToExternalIds(mappings, ('000' + i).slice(-3))]
-  //   }))
-  //   productDoc.baseProductId = instancesDocs[0].id;
-  //   await productDoc.save();
-  //   logger.debug(`Saved new WProductModel: ${JSON.stringify(productDoc.toObject())}`);
-  //   const bulkWriteResult = await WProductInstanceModel.bulkWrite(instancesDocs.map(o => ({
-  //     insertOne: {
-  //       document: o
-  //     }
-  //   })));
-  //   logger.debug(`Instances creation result: ${JSON.stringify(bulkWriteResult)}`);
-  //   await Promise.all([this.SyncProducts(), this.SyncProductInstances()]);
+      const insertInstances = b.instances.filter(b => !isUpdateProductInstance(b)) as CreateIProductInstance[];
+      const adjustedInsertInstances: Omit<IProductInstance, 'id'>[] = insertInstances.map(x => {
+        // we need to filter these external IDs because it'll interfere with adding the new product to the catalog
+        return { ...x, productId: b.product.id, externalIDs: GetNonSquareExternalIds(x.externalIDs) };
 
-  //   this.RecomputeCatalogAndEmit();
-  //   return productDoc.toObject();
-  // };
+      });
+      // add the insert instances
+      catalogObjectsForUpsert.push(...adjustedInsertInstances.filter(pi => pi.displayFlags.hideFromPos !== true).map((pi, k) =>
+        ProductInstanceToSquareCatalogObject(
+          LocationsConsidering3pFlag(mergedProduct.displayFlags.is3p),
+          mergedProduct,
+          pi,
+          mergedProduct.printerGroup ? this.#printerGroups[mergedProduct.printerGroup] : null,
+          this.CatalogSelectors, [], ('0000000' + ((i * 1000) + k)).slice(-7))));
+      // aggregate explicit and implicit updates of product instances, and what square products might need deletion
+      const explicitUpdateInstances = b.instances.filter(b => isUpdateProductInstance(b)) as UpdateIProductUpdateIProductInstance[];
+      const updateInstanceIds = explicitUpdateInstances.map(x => x.id);
+      const implicitUpdateInstances: IProductInstance[] = oldProductEntry.instances
+        .filter(x => !updateInstanceIds.includes(x))
+        .map((piId) => this.Catalog.productInstances[piId]!)
+        .filter(pi => adjustedPrice !== null ||
+          adjustedPrinterGroup ||
+          addedModifierTypes ||
+          pi.modifiers.filter(mod => removedModifierTypes.includes(mod.modifierTypeId)).length > 0)
+        .map(pi => ({ ...pi, modifiers: pi.modifiers.filter(x => !removedModifierTypes.includes(x.modifierTypeId)) }));
+      externalIdsToDelete.push(...explicitUpdateInstances.map(pi => this.Catalog.productInstances[pi.id]!.displayFlags.hideFromPos === false && pi.displayFlags?.hideFromPos === true ? GetSquareExternalIds(pi.externalIDs ?? this.Catalog.productInstances[pi.id]!.externalIDs) : []).flat());
+      const adjustedUpdatedInstances: IProductInstance[] = [
+        ...implicitUpdateInstances,
+        ...explicitUpdateInstances.map(pi => {
+          const oldInstance = this.Catalog.productInstances[pi.id]!;
+          // these need to be deleted from square since they were previously not hidden from POS and now they are
+          const needToDeleteSquareCatalogItem = oldInstance.displayFlags.hideFromPos === false && pi.displayFlags?.hideFromPos === true;
+          const mergedExternalIds = pi.externalIDs ?? this.Catalog.productInstances[pi.id]!.externalIDs;
+          const newExternalIds = needToDeleteSquareCatalogItem ? GetNonSquareExternalIds(mergedExternalIds) : mergedExternalIds;
+          if (needToDeleteSquareCatalogItem) {
+            externalIdsToDelete.push(...GetSquareExternalIds(mergedExternalIds));
+          }
+          return { ...oldInstance, ...pi, externalIDs: newExternalIds };
+        })];
+      existingSquareExternalIds.push(...adjustedUpdatedInstances.map((pi) => GetSquareExternalIds(pi.externalIDs)).flat());
+      return { product: mergedProduct, updateInstances: adjustedUpdatedInstances, insertInstances: adjustedInsertInstances, batchIter: i, index: b.index };
+    });
+
+    const batchIter = adjustedUpdateBatches.length;
+    // first grab all the square catalog objects from the external IDs from products (and instances) being updated
+    // by getting these first, we can avoid modifiying anything if we get an error here
+    if (existingSquareExternalIds.length > 0) {
+      const batchRetrieveCatalogObjectsResponse = await SquareProviderInstance.BatchRetrieveCatalogObjects(existingSquareExternalIds.map(x => x.value), false);
+      if (!batchRetrieveCatalogObjectsResponse.success) {
+        logger.error(`Getting current square CatalogObjects failed with ${JSON.stringify(batchRetrieveCatalogObjectsResponse.error)}`);
+        return null;
+      }
+      existingSquareObjects.push(...batchRetrieveCatalogObjectsResponse.result.objects ?? []);
+    }
+
+    // now that we have square catalog items we can add on the insert and update objects
+    catalogObjectsForUpsert.push(...adjustedUpdateBatches.flatMap((b) => {
+      const updateCatalogObjects = b.updateInstances.flatMap((pi, j) => {
+        return pi.displayFlags.hideFromPos ? [] : [ProductInstanceToSquareCatalogObject(
+          LocationsConsidering3pFlag(b.product.displayFlags.is3p),
+          b.product,
+          pi,
+          b.product.printerGroup ? this.#printerGroups[b.product.printerGroup] : null,
+          this.CatalogSelectors, existingSquareObjects,
+          ('0000000' + (((b.batchIter) * 1000) + j)).slice(-7))];
+      });
+      const insertCatalogObjects = b.insertInstances.flatMap((pi, k) => {
+        return pi.displayFlags.hideFromPos ? [] : [ProductInstanceToSquareCatalogObject(
+          LocationsConsidering3pFlag(b.product.displayFlags.is3p),
+          b.product,
+          pi,
+          b.product.printerGroup ? this.#printerGroups[b.product.printerGroup] : null,
+          this.CatalogSelectors, [],
+          ('0000000' + (((b.batchIter) * 1000) + b.updateInstances.length + k)).slice(-7))];
+      });
+      return [...updateCatalogObjects, ...insertCatalogObjects];
+    }));
+
+    const adjustedInsertBatches = insertBatches.map((b, i) => {
+      // we're inserting a new product and instances. the first instance is the base product instance
+      // we need to filter these square specific external IDs because it'll interfere with adding the new product to the catalog
+      const adjustedProduct: Omit<IProduct, 'id' | 'baseProductId'> = { ...b.product, externalIDs: GetNonSquareExternalIds(b.product.externalIDs) };
+      const adjustedInstances: Omit<IProductInstance, 'id' | 'productId'>[] = b.instances.map(x => ({ ...x, externalIDs: GetNonSquareExternalIds(x.externalIDs) }))
+      // first add the stuff to square so we can write to the DB in two operations
+      catalogObjectsForUpsert.push(...adjustedInstances.filter(pi => pi.displayFlags.hideFromPos !== true).map((pi, j) =>
+        ProductInstanceToSquareCatalogObject(
+          LocationsConsidering3pFlag(adjustedProduct.displayFlags.is3p),
+          adjustedProduct,
+          pi,
+          adjustedProduct.printerGroup ? this.#printerGroups[adjustedProduct.printerGroup] : null,
+          this.CatalogSelectors, [], ('0000000' + (((i + batchIter + 2) * 1000) + j)).slice(-7))));
+      return { product: adjustedProduct, instances: adjustedInstances, batchIter: i + batchIter + 2, index: i };
+    });
+
+    let mappings: CatalogIdMapping[];
+    if (catalogObjectsForUpsert.length) {
+      const upsertResponse = await SquareProviderInstance.BatchUpsertCatalogObjects(chunk(catalogObjectsForUpsert, SQUARE_BATCH_CHUNK_SIZE).map(x => ({ objects: x })));
+      if (!upsertResponse.success) {
+        logger.error(`Failed to save square products, got errors: ${JSON.stringify(upsertResponse.error)}`);
+        return null;
+      }
+      mappings = (upsertResponse.result.idMappings ?? []);
+    }
+
+    const bulkUpdate = adjustedUpdateBatches.map((b) => {
+      return {
+        index: b.index,
+        product: b.product,
+        instances: b.updateInstances.map((pi, j) => {
+          return {
+            ...pi,
+            productId: b.product.id,
+            externalIDs: [...pi.externalIDs, ...IdMappingsToExternalIds(mappings, ('0000000' + ((b.batchIter * 1000) + j)).slice(-7))]
+          }
+        })
+      };
+    }) as { product: IProduct, instances: IProductInstance[], index: number }[];
+    const updateBatchesInserts = adjustedUpdateBatches.map((b) => {
+      return {
+        index: b.index,
+        instances: b.insertInstances.map((pi, j) => {
+          return new WProductInstanceModel({
+            ...pi,
+            productId: b.product.id,
+            externalIDs: [...pi.externalIDs, ...IdMappingsToExternalIds(mappings, ('0000000' + ((b.batchIter * 1000) + b.updateInstances.length + j)).slice(-7))]
+          });
+        })
+      };
+    });
+    const insertBatchInserts = adjustedInsertBatches.map((b) => {
+      const productDoc = new WProductModel(b.product);
+      const batchInstanceDocs = b.instances.map((x, j) => new WProductInstanceModel({
+        ...x,
+        productId: productDoc.id,
+        externalIDs: [...x.externalIDs, ...IdMappingsToExternalIds(mappings, ('0000000' + ((b.batchIter * 1000) + j)).slice(-7))]
+      }));
+      productDoc.baseProductId = batchInstanceDocs[0].id;
+      return { product: productDoc, instances: batchInstanceDocs, index: b.index };
+    })
+    if (insertBatchInserts.length) {
+      const bulkProductInsert = await WProductModel.insertMany(insertBatchInserts.map(o => o.product));
+      logger.debug(`Saved new WProductModels: ${JSON.stringify(bulkProductInsert.map(x => x.toObject()))}`);
+    }
+    const productInstanceInserts = [...insertBatchInserts, ...updateBatchesInserts];
+    if (productInstanceInserts.length) {
+      const bulkProductInstanceInsert = await WProductInstanceModel.insertMany(([...insertBatchInserts, ...updateBatchesInserts]).flatMap(x => x.instances));
+      logger.debug(`Instances creation result: ${JSON.stringify(bulkProductInstanceInsert.map(x => x.toObject()))}`);
+    }
+    if (bulkUpdate.length) {
+      // @ts-ignore
+      const bulkProductUpdate = await WProductModel.bulkWrite(bulkUpdate.map(b => ({
+        updateOne: {
+          filter: { _id: b.product.id },
+          update: b.product
+        }
+      })));
+      logger.info(`Bulk update of WProductModel successful: ${JSON.stringify(bulkProductUpdate)}`);
+      // @ts-ignore
+      const bulkProductInstanceUpdate = await WProductInstanceModel.bulkWrite(bulkUpdate.flatMap(b => b.instances.map(pi => ({
+        updateOne: {
+          filter: { _id: pi.id },
+          update: pi
+        }
+      }))));
+      logger.info(`Bulk update of WProductInstanceModel successful: ${JSON.stringify(bulkProductInstanceUpdate)}`);
+    }
+    await Promise.all([this.SyncProducts(), this.SyncProductInstances()]);
+    this.RecomputeCatalogAndEmit();
+
+    const reconstructedBatches: Record<number, { product: IProduct; instances: IProductInstance[]; index: number; }> = {};
+    insertBatchInserts.forEach(b => {
+      const product = b.product.toObject();
+      const instances = b.instances.map(x => x.toObject());
+      reconstructedBatches[b.index] = { product, instances, index: b.index };
+    });
+    bulkUpdate.forEach(b => {
+      reconstructedBatches[b.index] = { product: b.product, instances: b.instances, index: b.index };
+    });
+    updateBatchesInserts.forEach(b => {
+      reconstructedBatches[b.index].instances = [...b.instances.map(x => x.toObject()), ...reconstructedBatches[b.index].instances];
+    });
+    return Object.values(reconstructedBatches).sort((a, b) => a.index - b.index).map(x => ({ product: x.product, instances: x.instances.sort((a, b) => a.ordinal - b.ordinal) }));
+  };
 
   UpdateProduct = async (pid: string, product: Partial<Omit<IProduct, 'id'>>) => {
-    if (!ValidateProductModifiersFunctionsCategories(product.modifiers ?? [], product.category_ids ?? [], this)) {
-      return null;
-    }
-    const oldProductEntry = this.Catalog.products[pid];
-    const updated = await WProductModel
-      .findByIdAndUpdate(pid, product, { new: true })
-      .exec();
-    if (!updated) {
-      return null;
-    }
-    let removedModifierTypes: string[] = [];
-    let addedModifierTypes = false;
-    const adjustedPrice = product.price && product.price !== oldProductEntry.product.price ? product.price : null;
-    const adjustedPrinterGroup = product.printerGroup !== oldProductEntry.product.printerGroup;
-    if (product.modifiers) {
-      const oldModifierTypes = oldProductEntry.product.modifiers.map(x => x.mtid);
-      const newModifierTypes = product.modifiers.map(x => x.mtid);
-      removedModifierTypes = oldModifierTypes.filter(x => !newModifierTypes.includes(x));
-      addedModifierTypes = newModifierTypes.filter(x => !oldModifierTypes.includes(x)).length > 0;
-    }
-
-    const batchProductInstanceUpdates = oldProductEntry.instances
-      .map((piId) => this.Catalog.productInstances[piId]!)
-      .filter(pi => adjustedPrice !== null ||
-        adjustedPrinterGroup ||
-        addedModifierTypes ||
-        pi.modifiers.filter(mod => removedModifierTypes.includes(mod.modifierTypeId)).length > 0)
-      .map((pi) => ({
-        piid: pi.id,
-        product: { modifiers: updated.modifiers, price: updated.price, printerGroup: updated.printerGroup, disabled: updated.disabled, displayFlags: updated.displayFlags },
-        productInstance: {
-          modifiers: pi.modifiers.filter(x => !removedModifierTypes.includes(x.modifierTypeId))
-        }
-      }));
-
-    if (batchProductInstanceUpdates.length > 0) {
-      await this.BatchUpdateProductInstance(batchProductInstanceUpdates, true);
-      await this.SyncProductInstances();
-    }
-
-    await this.SyncProducts();
-    this.RecomputeCatalogAndEmit();
-    return updated.toObject();
-  };
+    const result = await this.BatchUpsertProduct([{ product: { id: pid, ...product }, instances: [] }]);
+    return result ? result[0].product : null;
+  }
 
   BatchDeleteProduct = async (p_ids: string[], suppress_catalog_recomputation: boolean = false) => {
     logger.debug(`Removing Product(s) ${p_ids.join(", ")}`);

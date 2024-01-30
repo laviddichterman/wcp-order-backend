@@ -6,7 +6,7 @@ import logger from '../logging';
 
 import IExpressController from '../types/IExpressController';
 import { CheckJWT, ScopeDeleteCatalog, ScopeWriteCatalog } from '../config/authorization';
-import { CatalogProviderInstance } from '../config/catalog_provider';
+import { CatalogProviderInstance, UpsertProductBatch } from '../config/catalog_provider';
 import { isFulfillmentDefined, isValidDisabledValue } from '../types/Validations';
 
 const ProductClassesByIdsInBodyValidationChain = [
@@ -80,14 +80,14 @@ const ProductClassValidationChain = (prefix: string) => [
 ];
 
 const AddProductClassValidationChain = (prefix: string) => [
-  ...ProductClassValidationChain(prefix),
-  body(`${prefix}instances`).isArray({ min: 1 }),
-  ...ProductInstanceValidationChain(`${prefix}instances.*.`)
+  ...ProductClassValidationChain(`${prefix}.product.`),
+  body(`${prefix}.instances`).isArray({ min: 1 }),
+  ...ProductInstanceValidationChain(`${prefix}.instances.*.`)
 ];
 
 const BatchAddProductClassValidationChain = [
   body().isArray({min: 1}),
-  ...AddProductClassValidationChain('*.')
+  ...AddProductClassValidationChain('*')
 ];
 
 const EditProductClassValidationChain = [
@@ -117,7 +117,7 @@ export class ProductController implements IExpressController {
 
   private initializeRoutes() {
     this.router.post(`${this.path}`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(AddProductClassValidationChain('')), this.postProductClass);
-    //this.router.post(`${this.path}batch`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(BatchAddProductClassValidationChain), this.postProductClass);
+    this.router.post(`${this.path}batch`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(BatchAddProductClassValidationChain), this.batchPostProducts);
     this.router.patch(`${this.path}/:pid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(EditProductClassValidationChain), this.patchProductClass);
     this.router.delete(`${this.path}/:pid`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware(ProductClassByIdValidationChain), this.deleteProductClass);
     this.router.post(`${this.path}batch/batchDelete`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware(ProductClassesByIdsInBodyValidationChain), this.batchDeleteProductClasses);
@@ -128,31 +128,46 @@ export class ProductController implements IExpressController {
   private postProductClass = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const productClass: Omit<IProduct, 'id' | 'baseProductId'> = {
-        price: req.body.price,
-        disabled: req.body.disabled ? req.body.disabled : null,
-        serviceDisable: req.body.serviceDisable || [],
-        externalIDs: req.body.externalIDs,
-        modifiers: req.body.modifiers,
-        category_ids: req.body.category_ids,
-        displayFlags: req.body.displayFlags,
-        printerGroup: req.body.printerGroup ?? null,
-        availability: req.body.availability,
-        timing: req.body.timing,
+        price: req.body.product.price,
+        disabled: req.body.product.disabled ? req.body.disabled : null,
+        serviceDisable: req.body.product.serviceDisable || [],
+        externalIDs: req.body.product.externalIDs,
+        modifiers: req.body.product.modifiers,
+        category_ids: req.body.product.category_ids,
+        displayFlags: req.body.product.displayFlags,
+        printerGroup: req.body.product.printerGroup ?? null,
+        availability: req.body.product.availability,
+        timing: req.body.product.timing,
       };
       const instances = req.body.instances;
-      const newProduct = await CatalogProviderInstance.CreateProduct(
+      const createProductResult = await CatalogProviderInstance.CreateProduct(
         productClass,
         instances
       );
-      if (!newProduct) {
+      if (!createProductResult) {
         const errorDetail = `Unable to satisfy prerequisites to create Product and instances`;
         logger.info(errorDetail);
         return res.status(404).send(errorDetail);
       }
 
-      const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/${newProduct.id}`;
+      const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/${createProductResult.product.id}`;
       res.setHeader('Location', location);
-      return res.status(201).send(newProduct);
+      return res.status(201).send(createProductResult);
+    } catch (error) {
+      return next(error)
+    }
+  }
+
+  private batchPostProducts = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const batches: UpsertProductBatch[] = req.body;
+      const createBatchesResult = await CatalogProviderInstance.BatchUpsertProduct(batches);
+      if (!createBatchesResult) {
+        const errorDetail = `Unable to satisfy prerequisites to create Product(s) and instance(s)`;
+        logger.info(errorDetail);
+        return res.status(404).send(errorDetail);
+      }
+      return res.status(201).send(createBatchesResult);
     } catch (error) {
       return next(error)
     }

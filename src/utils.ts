@@ -100,3 +100,5 @@ export const BigIntStringify = (str : any) => (
                 ? BigInt(value)
                 : value // return everything else unchanged
         ) )
+
+export const IsSetOfUniqueStrings = ( arr: string[] ) => (new Set(arr)).size === arr.length;

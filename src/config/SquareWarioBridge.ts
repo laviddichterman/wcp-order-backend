@@ -20,11 +20,11 @@ export const BigIntMoneyToIntMoney = (bigIntMoney: Money): IMoney => ({ amount: 
 
 export const IMoneyToBigIntMoney = (money: IMoney): Money => ({ amount: BigInt(money.amount), currency: money.currency });
 
-export const GetSquareExternalIds = (externalIds: KeyValue[]) => externalIds.filter(x => x.key.startsWith(WARIO_SQUARE_ID_METADATA_KEY));
-export const GetNonSquareExternalIds = (externalIds: KeyValue[]) => externalIds.filter(x => !x.key.startsWith(WARIO_SQUARE_ID_METADATA_KEY));
+export const GetSquareExternalIds = (externalIds: KeyValue[] | undefined) => (externalIds ?? []).filter(x => x.key.startsWith(WARIO_SQUARE_ID_METADATA_KEY));
+export const GetNonSquareExternalIds = (externalIds: KeyValue[] | undefined) => (externalIds ?? []).filter(x => !x.key.startsWith(WARIO_SQUARE_ID_METADATA_KEY));
 
-export const GetSquareIdIndexFromExternalIds = (externalIds: KeyValue[], specifier: string) =>
-  externalIds.findIndex(x => x.key === `${WARIO_SQUARE_ID_METADATA_KEY}${specifier}`);
+export const GetSquareIdIndexFromExternalIds = (externalIds: KeyValue[] | undefined, specifier: string) =>
+  (externalIds ?? []).findIndex(x => x.key === `${WARIO_SQUARE_ID_METADATA_KEY}${specifier}`);
 export const GetSquareIdFromExternalIds = (externalIds: KeyValue[], specifier: string): string | null => {
   const kvIdx = GetSquareIdIndexFromExternalIds(externalIds, specifier);
   return kvIdx === -1 ? null : externalIds[kvIdx].value;
