@@ -567,7 +567,7 @@ export const ProductInstanceToSquareCatalogObject = (
       isArchived: isBlanketDisabled,
       descriptionHtml: productInstance.description,
       name: productInstance.displayFlags.posName ? productInstance.displayFlags.posName : productInstance.displayName,
-      productType: "REGULAR",
+      productType: "FOOD_AND_BEV",
       taxIds: [SQUARE_TAX_RATE_CATALOG_ID],
       skipModifierScreen: product.modifiers.length === 0 || productInstance.displayFlags.order.skip_customization,
       modifierListInfo,
