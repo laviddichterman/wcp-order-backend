@@ -25,19 +25,19 @@ export class SocketIoProvider implements WProvider {
     return this.EmitFulfillmentsTo(this.socketRO, fulfillments);
   }
   EmitSettingsTo(dest: Socket | Namespace, settings: IWSettings) {
-    return this.socketRO.emit('WCP_SETTINGS', settings);
+    return dest.emit('WCP_SETTINGS', settings);
   }
   EmitSettings(settings: IWSettings) {
     return this.EmitSettingsTo(this.socketRO, settings);
   }
   EmitCatalogTo = (dest: Socket | Namespace, catalog: ICatalog) => {
-    return this.socketRO.emit('WCP_CATALOG', catalog);
+    return dest.emit('WCP_CATALOG', catalog);
   }
   EmitCatalog = (catalog: ICatalog) => {
     return this.EmitCatalogTo(this.socketRO, catalog);
   }
   EmitOrderTo = (dest: Socket | Namespace, order: WOrderInstance) => {
-    //return this.socketAuth.emit('AUTH_ORDERS', order);
+    //return dest.emit('AUTH_ORDERS', order);
   }
   EmitOrder = (order: WOrderInstance) => {
     //return this.EmitOrderTo(this.socketAuth, order);
