@@ -920,7 +920,7 @@ export class CatalogProvider implements WProvider {
 
   BatchUpdateModifierOption = async (batches: UpdateModifierOptionProps[]) => {
     logger.info(`Request to update ModifierOption(s) ${batches.map(b => `ID: ${b.id}, updates: ${JSON.stringify(b.modifierOption)}`).join(", ")}`);
-    if (IsSetOfUniqueStrings(batches.map(b => b.modifierTypeId))) {
+    if (!IsSetOfUniqueStrings(batches.map(b => b.modifierTypeId))) {
       // Note: this checks for duplicate modifier types in the batches, but at some point the thought was that we couldn't be updating two single select modifier options in the same type. 
       // If the next error fails too many cases, revisit the scope of the check on the next line.
       const errorDetail = `Request for multiple option update batches from the same modifier type.`;
