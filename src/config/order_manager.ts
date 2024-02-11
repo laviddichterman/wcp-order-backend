@@ -44,7 +44,7 @@ import {
 
 import { WProvider } from '../types/WProvider';
 
-import { formatRFC3339, format, Interval, isSameMinute, formatISO, addHours, isSameDay, subMinutes, setSeconds, setMilliseconds, isBefore, subDays } from 'date-fns';
+import { formatRFC3339, format, Interval, isSameMinute, formatISO, addHours, isSameDay, subMinutes, isBefore, subDays } from 'date-fns';
 import { GoogleProviderInstance } from "./google";
 import { SquareProviderInstance } from "./square";
 import { StoreCreditProviderInstance } from "./store_credit_provider";
@@ -52,15 +52,13 @@ import { CatalogProviderInstance } from './catalog_provider';
 import { DataProviderInstance } from './dataprovider';
 import logger from '../logging';
 import crypto from 'crypto';
-import { OrderFunctional } from "@wcp/wcpshared";
 import { WOrderInstanceModel } from "../models/orders/WOrderInstance";
 import { Order as SquareOrder } from "square";
 import { SocketIoProviderInstance } from "./socketio_provider";
 import { CreateOrderFromCart, CreateOrderForMessages, CreateOrdersForPrintingFromCart, CartByPrinterGroup, GetSquareIdFromExternalIds, BigIntMoneyToIntMoney, LineItemsToOrderInstanceCart } from "./SquareWarioBridge";
 import { FilterQuery } from "mongoose";
-import { WOrderInstanceFunctionModel } from "../models/query/order/WOrderInstanceFunction";
-import { utcToZonedTime, zonedTimeToUtc } from "date-fns-tz";
 import { calendar_v3 } from "googleapis";
+import { UTCDate } from "@date-fns/utc";
 type CrudFunctionResponseWithStatusCode = (order: WOrderInstance) => ResponseWithStatusCode<CrudOrderResponse>;
 const WCP = "Windy City Pie";
 
@@ -360,16 +358,16 @@ export class OrderManager implements WProvider {
 
   private ClearPastOrders = async () => {
     try {
-      logger.info("Clearing old orders...");
-      const now = Date.now();
-      const timeSpanAgo = subDays(zonedTimeToUtc(now, process.env.TZ!), 1);
+      const timeSpanAgoEnd = subDays(new UTCDate(), 1);
+      const timeSpanAgoStart = subDays(timeSpanAgoEnd, 1);
+      logger.info(`Clearing old orders between ${formatRFC3339(timeSpanAgoStart)} and ${formatRFC3339(timeSpanAgoEnd)}`);
       const locationsToSearch = DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_3P ? [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE, DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_3P] : [DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_ALTERNATE];
       const oldOrdersResults = await SquareProviderInstance.SearchOrders(locationsToSearch, {
-        filter: { dateTimeFilter: { updatedAt: { startAt: formatRFC3339(subDays(timeSpanAgo, 1)) } }, stateFilter: { states: ['OPEN'] } }, sort: { sortField: 'UPDATED_AT', sortOrder: 'ASC' }
+        filter: { dateTimeFilter: { updatedAt: { startAt: formatRFC3339(timeSpanAgoStart) } }, stateFilter: { states: ['OPEN'] } }, sort: { sortField: 'UPDATED_AT', sortOrder: 'ASC' }
       });
-      logger.info({oldOrdersResults});
       if (oldOrdersResults.success) {
-        const ordersToComplete = (oldOrdersResults.result.orders ?? []).filter(x => (x.fulfillments ?? []).length === 1 && isBefore(utcToZonedTime(x.fulfillments![0].pickupDetails!.pickupAt!, process.env.TZ!), timeSpanAgo));
+        logger.info(`Square old order search results: ${JSON.stringify(oldOrdersResults.result)}`);
+        const ordersToComplete = (oldOrdersResults.result.orders ?? []).filter(x => (x.fulfillments ?? []).length === 1 && isBefore(new UTCDate(x.fulfillments![0].pickupDetails!.pickupAt!), timeSpanAgoEnd));
         for (let i = 0; i < ordersToComplete.length; ++i) {
           const squareOrder = ordersToComplete[i];
           try {
@@ -398,8 +396,7 @@ export class OrderManager implements WProvider {
 
   private Query3pOrders = async () => {
     try {
-      const now = Date.now();
-      const timeSpanAgo = subMinutes(zonedTimeToUtc(now, process.env.TZ!), 10);
+      const timeSpanAgo = subMinutes(new UTCDate(), 10);
       const recentlyUpdatedOrdersResponse = await SquareProviderInstance.SearchOrders([DataProviderInstance.KeyValueConfig.SQUARE_LOCATION_3P], {
         filter: { dateTimeFilter: { updatedAt: { startAt: formatRFC3339(timeSpanAgo) } } }, sort: { sortField: 'UPDATED_AT', sortOrder: 'ASC' }
       });
@@ -412,7 +409,7 @@ export class OrderManager implements WProvider {
         const orderInstances: Omit<WOrderInstance, "id">[] = [];
         ordersToIngest.forEach(squareOrder => {
           const fulfillmentDetails = squareOrder.fulfillments![0];
-          const requestedFulfillmentTime = WDateUtils.ComputeFulfillmentTime(setMilliseconds(setSeconds(utcToZonedTime(fulfillmentDetails.pickupDetails!.pickupAt!, process.env.TZ!), 0), 0));
+          const requestedFulfillmentTime = WDateUtils.ComputeFulfillmentTime(new Date(fulfillmentDetails.pickupDetails!.pickupAt!));
           const fulfillmentTimeClampedRounded = Math.floor(requestedFulfillmentTime.selectedTime / fulfillmentConfig.timeStep) * fulfillmentConfig.timeStep;
           let adjustedFulfillmentTime = requestedFulfillmentTime.selectedTime;
           const [givenName, familyFirstLetter] = (fulfillmentDetails.pickupDetails?.recipient?.displayName ?? "ABBIE NORMAL").split(' ');
@@ -423,7 +420,7 @@ export class OrderManager implements WProvider {
             // determine what available time we have for this order
             const cartLeadTime = DetermineCartBasedLeadTime(cart, CatalogProviderInstance.CatalogSelectors.productEntry);
             const availabilityMap = WDateUtils.GetInfoMapForAvailabilityComputation([fulfillmentConfig], requestedFulfillmentTime.selectedDate, cartLeadTime);
-            const optionsForSelectedDate = WDateUtils.GetOptionsForDate(availabilityMap, requestedFulfillmentTime.selectedDate, formatISO(now))
+            const optionsForSelectedDate = WDateUtils.GetOptionsForDate(availabilityMap, requestedFulfillmentTime.selectedDate, formatISO(Date.now()))
             const foundTimeOptionIndex = optionsForSelectedDate.findIndex(x => x.value >= fulfillmentTimeClampedRounded);
             if (foundTimeOptionIndex === -1 || optionsForSelectedDate[foundTimeOptionIndex].disabled) {
               const errorDetail = `Requested fulfillment (${fulfillmentConfig.displayName}) at ${WDateUtils.MinutesToPrintTime(requestedFulfillmentTime.selectedTime)} is no longer valid and could not find suitable time. Ignoring WARIO timing and sending order for originally requested time.`;
@@ -494,7 +491,7 @@ export class OrderManager implements WProvider {
    */
   private SendOrders = async () => {
     const idempotencyKey = crypto.randomBytes(22).toString('hex');
-    const now = zonedTimeToUtc(Date.now(), process.env.TZ!)
+    const now = Date.now()
     const endOfRange = GetEndOfSendingRange(now);
     const isEndRangeSameDay = isSameDay(now, endOfRange);
     const endOfRangeAsFT = WDateUtils.ComputeFulfillmentTime(endOfRange);
@@ -502,7 +499,7 @@ export class OrderManager implements WProvider {
     const timeConstraint = isEndRangeSameDay ?
       endOfRangeAsQuery :
       { $or: [{ 'fulfillment.selectedDate': WDateUtils.formatISODate(now) }, endOfRangeAsQuery] }
-    //logger.debug(`Running SendOrders job for the time constraint: ${JSON.stringify(timeConstraint)}`);
+    // logger.debug(`Running SendOrders job for the time constraint: ${JSON.stringify(timeConstraint)}`);
     await WOrderInstanceModel.updateMany({
       status: WOrderStatus.CONFIRMED,
       'locked': null,
@@ -726,6 +723,7 @@ export class OrderManager implements WProvider {
         }
         let undoPaymentResponse;
         if (lockedOrder.status === WOrderStatus.CONFIRMED) {
+          // TODO: see if we can re-make the payment to a different order
           undoPaymentResponse = await SquareProviderInstance.RefundPayment(payment.processorId, payment.amount, reason);
         } else {
           undoPaymentResponse = await SquareProviderInstance.CancelPayment(payment.processorId);
@@ -1046,7 +1044,7 @@ export class OrderManager implements WProvider {
 
     // check if the order is confirmed or processing and within time range and send it if so
     if ((updatedOrder.status === WOrderStatus.CONFIRMED || updatedOrder.status === WOrderStatus.PROCESSING) &&
-      isBefore(WDateUtils.ComputeServiceDateTime(newTime), GetEndOfSendingRange(zonedTimeToUtc(Date.now(), process.env.TZ!)))) {
+      isBefore(WDateUtils.ComputeServiceDateTime(newTime), GetEndOfSendingRange(Date.now()))) {
       return await this.SendLockedOrder(updatedOrder, true);
     } else {
       updatedOrder.fulfillment.status = WFulfillmentStatus.PROPOSED;
@@ -1105,7 +1103,7 @@ export class OrderManager implements WProvider {
     }
 
     // check if the order is within time range and send it if so
-    const endOfRange = GetEndOfSendingRange(zonedTimeToUtc(Date.now(), process.env.TZ!));
+    const endOfRange = GetEndOfSendingRange(Date.now());
     if (isBefore(WDateUtils.ComputeServiceDateTime(lockedOrder.fulfillment), endOfRange)) {
       return await this.SendLockedOrder({ ...lockedOrder, status: WOrderStatus.CONFIRMED }, true);
     }

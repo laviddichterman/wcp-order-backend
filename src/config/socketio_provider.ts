@@ -5,7 +5,6 @@ import { CatalogProviderInstance } from './catalog_provider';
 import { DataProviderInstance } from './dataprovider';
 import WApp from '../App';
 import { format, intervalToDuration, formatDuration } from 'date-fns';
-import { zonedTimeToUtc } from 'date-fns-tz';
 import { FulfillmentConfig, ICatalog, IWSettings, WDateUtils, WOrderInstance } from '@wcp/wcpshared';
 import { SocketIoJwtAuthenticateAndAuthorize } from './authorization';
 
@@ -51,7 +50,7 @@ export class SocketIoProvider implements WProvider {
       this.socketRO = socketRO;
       this.socketRO.on('connection', (socket) => {
         ++this.clientCount;
-        const connect_time = zonedTimeToUtc(Date.now(), process.env.TZ!);
+        const connect_time = Date.now();
         socket.client.request.headers["x-real-ip"] ?
           logger.info(`CONNECTION: Client at IP: ${socket.client.request.headers["x-real-ip"]}, UA: ${socket.client.request.headers['user-agent']}.`) :
           logger.info(`CONNECTION: Client info: ${JSON.stringify(socket.client.request.headers)}.`);
@@ -62,7 +61,7 @@ export class SocketIoProvider implements WProvider {
         this.EmitCatalogTo(socket, CatalogProviderInstance.Catalog);
         socket.on('disconnect', (reason: string) => {
           --this.clientCount;
-          const formattedDuration = formatDuration(intervalToDuration({ start: connect_time, end: zonedTimeToUtc(Date.now(), process.env.TZ!) }));
+          const formattedDuration = formatDuration(intervalToDuration({ start: connect_time, end: Date.now() }));
           socket.client.request.headers["x-real-ip"] ?
             logger.info(`DISCONNECT: ${reason} after ${formattedDuration}. IP: ${socket.client.request.headers["x-real-ip"]}`) :
             logger.info(`DISCONNECT: ${reason} after ${formattedDuration}.\nClient: ${JSON.stringify(socket.client.request.headers)}`);
