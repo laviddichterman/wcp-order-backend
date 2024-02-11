@@ -392,7 +392,7 @@ export class CatalogProvider implements WProvider {
 
     const batches = Object.values(this.#catalog.products)
       .map(p => p.instances
-        .filter(piid => GetSquareIdIndexFromExternalIds(this.#catalog.productInstances[piid]!.externalIDs, "ITEM") === -1)
+        .filter(piid => { const pi = this.#catalog.productInstances[piid]; return pi && pi.displayFlags.hideFromPos !== true && GetSquareIdIndexFromExternalIds(pi.externalIDs, "ITEM") === -1; })
         .map(piid => ({ piid, product: { modifiers: p.product.modifiers, price: p.product.price, printerGroup: p.product.printerGroup, disabled: p.product.disabled, displayFlags: p.product.displayFlags }, productInstance: {} })))
       .flat();
     if (batches.length > 0) {
