@@ -489,7 +489,7 @@ export const ProductInstanceToSquareCatalogObject = (
   productInstance: Omit<IProductInstance, 'id' | 'productId'>,
   printerGroup: PrinterGroup | null,
   catalogSelectors: ICatalogSelectors,
-  currentObjects: Pick<CatalogObject, 'id' | 'version'>[],
+  currentObjects: Pick<CatalogObject, 'id' | 'version' | 'itemData'>[],
   batch: string): CatalogObject => {
   // todo: we need a way to handle naming of split/super custom product instances
   // do we need to add an additional variation on the square item corresponding to the base product instance for split and otherwise unruly product instances likely with pricingType: VARIABLE?
@@ -499,6 +499,7 @@ export const ProductInstanceToSquareCatalogObject = (
   // 
   const squareItemId = GetSquareIdFromExternalIds(productInstance.externalIDs, 'ITEM') ?? `#${batch}_ITEM`;
   const versionItem = currentObjects.find(x => x.id === squareItemId)?.version ?? null;
+  const productTypeItem = currentObjects.find(x => x.id === squareItemId)?.itemData?.productType ?? 'REGULAR';
   const squareItemVariationId = GetSquareIdFromExternalIds(productInstance.externalIDs, 'ITEM_VARIATION') ?? `#${batch}_ITEM_VARIATION`;
   const versionItemVariation = currentObjects.find(x => x.id === squareItemVariationId)?.version ?? null;
   const isBlanketDisabled = product.disabled && product.disabled.start > product.disabled.end;
@@ -567,7 +568,7 @@ export const ProductInstanceToSquareCatalogObject = (
       isArchived: isBlanketDisabled,
       descriptionHtml: productInstance.description,
       name: productInstance.displayFlags.posName ? productInstance.displayFlags.posName : productInstance.displayName,
-      productType: "FOOD_AND_BEV",
+      productType: productTypeItem,
       taxIds: [SQUARE_TAX_RATE_CATALOG_ID],
       skipModifierScreen: product.modifiers.length === 0 || productInstance.displayFlags.order.skip_customization,
       modifierListInfo,
