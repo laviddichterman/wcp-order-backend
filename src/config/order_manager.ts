@@ -85,7 +85,7 @@ const CreateExternalConfirmationEmail = async function (order: WOrderInstance) {
   const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
 
   const fulfillmentConfig = DataProviderInstance.Fulfillments[order.fulfillment.selectedService];
-  const dateTimeInterval = DateTimeIntervalBuilder(order.fulfillment, fulfillmentConfig);
+  const dateTimeInterval = DateTimeIntervalBuilder(order.fulfillment, fulfillmentConfig.maxDuration);
   const display_time = DateTimeIntervalToDisplayServiceInterval(dateTimeInterval);
   const customer_name = [order.customerInfo.givenName, order.customerInfo.familyName].join(" ");
   const service_title = ServiceTitleBuilder(fulfillmentConfig.displayName, order.fulfillment, customer_name, dateTimeInterval);
@@ -113,7 +113,7 @@ const CreateExternalCancelationEmail = async function (
   const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
 
   const fulfillmentConfig = DataProviderInstance.Fulfillments[order.fulfillment.selectedService];
-  const dateTimeInterval = DateTimeIntervalBuilder(order.fulfillment, fulfillmentConfig);
+  const dateTimeInterval = DateTimeIntervalBuilder(order.fulfillment, fulfillmentConfig.maxDuration);
   const display_time = DateTimeIntervalToDisplayServiceInterval(dateTimeInterval);
   const customer_name = [order.customerInfo.givenName, order.customerInfo.familyName].join(" ");
   const service_title = ServiceTitleBuilder(fulfillmentConfig.displayName, order.fulfillment, customer_name, dateTimeInterval);
@@ -271,7 +271,7 @@ const CreateExternalEmailForOrderReschedule = async (
   customerInfo: Pick<CustomerInfoDto, "email" | 'familyName' | 'givenName'>,
   additionalMessage: string
 ) => {
-  const dateTimeInterval = DateTimeIntervalBuilder(fulfillmentDto, fulfillmentConfig);
+  const dateTimeInterval = DateTimeIntervalBuilder(fulfillmentDto, fulfillmentConfig.maxDuration);
   const service_title = ServiceTitleBuilder(fulfillmentConfig.displayName, fulfillmentDto, `${customerInfo.givenName} ${customerInfo.familyName}`, dateTimeInterval);
   const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
   const STORE_NAME = DataProviderInstance.KeyValueConfig.STORE_NAME;
@@ -558,7 +558,7 @@ export class OrderManager implements WProvider {
       // send order to alternate location
       const customerName = `${lockedOrder.customerInfo.givenName} ${lockedOrder.customerInfo.familyName}`;
       const fulfillmentConfig = DataProviderInstance.Fulfillments[lockedOrder.fulfillment.selectedService];
-      const promisedTime = DateTimeIntervalBuilder(lockedOrder.fulfillment, fulfillmentConfig);
+      const promisedTime = DateTimeIntervalBuilder(lockedOrder.fulfillment, fulfillmentConfig.maxDuration);
       const rebuiltCart = RebuildAndSortCart(lockedOrder.cart, CatalogProviderInstance.CatalogSelectors, promisedTime.start, fulfillmentConfig.id);
       const eventTitle = EventTitleStringBuilder(CatalogProviderInstance.CatalogSelectors, fulfillmentConfig, customerName, lockedOrder.fulfillment, rebuiltCart, lockedOrder.specialInstructions ?? "")
 
@@ -634,7 +634,7 @@ export class OrderManager implements WProvider {
       // send order to alternate location
       const customerName = `${lockedOrder.customerInfo.givenName} ${lockedOrder.customerInfo.familyName}`;
       const fulfillmentConfig = DataProviderInstance.Fulfillments[lockedOrder.fulfillment.selectedService];
-      const promisedTime = DateTimeIntervalBuilder(lockedOrder.fulfillment, fulfillmentConfig);
+      const promisedTime = DateTimeIntervalBuilder(lockedOrder.fulfillment, fulfillmentConfig.maxDuration);
       const rebuiltCart = RebuildAndSortCart(lockedOrder.cart, CatalogProviderInstance.CatalogSelectors, promisedTime.start, fulfillmentConfig.id);
       const eventTitle = EventTitleStringBuilder(CatalogProviderInstance.CatalogSelectors, fulfillmentConfig, customerName, lockedOrder.fulfillment, rebuiltCart, lockedOrder.specialInstructions ?? "")
       const messageOrders = CreateOrdersForPrintingFromCart(
@@ -777,7 +777,7 @@ export class OrderManager implements WProvider {
         }
         SQORDER_PRINT.splice(0);
 
-        const promisedTime = DateTimeIntervalBuilder(lockedOrder.fulfillment, fulfillmentConfig);
+        const promisedTime = DateTimeIntervalBuilder(lockedOrder.fulfillment, fulfillmentConfig.maxDuration);
         const oldPromisedTime = WDateUtils.ComputeServiceDateTime(lockedOrder.fulfillment);
         const customerName = `${lockedOrder.customerInfo.givenName} ${lockedOrder.customerInfo.familyName}`;
         const rebuiltCart = RebuildAndSortCart(lockedOrder.cart, CatalogProviderInstance.CatalogSelectors, promisedTime.start, fulfillmentConfig.id);
@@ -895,7 +895,7 @@ export class OrderManager implements WProvider {
     const updatedOrder = { ...lockedOrder, ...orderUpdate };
     const fulfillmentConfig = DataProviderInstance.Fulfillments[updatedOrder.fulfillment.selectedService];
     const is3pOrder = fulfillmentConfig.service === FulfillmentType.ThirdParty;
-    const promisedTime = DateTimeIntervalBuilder(lockedOrder.fulfillment, fulfillmentConfig);
+    const promisedTime = DateTimeIntervalBuilder(lockedOrder.fulfillment, fulfillmentConfig.maxDuration);
     const oldPromisedTime = WDateUtils.ComputeServiceDateTime(lockedOrder.fulfillment);
     logger.info(`Adjusting order in status: ${lockedOrder.status} with fulfillment status ${lockedOrder.fulfillment.status} to new time of ${format(promisedTime.start, WDateUtils.ISODateTimeNoOffset)}`);
     const customerName = `${lockedOrder.customerInfo.givenName} ${lockedOrder.customerInfo.familyName}`;
@@ -909,7 +909,7 @@ export class OrderManager implements WProvider {
     // adjust calendar event
     const gCalEventId = lockedOrder.metadata.find(x => x.key === 'GCALEVENT')?.value;
     if (gCalEventId) {
-      const dateTimeInterval = DateTimeIntervalBuilder(updatedOrder.fulfillment, fulfillmentConfig);
+      const dateTimeInterval = DateTimeIntervalBuilder(updatedOrder.fulfillment, fulfillmentConfig.maxDuration);
       const updatedOrderEventJson = GenerateOrderEventJson(
         eventTitle,
         updatedOrder,
@@ -951,7 +951,7 @@ export class OrderManager implements WProvider {
     let updatedOrder: WOrderInstance = { ...lockedOrder, fulfillment: { ...lockedOrder.fulfillment, ...newTime } };
     const fulfillmentConfig = DataProviderInstance.Fulfillments[lockedOrder.fulfillment.selectedService];
     const is3pOrder = fulfillmentConfig.service === FulfillmentType.ThirdParty;
-    const promisedTime = DateTimeIntervalBuilder(lockedOrder.fulfillment, fulfillmentConfig);
+    const promisedTime = DateTimeIntervalBuilder(lockedOrder.fulfillment, fulfillmentConfig.maxDuration);
     const oldPromisedTime = WDateUtils.ComputeServiceDateTime(lockedOrder.fulfillment);
     logger.info(`Adjusting order in status: ${lockedOrder.status} with fulfillment status ${lockedOrder.fulfillment.status} to new time of ${format(promisedTime.start, WDateUtils.ISODateTimeNoOffset)}`);
     const customerName = `${lockedOrder.customerInfo.givenName} ${lockedOrder.customerInfo.familyName}`;
@@ -1016,7 +1016,7 @@ export class OrderManager implements WProvider {
     // adjust calendar event
     const gCalEventId = lockedOrder.metadata.find(x => x.key === 'GCALEVENT')?.value;
     if (gCalEventId) {
-      const dateTimeInterval = DateTimeIntervalBuilder(newTime, fulfillmentConfig);
+      const dateTimeInterval = DateTimeIntervalBuilder(newTime, fulfillmentConfig.maxDuration);
       await GoogleProviderInstance.ModifyCalendarEvent(gCalEventId, {
         start: {
           dateTime: formatRFC3339(dateTimeInterval.start),
@@ -1207,7 +1207,7 @@ export class OrderManager implements WProvider {
     const fulfillmentConfig = DataProviderInstance.Fulfillments[createOrderRequest.fulfillment.selectedService];
     const STORE_NAME = DataProviderInstance.KeyValueConfig.STORE_NAME;
     const referenceId = requestTime.toString(36).toUpperCase();
-    const dateTimeInterval = DateTimeIntervalBuilder(createOrderRequest.fulfillment, fulfillmentConfig);
+    const dateTimeInterval = DateTimeIntervalBuilder(createOrderRequest.fulfillment, fulfillmentConfig.maxDuration);
     const customerName = [createOrderRequest.customerInfo.givenName, createOrderRequest.customerInfo.familyName].join(" ");
     const service_title = ServiceTitleBuilder(fulfillmentConfig.displayName, createOrderRequest.fulfillment, customerName, dateTimeInterval);
     // 2. Rebuild the order from the menu/catalog

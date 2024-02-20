@@ -366,6 +366,8 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
   }],
   "0.5.80": [{ major: 0, minor: 5, patch: 81 }, async () => {
   }],
+  "0.5.81": [{ major: 0, minor: 5, patch: 82 }, async () => {
+  }],
 }
 
 export class DatabaseManager implements WProvider {
