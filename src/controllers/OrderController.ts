@@ -251,7 +251,7 @@ export class OrderController implements IExpressController {
     try {
       const queryDate = req.query.date ? req.query.date as string : null;
       const queryStatus = req.query.status ? WOrderStatus[req.query.status as keyof typeof WOrderStatus] ?? null : null;
-      const response = await OrderManagerInstance.GetOrders(queryDate, queryStatus);
+      const response = await OrderManagerInstance.GetOrders(queryDate ? { $gte: queryDate } : null, queryStatus);
       res.status(200).json(response);
     } catch (error) {
       SendFailureNoticeOnErrorCatch(req, error);

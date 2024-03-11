@@ -1130,9 +1130,16 @@ export class OrderManager implements WProvider {
     return await WOrderInstanceModel.findById(orderId);
   };
 
-  public GetOrders = async (queryDate: string | null, queryStatus: WOrderStatus | null): Promise<WOrderInstance[]> => {
+  public GetOrders = async (queryDate: {
+    $eq?: string;
+    $gt?: string;
+    $gte?: string;
+    $lt?: string;
+    $lte?: string;
+    $ne?: string;
+  } | null, queryStatus: WOrderStatus | null): Promise<WOrderInstance[]> => {
     // find orders and return
-    const dateConstraint = queryDate ? { 'fulfillment.selectedDate': { $gte: queryDate } } : {};
+    const dateConstraint = queryDate ? { 'fulfillment.selectedDate': queryDate } : {};
     const statusConstraint = queryStatus ? { 'status': queryStatus } : {};
     return await WOrderInstanceModel.find({
       ...(dateConstraint),

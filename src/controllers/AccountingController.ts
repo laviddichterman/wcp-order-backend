@@ -24,26 +24,27 @@ const CategorySalesMapMerger = (sales_map: CategorySalesMap, cart: CoreCartEntry
     const printerGroupId = e.product.p.PRODUCT_CLASS.printerGroup;
     const printerGroupName = printerGroupId ? CatalogProviderInstance.PrinterGroups[printerGroupId].name : "No Category";
     const pgIdOrNONE = printerGroupId ?? "NONE";
+    const price = (e.quantity * e.product.m.price.amount);
+    let existingQuantity = 0;
+    let existingSum = 0;
     if (Object.hasOwn(acc, pgIdOrNONE)) {
       const existing = acc[pgIdOrNONE];
-      return {
-        ...acc,
-        [pgIdOrNONE]: {
-          name: printerGroupName,
-          quantity: e.quantity + existing.quantity,
-          sum: existing.sum + (e.quantity * e.product.m.price.amount)
-        }
+      existingQuantity = existing.quantity;
+      existingSum = existing.sum;
+    }
+    // logger.info(`${e.quantity} units at ${e.product.m.price.amount} each: ${price}, adding to existing ${existingQuantity}, ${existingSum} yields: ${JSON.stringify({
+    //   name: printerGroupName,
+    //   quantity: existingQuantity + e.quantity,
+    //   sum: existingSum + price
+    // })}`)
+    return {
+      ...acc,
+      [pgIdOrNONE]: {
+        name: printerGroupName,
+        quantity: existingQuantity + e.quantity,
+        sum: existingSum + price
       }
-    } else {
-      return {
-        ...acc,
-        [pgIdOrNONE]: {
-          name: printerGroupName,
-          quantity: e.quantity,
-          sum: (e.quantity * e.product.m.price.amount)
-        }
-      }
-    };
+    }
   }, sales_map);
 }
 export class AccountingController implements IExpressController {
@@ -83,7 +84,7 @@ export class AccountingController implements IExpressController {
   private getReport = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const report_date = req.query.date as string;
-      const orders = await OrderManagerInstance.GetOrders(report_date, WOrderStatus.CONFIRMED);
+      const orders = await OrderManagerInstance.GetOrders({ $eq: report_date } , WOrderStatus.CONFIRMED);
       const report = orders.reduce((acc, o) => {
         const service_time = WDateUtils.ComputeServiceDateTime(o.fulfillment);
         const order_discount_amount = o.discounts.reduce((inner_acc, d) => inner_acc + d.discount.amount.amount, 0);
