@@ -1,7 +1,7 @@
 import { OrderLineItem, Money, OrderLineItemModifier, Order, CatalogObject, CatalogIdMapping, OrderFulfillment, CatalogItemModifierListInfo, OrderLineItemDiscount } from 'square';
 import logger from '../logging';
 import { CatalogProviderInstance } from './catalog_provider';
-import { IMoney, TenderBaseStatus, PRODUCT_LOCATION, IProduct, IProductInstance, KeyValue, ICatalogSelectors, OptionPlacement, OptionQualifier, IOption, IOptionInstance, PrinterGroup, CURRENCY, CoreCartEntry, WProduct, OrderLineDiscount, OrderTax, DiscountMethod, IOptionType, ICatalog, WCPProductV2Dto, ProductModifierEntry } from '@wcp/wcpshared';
+import { IMoney, TenderBaseStatus, PRODUCT_LOCATION, IProduct, IProductInstance, KeyValue, ICatalogSelectors, OptionPlacement, OptionQualifier, IOption, IOptionInstance, PrinterGroup, CURRENCY, CoreCartEntry, WProduct, OrderLineDiscount, OrderTax, DiscountMethod, IOptionType, ICatalog, WCPProductV2Dto, ProductModifierEntry, CartByPrinterGroup } from '@wcp/wcpshared';
 import { formatRFC3339 } from 'date-fns';
 import { IS_PRODUCTION } from '../utils';
 
@@ -29,19 +29,6 @@ export const GetSquareIdFromExternalIds = (externalIds: KeyValue[], specifier: s
   const kvIdx = GetSquareIdIndexFromExternalIds(externalIds, specifier);
   return kvIdx === -1 ? null : externalIds[kvIdx].value;
 }
-type MapPrinterGroupToCartEntry = Record<string, CoreCartEntry<WProduct>[]>;
-export const CartByPrinterGroup = (cart: CoreCartEntry<WProduct>[]): MapPrinterGroupToCartEntry =>
-  cart
-    .flat()
-    .filter(x => x.product.p.PRODUCT_CLASS.printerGroup !== null)
-    .reduce((acc: MapPrinterGroupToCartEntry, x) =>
-    ({
-      ...acc,
-      [x.product.p.PRODUCT_CLASS.printerGroup!]: Object.hasOwn(acc, x.product.p.PRODUCT_CLASS.printerGroup!) ?
-        [...acc[x.product.p.PRODUCT_CLASS.printerGroup!], x] :
-        [x]
-    }), {});
-
 export interface SquareOrderFulfillmentInfo {
   displayName: string;
   emailAddress: string;
@@ -225,7 +212,7 @@ export const CreateOrdersForPrintingFromCart = (
 
   const carts: CoreCartEntry<WProduct>[][] = [];
   // split out the items we need to get printed
-  const cartEntriesByPrinterGroup = CartByPrinterGroup(cart);
+  const cartEntriesByPrinterGroup = CartByPrinterGroup(cart, CatalogProviderInstance.CatalogSelectors.productEntry);
   // this checks if there's anything left in the queue
   while (Object.values(cartEntriesByPrinterGroup).reduce((acc, x) => acc || x.length > 0, false)) {
     const orderEntries: CoreCartEntry<WProduct>[] = [];
@@ -343,6 +330,7 @@ export const CreateOrderFromCart = (
     referenceId,
     lineItems: Object.values(cart).map(x => {
       const catalogProductInstance = CatalogProviderInstance.Catalog.productInstances[x.product.m.pi[PRODUCT_LOCATION.LEFT]];
+      const catalogProduct = CatalogProviderInstance.CatalogSelectors.productEntry(x.product.p.productId)!;
       const squareItemVariationId = GetSquareIdFromExternalIds(catalogProductInstance.externalIDs, "ITEM_VARIATION");
       // // left and right catalog product instance are the same, 
       // if (x.product.m.pi[PRODUCT_LOCATION.LEFT] === x.product.m.pi[PRODUCT_LOCATION.RIGHT]) {
@@ -361,7 +349,7 @@ export const CreateOrderFromCart = (
         ...(squareItemVariationId === null ? {
           name: x.product.m.name,
           variationName: x.product.m.name,
-          basePriceMoney: IMoneyToBigIntMoney(x.product.p.PRODUCT_CLASS.price)
+          basePriceMoney: IMoneyToBigIntMoney(catalogProduct.product.price)
         } : {
           catalogObjectId: squareItemVariationId,
         }),

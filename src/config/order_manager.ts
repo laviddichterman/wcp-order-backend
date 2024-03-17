@@ -39,7 +39,8 @@ import {
   OrderPaymentAllocated,
   RecomputeTotals,
   OrderPaymentProposed,
-  DetermineCartBasedLeadTime
+  DetermineCartBasedLeadTime,
+  CartByPrinterGroup
 } from "@wcp/wcpshared";
 
 import { WProvider } from '../types/WProvider';
@@ -55,7 +56,7 @@ import crypto from 'crypto';
 import { WOrderInstanceModel } from "../models/orders/WOrderInstance";
 import { Order as SquareOrder } from "square";
 import { SocketIoProviderInstance } from "./socketio_provider";
-import { CreateOrderFromCart, CreateOrderForMessages, CreateOrdersForPrintingFromCart, CartByPrinterGroup, GetSquareIdFromExternalIds, BigIntMoneyToIntMoney, LineItemsToOrderInstanceCart } from "./SquareWarioBridge";
+import { CreateOrderFromCart, CreateOrderForMessages, CreateOrdersForPrintingFromCart, GetSquareIdFromExternalIds, BigIntMoneyToIntMoney, LineItemsToOrderInstanceCart } from "./SquareWarioBridge";
 import { FilterQuery } from "mongoose";
 import { calendar_v3 } from "googleapis";
 import { UTCDate } from "@date-fns/utc";
@@ -784,7 +785,7 @@ export class OrderManager implements WProvider {
         const eventTitle = EventTitleStringBuilder(CatalogProviderInstance.CatalogSelectors, fulfillmentConfig, customerName, lockedOrder.fulfillment, rebuiltCart, lockedOrder.specialInstructions ?? "")
         const flatCart = Object.values(rebuiltCart).flat();
         // get mapping from printerGroupId to list CoreCartEntry<WProduct> being adjusted for that pgId
-        const messages = Object.entries(CartByPrinterGroup(flatCart)).map(([pgId, entries]) => ({
+        const messages = Object.entries(CartByPrinterGroup(flatCart, CatalogProviderInstance.CatalogSelectors.productEntry)).map(([pgId, entries]) => ({
           squareItemVariationId: GetSquareIdFromExternalIds(CatalogProviderInstance.PrinterGroups[pgId]!.externalIDs, 'ITEM_VARIATION')!,
           message: entries.map(x => `CANCEL ${x.quantity}x:${x.product.m.name}`)
         }))
@@ -990,7 +991,7 @@ export class OrderManager implements WProvider {
       SQORDER_PRINT.splice(0);
 
       // get mapping from printerGroupId to list CoreCartEntry<WProduct> being adjusted for that pgId
-      const messages = Object.entries(CartByPrinterGroup(flatCart)).map(([pgId, entries]) => ({
+      const messages = Object.entries(CartByPrinterGroup(flatCart, CatalogProviderInstance.CatalogSelectors.productEntry)).map(([pgId, entries]) => ({
         squareItemVariationId: GetSquareIdFromExternalIds(CatalogProviderInstance.PrinterGroups[pgId]!.externalIDs, 'ITEM_VARIATION')!,
         message: entries.map(x => `RESCHEDULE ${x.quantity}x:${x.product.m.name}`)
       }))

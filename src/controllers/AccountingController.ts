@@ -5,7 +5,7 @@ import { GoogleProviderInstance } from '../config/google';
 import { addDays, formatRFC3339, parseISO, startOfDay } from 'date-fns';
 import { OrderManagerInstance } from '../config/order_manager';
 import { CatalogProviderInstance } from './../config/catalog_provider';
-import { CURRENCY, CoreCartEntry, CreateProductWithMetadataFromV2Dto, IMoney, WDateUtils, WOrderStatus, WProduct } from '@wcp/wcpshared';
+import { CoreCartEntry, CreateProductWithMetadataFromV2Dto, IMoney, WDateUtils, WOrderStatus, WProduct } from '@wcp/wcpshared';
 import logger from '../logging';
 
 const tipsregex = /Tip Amount: \$([0-9]+(?:\.[0-9]{1,2})?)/;
@@ -21,7 +21,8 @@ interface ReportAccumulator {
 
 const CategorySalesMapMerger = (sales_map: CategorySalesMap, cart: CoreCartEntry<WProduct>[]): CategorySalesMap => {
   return cart.reduce((acc, e) => {
-    const printerGroupId = e.product.p.PRODUCT_CLASS.printerGroup;
+    const product = CatalogProviderInstance.CatalogSelectors.productEntry(e.product.p.productId)!;
+    const printerGroupId = product.product.printerGroup;
     const printerGroupName = printerGroupId ? CatalogProviderInstance.PrinterGroups[printerGroupId].name : "No Category";
     const pgIdOrNONE = printerGroupId ?? "NONE";
     const price = (e.quantity * e.product.m.price.amount);
@@ -32,11 +33,6 @@ const CategorySalesMapMerger = (sales_map: CategorySalesMap, cart: CoreCartEntry
       existingQuantity = existing.quantity;
       existingSum = existing.sum;
     }
-    // logger.info(`${e.quantity} units at ${e.product.m.price.amount} each: ${price}, adding to existing ${existingQuantity}, ${existingSum} yields: ${JSON.stringify({
-    //   name: printerGroupName,
-    //   quantity: existingQuantity + e.quantity,
-    //   sum: existingSum + price
-    // })}`)
     return {
       ...acc,
       [pgIdOrNONE]: {
