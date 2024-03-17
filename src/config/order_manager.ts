@@ -366,7 +366,7 @@ export class OrderManager implements WProvider {
         filter: { dateTimeFilter: { updatedAt: { startAt: formatRFC3339(timeSpanAgoStart) } }, stateFilter: { states: ['OPEN'] } }, sort: { sortField: 'UPDATED_AT', sortOrder: 'ASC' }
       });
       if (oldOrdersResults.success) {
-        logger.info(`Square old order search results: ${JSON.stringify(oldOrdersResults.result)}`);
+        logger.info(`Square old order search results found ${oldOrdersResults.result.orders?.length ?? 0} orders`);
         const ordersToComplete = (oldOrdersResults.result.orders ?? []).filter(x => (x.fulfillments ?? []).length === 1 && isBefore(new UTCDate(x.fulfillments![0].pickupDetails!.pickupAt!), timeSpanAgoEnd));
         for (let i = 0; i < ordersToComplete.length; ++i) {
           const squareOrder = ordersToComplete[i];
