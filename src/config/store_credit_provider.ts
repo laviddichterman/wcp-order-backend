@@ -171,7 +171,7 @@ export class StoreCreditProvider {
     const new_entry = [entry[0], entry[1], entry[2], entry[3], entry[4], entry[5], date_modified, entry[7], entry[8], entry[9], lock.enc, ivAsString, authAsString];
     const new_range = `${ACTIVE_SHEET}!${2 + i}:${2 + i}`;
     const update_promise = GoogleProviderInstance.UpdateValuesInSheet(DataProviderInstance.KeyValueConfig.STORE_CREDIT_SHEET, new_range, new_entry);
-    const expiration = entry[8] ? startOfDay(parseISO(entry[8])) : null;
+    const expiration = entry[8] ? startOfDay(parseISO(String(entry[8]))) : null;
     await update_promise;
     const balance = Math.round(Number(entry[3]) * 100);
     const valid = (expiration === null || !isValid(expiration) || !isBefore(expiration, startOfDay(Date.now())));
