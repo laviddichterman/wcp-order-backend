@@ -1461,6 +1461,7 @@ export class OrderManager implements WProvider {
       logger.error(`Got error when unwinding the order after failure: ${JSON.stringify(err)}`);
       return { status: 500, success: false, error: errors };
     }
+    logger.error(`Got error when unwinding the order after failure: ${JSON.stringify(errors)}`);
     return { status: 400, success: false, error: errors };
   };
 

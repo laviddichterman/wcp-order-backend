@@ -202,7 +202,7 @@ export class StoreCreditProvider {
           return { success: false };
         }
         if (entry[8]) {
-          const expiration = startOfDay(parseISO(entry[8]));
+          const expiration = startOfDay(parseISO(String(entry[8])));
           if (isBefore(expiration, beginningOfToday)) {
             logger.error(`We have a cheater folks, store credit key ${entry[7]}, attempted to use after expiration of ${entry[8]}.`);
             return { success: false };
