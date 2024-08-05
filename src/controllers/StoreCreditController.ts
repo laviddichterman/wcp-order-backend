@@ -41,13 +41,13 @@ const SpendStoreCreditValidationChain = [
 const IssueStoreCreditValidationChain = [
   body('amount.amount').isInt({ min: 100, max: 50000 }).exists(),
   body('amount.currency').exists().isIn(Object.values(CURRENCY)),
-  body('recipientNameFirst').trim().exists(),
-  body('recipientNameLast').trim().exists(),
+  body('recipientNameFirst').trim().exists().isLength({ min: 1 }),
+  body('recipientNameLast').trim().exists().isLength({ min: 1 }),
   body('recipientEmail').exists().trim().isEmail(),
   body('creditType').trim().exists().isIn(Object.keys(StoreCreditType)),
   body('expiration').optional({nullable: true, checkFalsy: true}).isISO8601(),
-  body('addedBy').trim().exists(),
-  body('reason').trim().exists(),
+  body('addedBy').trim().exists().isLength({ min: 1 }),
+  body('reason').trim().exists().isLength({ min: 1 }),
 ];
 
 

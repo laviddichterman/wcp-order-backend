@@ -18,13 +18,13 @@ const ModifierOptionByIdValidationChain = [
 ];
 
 const ModifierTypeValidationChain = [
-  body('name').trim().exists(),
+  body('name').trim().exists().isLength({ min: 1 }),
   body('displayName').trim(),
   body('ordinal').isInt({ min: 0, max: 500 }).exists(),
   body('min_selected').isInt({ min: 0 }).exists(),
   body('max_selected').optional({ nullable: true }).isInt({ min: 0 }),
   body('externalIDs').isArray(),
-  body('externalIDs.*.key').exists(),
+  body('externalIDs.*.key').exists().isLength({ min: 1 }),
   body('externalIDs.*.value').exists(),
   body('displayFlags.is3p').exists().toBoolean(true),
   body('displayFlags.omit_section_if_no_available_options').exists().toBoolean(true),
