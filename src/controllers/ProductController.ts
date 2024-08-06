@@ -1,12 +1,12 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { body, param } from 'express-validator';
-import { CURRENCY, IProduct, IProductDisplayFlags, OptionPlacement, OptionQualifier, PriceDisplay } from '@wcp/wcpshared';
+import { CURRENCY, IProduct, IProductDisplayFlags, OptionPlacement, OptionQualifier, PriceDisplay, type UpsertProductBatch} from '@wcp/wcpshared';
 import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
 import logger from '../logging';
 
 import IExpressController from '../types/IExpressController';
 import { CheckJWT, ScopeDeleteCatalog, ScopeWriteCatalog } from '../config/authorization';
-import { CatalogProviderInstance, UpsertProductBatch } from '../config/catalog_provider';
+import { CatalogProviderInstance } from '../config/catalog_provider';
 import { isFulfillmentDefined, isValidDisabledValue } from '../types/Validations';
 
 const ProductClassesByIdsInBodyValidationChain = [

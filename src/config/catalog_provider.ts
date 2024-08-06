@@ -19,7 +19,13 @@ import {
   KeyValue,
   PrinterGroup,
   IProductModifier,
-  ProductModifierEntry
+  ProductModifierEntry,
+  CreateIProductInstance,
+  CreateProductBatch,
+  UpdateIProduct,
+  UpdateIProductUpdateIProductInstance,
+  UpdateProductBatch,
+  UpsertProductBatch
 } from "@wcp/wcpshared";
 import DBVersionModel from '../models/DBVersionSchema';
 import { WCategoryModel } from '../models/catalog/category/WCategorySchema';
@@ -41,14 +47,6 @@ import { CatalogIdMapping, CatalogObject } from "square";
 import { FilterQuery } from "mongoose";
 import { IsSetOfUniqueStrings } from "../utils";
 
-type CreateIProduct = Omit<IProduct, 'id' | 'baseProductId'>; // CompleteProductWithoutIDs
-type UpdateIProduct = (Pick<IProduct, 'id'> & Partial<Omit<IProduct, 'id'>>); // PartialProductWithIDs
-// aka CompleteProductInstanceWithoutIDsOrPartialProductInstanceWithIDs
-type CreateIProductInstance = Omit<IProductInstance, 'id' | 'productId'>;
-type UpdateIProductUpdateIProductInstance = Pick<IProductInstance, 'id'> & Partial<Omit<IProductInstance, 'id' | 'productId'>>;
-type CreateProductBatch = { product: CreateIProduct; instances: CreateIProductInstance[] };
-type UpdateProductBatch = { product: UpdateIProduct; instances: (CreateIProductInstance | UpdateIProductUpdateIProductInstance)[] };
-export type UpsertProductBatch = (CreateProductBatch | UpdateProductBatch);
 function isUpdateProduct(batch: (CreateProductBatch | UpdateProductBatch)): batch is UpdateProductBatch {
   return (batch.product as UpdateIProduct).id !== undefined;
 }
