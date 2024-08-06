@@ -1,6 +1,6 @@
 {
   "name": "@wcp/wcp-order-backend",
-  "version": "0.5.87",
+  "version": "0.5.88",
   "main": "dist/src/server.js",
   "files": [
     "dist",
@@ -27,9 +27,6 @@
     "url": "https://github.com/laviddichterman/wcp-order-backend/issues"
   },
   "homepage": "https://github.com/laviddichterman/wcp-order-backend#readme",
-  "overrides": {
-    "@googlemaps/url-signature": "1.0.32"
-  },
   "dependencies": {
     "@date-fns/utc": "^1.2.0",
     "@googlemaps/google-maps-services-js": "^3.4.0",
