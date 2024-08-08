@@ -31,43 +31,6 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
       return await WOrderInstanceModel.findByIdAndUpdate(o.id, { 'fulfillment.selectedDate': WDateUtils.formatISODate(parseISO(o.fulfillment.selectedDate)) });
     }))
   }],
-  "0.5.20": [{ major: 0, minor: 5, patch: 21 }, async () => {
-  }],
-  "0.5.21": [{ major: 0, minor: 5, patch: 22 }, async () => {
-  }],
-  "0.5.22": [{ major: 0, minor: 5, patch: 23 }, async () => {
-  }],
-  "0.5.23": [{ major: 0, minor: 5, patch: 24 }, async () => {
-  }],
-  "0.5.24": [{ major: 0, minor: 5, patch: 25 }, async () => {
-  }],
-  "0.5.25": [{ major: 0, minor: 5, patch: 26 }, async () => {
-  }],
-  "0.5.26": [{ major: 0, minor: 5, patch: 27 }, async () => {
-  }],
-  "0.5.27": [{ major: 0, minor: 5, patch: 28 }, async () => {
-  }],
-  "0.5.28": [{ major: 0, minor: 5, patch: 29 }, async () => {
-  }],
-  "0.5.29": [{ major: 0, minor: 5, patch: 30 }, async () => {
-  }],
-  "0.5.30": [{ major: 0, minor: 5, patch: 31 }, async () => {
-  }],
-  "0.5.31": [{ major: 0, minor: 5, patch: 32 }, async () => {
-  }],
-  "0.5.32": [{ major: 0, minor: 5, patch: 33 }, async () => {
-  }],
-  "0.5.33": [{ major: 0, minor: 5, patch: 34 }, async () => {
-  }],
-  "0.5.34": [{ major: 0, minor: 5, patch: 35 }, async () => {
-  }],
-  "0.5.35": [{ major: 0, minor: 5, patch: 36 }, async () => {
-  }],
-  "0.5.36": [{ major: 0, minor: 5, patch: 39 }, async () => {
-    CatalogProviderInstance.RequireSquareRebuild = true;
-  }],
-  "0.5.37": [{ major: 0, minor: 5, patch: 38 }, async () => {
-  }],
   "0.5.38": [{ major: 0, minor: 5, patch: 39 }, async () => {
     CatalogProviderInstance.RequireSquareRebuild = true;
   }],
@@ -130,32 +93,6 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
         logger.warn("No IProduct had is3p disabled");
       }
     }
-  }],
-  "0.5.44": [{ major: 0, minor: 5, patch: 45 }, async () => {
-  }],
-  "0.5.45": [{ major: 0, minor: 5, patch: 46 }, async () => {
-  }],
-  "0.5.46": [{ major: 0, minor: 5, patch: 47 }, async () => {
-  }],
-  "0.5.47": [{ major: 0, minor: 5, patch: 48 }, async () => {
-  }],
-  "0.5.48": [{ major: 0, minor: 5, patch: 49 }, async () => {
-  }],
-  "0.5.49": [{ major: 0, minor: 5, patch: 50 }, async () => {
-  }],
-  "0.5.50": [{ major: 0, minor: 5, patch: 51 }, async () => {
-  }],
-  "0.5.51": [{ major: 0, minor: 5, patch: 52 }, async () => {
-  }],
-  "0.5.52": [{ major: 0, minor: 5, patch: 53 }, async () => {
-  }],
-  "0.5.53": [{ major: 0, minor: 5, patch: 54 }, async () => {
-  }],
-  "0.5.54": [{ major: 0, minor: 5, patch: 55 }, async () => {
-  }],
-  "0.5.55": [{ major: 0, minor: 5, patch: 56 }, async () => {
-  }],
-  "0.5.56": [{ major: 0, minor: 5, patch: 57 }, async () => {
   }],
   "0.5.57": [{ major: 0, minor: 5, patch: 58 }, async () => {
   }],
@@ -315,16 +252,6 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
       logger.info(`Updated fulfillments, setting allowTipping to true, got result: ${JSON.stringify(updatedFulfillments)}`);
     }
   }],
-  "0.5.63": [{ major: 0, minor: 5, patch: 64 }, async () => {
-  }],
-  "0.5.64": [{ major: 0, minor: 5, patch: 65 }, async () => {
-  }],
-  "0.5.65": [{ major: 0, minor: 5, patch: 66 }, async () => {
-  }],
-  "0.5.66": [{ major: 0, minor: 5, patch: 67 }, async () => {
-  }],
-  "0.5.67": [{ major: 0, minor: 5, patch: 68 }, async () => {
-  }],
   "0.5.68": [{ major: 0, minor: 5, patch: 69 }, async () => {
     // mass set posName to empty string on WProductInstance
     const WProductInstanceSchema = mongoose.model('WPrODUcTInstanceSchema', new Schema({
@@ -342,35 +269,7 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
       logger.warn("No WProductInstanceSchema had posName set to empty string");
     }
   }],
-  "0.5.69": [{ major: 0, minor: 5, patch: 70 }, async () => {
-  }],
-  "0.5.70": [{ major: 0, minor: 5, patch: 71 }, async () => {
-  }],
-  "0.5.71": [{ major: 0, minor: 5, patch: 72 }, async () => {
-  }],
-  "0.5.72": [{ major: 0, minor: 5, patch: 73 }, async () => {
-  }],
-  "0.5.73": [{ major: 0, minor: 5, patch: 74 }, async () => {
-  }],
-  "0.5.74": [{ major: 0, minor: 5, patch: 75 }, async () => {
-  }],
-  "0.5.75": [{ major: 0, minor: 5, patch: 76 }, async () => {
-  }],
-  "0.5.76": [{ major: 0, minor: 5, patch: 77 }, async () => {
-  }],
-  "0.5.77": [{ major: 0, minor: 5, patch: 78 }, async () => {
-  }],
-  "0.5.78": [{ major: 0, minor: 5, patch: 79 }, async () => {
-  }],
-  "0.5.79": [{ major: 0, minor: 5, patch: 80 }, async () => {
-  }],
-  "0.5.80": [{ major: 0, minor: 5, patch: 81 }, async () => {
-  }],
-  "0.5.81": [{ major: 0, minor: 5, patch: 82 }, async () => {
-  }],
-  "0.5.82": [{ major: 0, minor: 5, patch: 83 }, async () => {
-  }],
-  "0.5.83": [{ major: 0, minor: 5, patch: 84 }, async () => {
+  "0.5.69": [{ major: 0, minor: 5, patch: 84 }, async () => {
   }],
   "0.5.84": [{ major: 0, minor: 5, patch: 85 }, async () => {
   }],
@@ -379,6 +278,8 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
   "0.5.86": [{ major: 0, minor: 5, patch: 87 }, async () => {
   }],
   "0.5.87": [{ major: 0, minor: 5, patch: 88 }, async () => {
+  }],
+  "0.5.88": [{ major: 0, minor: 5, patch: 89 }, async () => {
   }],
 }
 

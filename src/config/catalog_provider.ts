@@ -65,6 +65,23 @@ const ValidateProductModifiersFunctionsCategoriesPrinterGroups = function (modif
   const found_all_printer_groups = printer_group_ids.map(pgid => Object.hasOwn(catalog.PrinterGroups, pgid)).every(x => x === true);
   return found_all_categories && found_all_modifiers && found_all_printer_groups;
 }
+
+/**
+ * Merges the original and updated external IDs into a single array, making sure to preserve the original Square external IDs.
+ * 
+ * @param originalExternalIds - The original external IDs, potentially containing the square external IDs.
+ * @param updateExternalIds - The updated external IDs, with any SquareIDs removed already.
+ * @returns The merged array of external IDs.
+ */
+export const ProductInstanceUpdateMergeExternalIds = (originalExternalIds: KeyValue[] | undefined, updateExternalIds: KeyValue[] | undefined) => {
+  if (updateExternalIds && originalExternalIds) {
+    const squareExternalIds = GetSquareExternalIds(originalExternalIds);
+    const updateSquareExternalIds = updateExternalIds;
+    return [...squareExternalIds, ...updateSquareExternalIds];
+  }
+  return updateExternalIds ?? originalExternalIds ?? [];
+}
+
 /**
  * checks that a passed instance doesn't explicitly declare a modifier that isn't allowed
  * TODO: move this to WCPShared 
@@ -1176,7 +1193,7 @@ export class CatalogProvider implements WProvider {
           const oldInstance = this.Catalog.productInstances[pi.id]!;
           // these need to be deleted from square since they were previously not hidden from POS and now they are
           const needToDeleteSquareCatalogItem = oldInstance.displayFlags.hideFromPos === false && pi.displayFlags?.hideFromPos === true;
-          const mergedExternalIds = pi.externalIDs ?? this.Catalog.productInstances[pi.id]!.externalIDs;
+          const mergedExternalIds = ProductInstanceUpdateMergeExternalIds(this.Catalog.productInstances[pi.id]!.externalIDs, pi.externalIDs);
           const newExternalIds = needToDeleteSquareCatalogItem ? GetNonSquareExternalIds(mergedExternalIds) : mergedExternalIds;
           if (needToDeleteSquareCatalogItem) {
             externalIdsToDelete.push(...GetSquareExternalIds(mergedExternalIds));
@@ -1415,7 +1432,7 @@ export class CatalogProvider implements WProvider {
 
     // TODO: if switching from hideFromPos === false to hideFromPos === true, we need to delete the product in square
     const oldProductInstances = batches.map(b => this.Catalog.productInstances[b.piid]!);
-    const newExternalIdses = batches.map((b, i) => b.productInstance.externalIDs ?? oldProductInstances[i].externalIDs);
+    const newExternalIdses = batches.map((b, i) => ProductInstanceUpdateMergeExternalIds(oldProductInstances[i].externalIDs, GetNonSquareExternalIds(b.productInstance.externalIDs)));
     const existingSquareExternalIds = newExternalIdses.map((ids) => GetSquareExternalIds(ids)).flat();
     let existingSquareObjects: CatalogObject[] = [];
     if (existingSquareExternalIds.length > 0) {
