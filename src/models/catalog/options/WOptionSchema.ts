@@ -41,7 +41,10 @@ export const WOptionSchema = new Schema<MT>({
   //   disabled not defined: means enabled
   disabled: IntervalSchema,
 
-  availability: RecurringIntervalSchema,
+  availability: {
+    type: [RecurringIntervalSchema],
+    required: true
+  },
   
   // placement index
   ordinal: {

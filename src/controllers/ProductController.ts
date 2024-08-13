@@ -75,7 +75,8 @@ const ProductClassValidationChain = (prefix: string) => [
   body(`${prefix}displayFlags.order_guide.suggestions.*`).trim().escape().exists().isMongoId(),
   body(`${prefix}printerGroup`).optional({ nullable: true }).isMongoId(),
   // TODO need proper deep validation of availability and timing fields
-  body(`${prefix}availability`).optional({ nullable: true }).isObject(),
+  body(`${prefix}availbility`).optional({ nullable: true }).isArray(),
+  body(`${prefix}availbility.*`).isObject(),
   body(`${prefix}timing`).optional({ nullable: true }).isObject(),
 ];
 

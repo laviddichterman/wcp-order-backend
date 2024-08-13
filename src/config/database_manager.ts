@@ -281,6 +281,65 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
   }],
   "0.5.88": [{ major: 0, minor: 5, patch: 89 }, async () => {
   }],
+  "0.5.89": [{ major: 0, minor: 6, patch: 0 }, async () => {
+    {
+      const WProductModel = mongoose.model('wproductsCHema', new Schema({
+        availability: {
+          type: [Schema.Types.Mixed],
+          default: []
+        },
+      }));
+      const elts = await WProductModel.find();
+      await Promise.all(elts.map(async (prod) => {
+        if (prod.availability === null) {
+          // If availability is null, set it to an empty array
+          prod.availability = [];
+        } else if (!Array.isArray(prod.availability)) {
+          // If availability is not an array, wrap it in an array
+          // @ts-ignore
+          prod.availability = [prod.availability];
+        }
+        return await prod.save()
+          .then(doc => {
+            logger.info(`Updated ProductModel ${doc.id} with availability: ${JSON.stringify(doc.availability)}`);
+            return doc;
+          })
+          .catch(err => {
+            logger.error(`Failed to update ProductModel ${prod.id} got error: ${JSON.stringify(err)}`);
+            return Promise.reject(err);
+          });
+      }));
+    }
+    {
+      // convert availability on modifier options to array
+      const WOptionModel = mongoose.model('woPtIoNschema', new Schema({
+        availability: {
+          type: [Schema.Types.Mixed],
+          default: []
+        },
+      }));
+      const elts = await WOptionModel.find();
+      await Promise.all(elts.map(async (opt) => {
+        if (opt.availability === null) {
+          // If availability is null, set it to an empty array
+          opt.availability = [];
+        } else if (!Array.isArray(opt.availability)) {
+          // If availability is not an array, wrap it in an array
+          // @ts-ignore
+          opt.availability = [opt.availability];
+        }
+        return await opt.save()
+          .then(doc => {
+            logger.info(`Updated WOptionModel ${doc.id} with availability: ${JSON.stringify(doc.availability)}`);
+            return doc;
+          })
+          .catch(err => {
+            logger.error(`Failed to update WOptionModel ${opt.id} got error: ${JSON.stringify(err)}`);
+            return Promise.reject(err);
+          });
+      }));
+    }
+  }],
 }
 
 export class DatabaseManager implements WProvider {

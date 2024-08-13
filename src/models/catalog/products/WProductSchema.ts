@@ -64,7 +64,10 @@ const WProductSchema = new Schema<MT>({
   // preparation timing info, or null if not considered
   timing: PrepTimingSchema,
 
-  availability: RecurringIntervalSchema,
+  availability: {
+    type: [RecurringIntervalSchema],
+    required: true
+  },
 
   // list of option type IDs and nullable product instance function IDs
   modifiers: [ProductModifierSchema],

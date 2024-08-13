@@ -59,6 +59,8 @@ const ModifierOptionValidationChain = (prefix: string) => [
   body(`${prefix}metadata.allowOTS`).toBoolean(true),
   body(`${prefix}displayFlags.omit_from_shortname`).toBoolean(true),
   body(`${prefix}displayFlags.omit_from_name`).toBoolean(true),
+  body(`${prefix}availbility`).optional({ nullable: true }).isArray(),
+  body(`${prefix}availbility.*`).isObject()
 ];
 
 const AddModifierTypeValidationChain = [
