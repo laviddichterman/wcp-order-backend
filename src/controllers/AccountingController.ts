@@ -6,7 +6,6 @@ import { addDays, formatRFC3339, parseISO, startOfDay } from 'date-fns';
 import { OrderManagerInstance } from '../config/order_manager';
 import { CatalogProviderInstance } from './../config/catalog_provider';
 import { CoreCartEntry, CreateProductWithMetadataFromV2Dto, IMoney, WDateUtils, WOrderStatus, WProduct } from '@wcp/wcpshared';
-import logger from '../logging';
 
 const tipsregex = /Tip Amount: \$([0-9]+(?:\.[0-9]{1,2})?)/;
 
@@ -25,7 +24,7 @@ const CategorySalesMapMerger = (sales_map: CategorySalesMap, cart: CoreCartEntry
     const printerGroupId = product.product.printerGroup;
     const printerGroupName = printerGroupId ? CatalogProviderInstance.PrinterGroups[printerGroupId].name : "No Category";
     const pgIdOrNONE = printerGroupId ?? "NONE";
-    const price = (e.quantity * e.product.m.price.amount);
+    const price = (e.quantity * e.product.m.price.amount) / 100;
     let existingQuantity = 0;
     let existingSum = 0;
     if (Object.hasOwn(acc, pgIdOrNONE)) {
@@ -83,9 +82,9 @@ export class AccountingController implements IExpressController {
       const orders = await OrderManagerInstance.GetOrders({ $eq: report_date } , WOrderStatus.CONFIRMED);
       const report = orders.reduce((acc, o) => {
         const service_time = WDateUtils.ComputeServiceDateTime(o.fulfillment);
-        const order_discount_amount = o.discounts.reduce((inner_acc, d) => inner_acc + d.discount.amount.amount, 0);
-        const order_tax_amount = o.taxes.reduce((inner_acc, t) => inner_acc + t.amount.amount, 0);
-        const sum_payments = o.payments.reduce((inner_acc, p) => ({ tip_amount: inner_acc.tip_amount + p.tipAmount.amount, payment_amount: inner_acc.payment_amount + p.amount.amount }), { tip_amount: 0, payment_amount: 0 });
+        const order_discount_amount = o.discounts.reduce((inner_acc, d) => inner_acc + d.discount.amount.amount, 0) / 100;
+        const order_tax_amount = o.taxes.reduce((inner_acc, t) => inner_acc + t.amount.amount, 0) / 100;
+        const sum_payments = o.payments.reduce((inner_acc, p) => ({ tip_amount: inner_acc.tip_amount + p.tipAmount.amount / 100, payment_amount: inner_acc.payment_amount + p.amount.amount / 100 }), { tip_amount: 0, payment_amount: 0 });
         const convertedCart: CoreCartEntry<WProduct>[] = o.cart.map(x => {
           return { categoryId: x.categoryId, quantity: x.quantity, product: CreateProductWithMetadataFromV2Dto(x.product, CatalogProviderInstance.CatalogSelectors, service_time, o.fulfillment.selectedService) }
         })
@@ -105,7 +104,7 @@ export class AccountingController implements IExpressController {
         tendered: 0
       } as ReportAccumulator);
 
-      res.status(200).json(report);
+      res.status(200).json({...report, netSales: Object.values(report.categorySales).reduce((acc, x) => acc + x.sum, 0) });
     } catch (error) {
       next(error)
     }
