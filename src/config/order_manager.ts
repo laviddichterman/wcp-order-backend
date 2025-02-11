@@ -171,7 +171,7 @@ const GeneratePaymentSection = (totals: RecomputeTotalsResult, discounts: OrderL
   const discountDisplays = discounts.map(discount => GenerateOrderLineDiscountDisplay(discount, isHtml)).join(isHtml ? "<br />" : "\n");
   return isHtml ? `${discountDisplays}
   <p>Pre-tax Amount: <strong>${subtotal}</strong><br />
-  Post-tax Amount: <strong>${totalAfterTaxBeforeTip}</strong>&nbsp;(verify this with payment)<br />
+  Post-tax Amount: <strong>${totalAfterTaxBeforeTip}</strong><br />
   Tip Amount: <strong>${tip_amount}</strong><br /></p>
   <p>Received payment of: <strong>${total_amount}</strong></p>
   ${paymentDisplays}` :
@@ -1252,7 +1252,7 @@ export class OrderManager implements WProvider {
     }
 
     // 3. recompute the totals to ensure everything matches up, and to get some needed computations that we don't want to pass over the wire and blindly trust
-    const recomputedTotals = RecomputeTotals({ cart: rebuiltCart, payments: createOrderRequest.proposedPayments, discounts: createOrderRequest.proposedDiscounts, fulfillment: fulfillmentConfig, order: orderInstance, config: { SERVICE_CHARGE: 0, AUTOGRAT_THRESHOLD: DataProviderInstance.Settings.config.AUTOGRAT_THRESHOLD as number ?? 5, TAX_RATE: DataProviderInstance.Settings.config.TAX_RATE as number ?? .1025, CATALOG_SELECTORS: CatalogProviderInstance.CatalogSelectors } });
+    const recomputedTotals = RecomputeTotals({ cart: rebuiltCart, payments: createOrderRequest.proposedPayments, discounts: createOrderRequest.proposedDiscounts, fulfillment: fulfillmentConfig, order: orderInstance, config: { SERVICE_CHARGE: 0, AUTOGRAT_THRESHOLD: DataProviderInstance.Settings.config.AUTOGRAT_THRESHOLD as number ?? 0, TAX_RATE: DataProviderInstance.Settings.config.TAX_RATE as number ?? .1035, CATALOG_SELECTORS: CatalogProviderInstance.CatalogSelectors } });
     if (recomputedTotals.balanceAfterPayments.amount > 0) {
       const errorDetail = `Proposed payments yield balance of ${MoneyToDisplayString(recomputedTotals.balanceAfterPayments, true)}.`;
       logger.error(errorDetail)

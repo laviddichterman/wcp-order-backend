@@ -33,6 +33,14 @@ export class GoogleProvider implements WProvider {
   }
 
   Bootstrap = async () => {
+    // this bootstrapping requires having used https://developers.google.com/oauthplayground/ to get a refresh token.
+    // 1. Go to https://developers.google.com/oauthplayground/
+    // 2. set scopes to https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive https://mail.google.com/
+    // 3. Click on the gear icon, and check "Use your own OAuth credentials"
+    // 4. Enter the client ID and client secret from the Google Cloud Console
+    // 5. Click "Authorize APIs" and use the account you want to send emails from
+    // 6. Click "Exchange authorization code for tokens"
+    // In the future, this should be changed to handle Oauth2 via the UI or to use a service account.
     logger.debug("Bootstrapping GoogleProvider");
     const cfg = DataProviderInstance.KeyValueConfig;
     this.#oauth2Client = new OAuth2(
