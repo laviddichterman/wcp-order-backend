@@ -31,7 +31,7 @@ import {
   WFulfillmentStatus,
   CustomerInfoDto,
   EventTitleStringBuilder,
-  GenerateDineInPlusString,
+  GenerateDineInGuestCountString,
   RecomputeTotalsResult,
   OrderPaymentAllocated,
   RecomputeTotals,
@@ -198,7 +198,7 @@ const GenerateDineInSection = (dineInInfo: DineInInfoDto, ishtml: boolean) => {
 
 const ServiceTitleBuilder = (service_option_display_string: string, fulfillmentInfo: FulfillmentDto, customer_name: string, service_time_interval: Interval) => {
   const display_service_time_interval = DateTimeIntervalToDisplayServiceInterval(service_time_interval);
-  return `${service_option_display_string} for ${customer_name}${fulfillmentInfo.dineInInfo ? GenerateDineInPlusString(fulfillmentInfo.dineInInfo) : ''} on ${format(service_time_interval.start, WDateUtils.ServiceDateDisplayFormat)} at ${display_service_time_interval}`;
+  return `${service_option_display_string} for ${customer_name}${fulfillmentInfo.dineInInfo ? GenerateDineInGuestCountString(fulfillmentInfo.dineInInfo) : ''} on ${format(service_time_interval.start, WDateUtils.ServiceDateDisplayFormat)} at ${display_service_time_interval}`;
 }
 
 const GenerateDisplayCartStringListFromProducts = (cart: CategorizedRebuiltCart) =>
