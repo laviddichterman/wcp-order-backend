@@ -61,15 +61,16 @@ const CreateExternalEmailRecipient = async ({ amount, senderName, recipientNameF
     [{ filename: "qrcode.png", content: qr_code_fs, cid: creditCode }]);
 }
 
-const CreateExternalEmail = async ({ amount, recipientNameFirst, recipientNameLast, recipientEmail, expiration }: IssueStoreCreditRequest, creditCode: string, qr_code_fs: internal.PassThrough) => {
+const CreateExternalEmail = async ({ amount, recipientNameFirst, recipientNameLast, recipientEmail, expiration, creditType }: IssueStoreCreditRequest, creditCode: string, qr_code_fs: internal.PassThrough) => {
   const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
   const STORE_NAME = DataProviderInstance.KeyValueConfig.STORE_NAME;
   const amountString = MoneyToDisplayString(amount, true);
   const recipient = `${recipientNameFirst} ${recipientNameLast}`;
+  const creditTypeString = creditType === StoreCreditType.DISCOUNT ? "discount" : "digital gift";
   const expiration_section = expiration ? `<br />Please note that this credit will expire at 11:59PM on ${format(parseISO(expiration), WDateUtils.ServiceDateDisplayFormat)}.` : "";
-  const emailbody = `<h2>You've been sent a discount code from ${STORE_NAME}!</h2>
+  const emailbody = `<h2>You've been sent a ${creditTypeString} code from ${STORE_NAME}!</h2>
   <p>Credit code: <strong>${creditCode}</strong> valuing <strong>${amountString}</strong> for ${recipient}.<br />
-  <p>Use this discount code when ordering online or in person at Windy City Pie.${expiration_section}</p><br />
+  <p>Use this ${creditTypeString} code when ordering online or in person at Windy City Pie.${expiration_section}</p><br />
   Keep this email in your records and let us know if you have any questions!</p>
   <p>Copy and paste the code above into the "Use Digital Gift Card / Store Credit" field when paying online or, if redeeming in person, show this QR code:<br/> <img src="cid:${creditCode}" /></p>`;
   await GoogleProviderInstance.SendEmail(
@@ -78,7 +79,7 @@ const CreateExternalEmail = async ({ amount, recipientNameFirst, recipientNameLa
       address: EMAIL_ADDRESS
     },
     recipientEmail,
-    `${STORE_NAME} discount code of value ${amountString} for ${recipient}.`,
+    `${STORE_NAME} ${creditTypeString} code of value ${amountString} for ${recipient}.`,
     EMAIL_ADDRESS,
     emailbody,
     [{ filename: "qrcode.png", content: qr_code_fs, cid: creditCode }]);

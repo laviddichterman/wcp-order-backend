@@ -64,7 +64,11 @@ export class StoreCreditController implements IExpressController {
     // todo: move /validate endpoint to ./
     this.router.get(`${this.path}/validate`, expressValidationMiddleware(CreditCodeValidationChain), this.getValidateCredit);
     this.router.post(`${this.path}/spend`, expressValidationMiddleware(SpendStoreCreditValidationChain), this.postSpendCredit);
+    // remove /stopgap endpoint in the future
     this.router.post(`${this.path}/stopgap`, expressValidationMiddleware(PurchaseStoreCreditValidationChain), this.postPurchaseCredit);
+    this.router.post(`${this.path}/purchase`, expressValidationMiddleware(PurchaseStoreCreditValidationChain), this.postPurchaseCredit);
+    this.router.post(`${this.path}/issue`, CheckJWT, ScopeEditCredit, expressValidationMiddleware(IssueStoreCreditValidationChain), this.postIssueCredit);
+    // remove /discount endpoint in the future
     this.router.post(`${this.path}/discount`, CheckJWT, ScopeEditCredit, expressValidationMiddleware(IssueStoreCreditValidationChain), this.postIssueCredit);
   };
 
