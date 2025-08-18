@@ -475,10 +475,11 @@ export const ProductInstanceToSquareCatalogObject = (
   locationIds: string[],
   product: Pick<IProduct, 'modifiers' | 'price' | 'disabled'>,
   productInstance: Omit<IProductInstance, 'id' | 'productId'>,
-  printerGroup: PrinterGroup | null, // this needs to be null if not wanting to modify it, so we don't clobber the menu category
+  printerGroup: PrinterGroup | null,
   catalogSelectors: ICatalogSelectors,
   currentObjects: Pick<CatalogObject, 'id' | 'version' | 'itemData'>[],
-  batch: string): CatalogObject => {
+  batch: string
+  ): CatalogObject => {
   // todo: we need a way to handle naming of split/super custom product instances
   // do we need to add an additional variation on the square item corresponding to the base product instance for split and otherwise unruly product instances likely with pricingType: VARIABLE?
   // maybe we add variations for each half and half combo?
@@ -541,6 +542,13 @@ export const ProductInstanceToSquareCatalogObject = (
     }
   });
 
+  // we need to pass the categories otherwise square will overwrite them with empty categories, so we need to pull out non-reporting categories
+  // won't be needed once we address https://app.asana.com/1/961497487611345/project/1189134071799993/task/1210817402795310?focus=true
+  const currentItemCategories = currentObjects.find(x => x.id === squareItemId)?.itemData?.categories ?? []
+  const newPrinterGroupCategory = printerGroup ? GetSquareIdFromExternalIds(printerGroup.externalIDs, 'CATEGORY')! : null;
+  const oldPrinterGroupCategory = currentObjects.find(x => x.id === squareItemId)?.itemData?.reportingCategory?.id ?? null;
+  const otherCategories = currentItemCategories.filter(x=>x.id !== oldPrinterGroupCategory);
+
   return {
     id: squareItemId,
     type: 'ITEM',
@@ -548,7 +556,7 @@ export const ProductInstanceToSquareCatalogObject = (
     presentAtLocationIds: locationIds,
     ...(versionItem !== null ? { version: versionItem } : {}),
     itemData: {
-      ...(printerGroup ? { categories: [ { id: GetSquareIdFromExternalIds(printerGroup.externalIDs, 'CATEGORY')! } ], reportingCategory: { id: GetSquareIdFromExternalIds(printerGroup.externalIDs, 'CATEGORY')!} } : {}),
+      ...(printerGroup ? { categories: [...otherCategories, { id: newPrinterGroupCategory! } ], reportingCategory: { id: newPrinterGroupCategory! } } : { categories: otherCategories }),
       abbreviation: productInstance.shortcode.slice(0, 24),
       availableElectronically: true,
       availableForPickup: true,

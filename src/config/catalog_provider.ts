@@ -1159,8 +1159,6 @@ export class CatalogProvider implements WProvider {
         removedModifierTypes = oldModifierTypes.filter(x => !newModifierTypes.includes(x));
         addedModifierTypes = newModifierTypes.filter(x => !oldModifierTypes.includes(x)).length > 0;
       }
-      // need to check for any explicit modifications to the printerGroup since new square API stores the Menu category in this field too and we don't currently support that well
-      const changedPrinterGroup = b.product.printerGroup !== undefined && oldProductEntry.product.printerGroup !== b.product.printerGroup;
       const mergedProduct = { ...oldProductEntry.product, ...b.product };
 
       const insertInstances = b.instances.filter(b => !isUpdateProductInstance(b)) as CreateIProductInstance[];
@@ -1203,7 +1201,7 @@ export class CatalogProvider implements WProvider {
           return { ...oldInstance, ...pi, externalIDs: newExternalIds };
         })];
       existingSquareExternalIds.push(...adjustedUpdatedInstances.map((pi) => GetSquareExternalIds(pi.externalIDs)).flat());
-      return { product: mergedProduct, updateInstances: adjustedUpdatedInstances, insertInstances: adjustedInsertInstances, batchIter: i, index: b.index, changedPrinterGroup };
+      return { product: mergedProduct, updateInstances: adjustedUpdatedInstances, insertInstances: adjustedInsertInstances, batchIter: i, index: b.index };
     });
 
     const batchIter = adjustedUpdateBatches.length;
@@ -1225,7 +1223,7 @@ export class CatalogProvider implements WProvider {
           LocationsConsidering3pFlag(b.product.displayFlags.is3p),
           b.product,
           pi,
-          b.changedPrinterGroup && b.product.printerGroup ? this.#printerGroups[b.product.printerGroup] : null,
+          b.product.printerGroup ? this.#printerGroups[b.product.printerGroup] : null,
           this.CatalogSelectors, existingSquareObjects,
           ('0000000' + (((b.batchIter) * 1000) + j)).slice(-7))];
       });
@@ -1453,7 +1451,7 @@ export class CatalogProvider implements WProvider {
         LocationsConsidering3pFlag(b.product.displayFlags.is3p),
         b.product,
         mergedInstance,
-        null, // explicitly null because we're not modifying the printer group in this code path. IF this is incorrect, then add back "b.product.printerGroup ? this.#printerGroups[b.product.printerGroup] : "
+        b.product.printerGroup ? this.#printerGroups[b.product.printerGroup] : null,
         this.CatalogSelectors, existingSquareObjects, ('000' + i).slice(-3))];
     }).flat();
     if (catalogObjects.length > 0) {
