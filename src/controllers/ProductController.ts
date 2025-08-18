@@ -29,8 +29,9 @@ const ProductInstanceValidationChain = (prefix: string) => [
   body(`${prefix}externalIDs`).isArray(),
   body(`${prefix}externalIDs.*.key`).exists().isLength({ min: 1 }),
   body(`${prefix}externalIDs.*.value`).exists(),
-  body(`${prefix}displayFlags.posName`).optional({nullable: true}).trim(),
-  body(`${prefix}displayFlags.hideFromPos`).toBoolean(true),
+  body(`${prefix}displayFlags.pos.name`).optional({nullable: true}).trim(),
+  body(`${prefix}displayFlags.pos.hide`).toBoolean(true),
+  body(`${prefix}displayFlags.pos.skip_customization`).toBoolean(true),
   body(`${prefix}displayFlags.menu.ordinal`).exists().isInt({ min: 0 }),
   body(`${prefix}displayFlags.menu.hide`).toBoolean(true),
   body(`${prefix}displayFlags.menu.price_display`).exists().isIn(Object.keys(PriceDisplay)),
@@ -233,8 +234,11 @@ export class ProductController implements IExpressController {
   private postProductInstance = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const displayFlags = { 
-        hideFromPos: req.body.displayFlags.hideFromPos,
-        posName: req.body.displayFlags.posName,
+        pos: {
+          hide: req.body.displayFlags.pos.hide,
+          name: req.body.displayFlags.pos.name,
+          skip_customization: req.body.displayFlags.pos.skip_customization
+        },
         menu: {
           adornment: req.body.displayFlags.menu.adornment,
           hide: req.body.displayFlags.menu.hide,

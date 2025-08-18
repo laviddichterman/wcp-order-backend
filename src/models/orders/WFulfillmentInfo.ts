@@ -1,12 +1,25 @@
 import { Schema } from "mongoose";
-import { AddressComponent, DeliveryAddressValidateResponse, DeliveryInfoDto, DineInInfoDto, FulfillmentDto, ThirdPartyInfo, WFulfillmentStatus } from "@wcp/wcpshared";
+import { AddressComponent, DeliveryAddressValidateResponse, DeliveryInfoDto, DineInInfoDto, FulfillmentDto, ThirdPartyInfo, WFulfillmentStatus, WSeatingStatus, WSeatingInfo } from "@wcp/wcpshared";
+
+export const WSeatingInfoSchema = new Schema<WSeatingInfo>({
+  // Corresponding to a WSeatingSchema
+  // list of seating resources assigned to this order
+  tableId: [{ type: String, ref: 'WSeatingSchema', _id: false }],
+  status: {
+    type: String,
+    enum: WSeatingStatus,
+    required: true
+  },
+  // modification time
+  mtime: Number
+}, { _id: false });
 
 export const DineInInfoSchema = new Schema<DineInInfoDto>({
   partySize: {
     type: Number,
     required: true
   },
-  tableId: String
+  seating: WSeatingInfoSchema
 }, { _id: false });
 
 export const AddressComponentSchema = new Schema<AddressComponent>({
@@ -16,7 +29,7 @@ export const AddressComponentSchema = new Schema<AddressComponent>({
 }, { _id: false });
 
 export const DeliveryAddressValidateResponseSchema = new Schema<DeliveryAddressValidateResponse>({
-  validated_address: { 
+  validated_address: {
     type: String,
     required: true
   },
@@ -32,12 +45,12 @@ export const DeliveryAddressValidateResponseSchema = new Schema<DeliveryAddressV
 }, { _id: false });
 
 export const DeliveryInfoSchema = new Schema<DeliveryInfoDto>({
-  address: { 
+  address: {
     type: String,
     required: true
   },
   address2: String,
-  zipcode: { 
+  zipcode: {
     type: String,
     required: true
   },
@@ -46,11 +59,11 @@ export const DeliveryInfoSchema = new Schema<DeliveryInfoDto>({
 }, { _id: false });
 
 export const ThirdPartyInfoSchema = new Schema<ThirdPartyInfo>({
-  squareId: { 
+  squareId: {
     type: String,
     required: true
   },
-  source: { 
+  source: {
     type: String,
     required: true
   }
@@ -62,17 +75,17 @@ export const FulfillmentInfo = new Schema<FulfillmentDto>({
     enum: WFulfillmentStatus,
     required: true
   },
-  selectedService: { 
+  selectedService: {
     type: String,
     required: true,
     ref: 'FulfillmentModel'
   },
   // as formatISODate
-  selectedDate: { 
+  selectedDate: {
     type: String,
     required: true
   },
-  selectedTime: { 
+  selectedTime: {
     type: Number,
     required: true
   },

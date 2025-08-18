@@ -407,7 +407,7 @@ export class CatalogProvider implements WProvider {
 
     const batches = Object.values(this.#catalog.products)
       .map(p => p.instances
-        .filter(piid => { const pi = this.#catalog.productInstances[piid]; return pi && pi.displayFlags.hideFromPos !== true && GetSquareIdIndexFromExternalIds(pi.externalIDs, "ITEM") === -1; })
+        .filter(piid => { const pi = this.#catalog.productInstances[piid]; return pi && pi.displayFlags.pos.hide !== true && GetSquareIdIndexFromExternalIds(pi.externalIDs, "ITEM") === -1; })
         .map(piid => ({ piid, product: { modifiers: p.product.modifiers, price: p.product.price, printerGroup: p.product.printerGroup, disabled: p.product.disabled, displayFlags: p.product.displayFlags }, productInstance: {} })))
       .flat();
     if (batches.length > 0) {
@@ -1159,6 +1159,8 @@ export class CatalogProvider implements WProvider {
         removedModifierTypes = oldModifierTypes.filter(x => !newModifierTypes.includes(x));
         addedModifierTypes = newModifierTypes.filter(x => !oldModifierTypes.includes(x)).length > 0;
       }
+      // need to check for any explicit modifications to the printerGroup since new square API stores the Menu category in this field too and we don't currently support that well
+      const changedPrinterGroup = b.product.printerGroup !== undefined && oldProductEntry.product.printerGroup !== b.product.printerGroup;
       const mergedProduct = { ...oldProductEntry.product, ...b.product };
 
       const insertInstances = b.instances.filter(b => !isUpdateProductInstance(b)) as CreateIProductInstance[];
@@ -1168,7 +1170,7 @@ export class CatalogProvider implements WProvider {
 
       });
       // add the insert instances
-      catalogObjectsForUpsert.push(...adjustedInsertInstances.filter(pi => pi.displayFlags.hideFromPos !== true).map((pi, k) =>
+      catalogObjectsForUpsert.push(...adjustedInsertInstances.filter(pi => pi.displayFlags.pos.hide !== true).map((pi, k) =>
         ProductInstanceToSquareCatalogObject(
           LocationsConsidering3pFlag(mergedProduct.displayFlags.is3p),
           mergedProduct,
@@ -1186,13 +1188,13 @@ export class CatalogProvider implements WProvider {
           addedModifierTypes ||
           pi.modifiers.filter(mod => removedModifierTypes.includes(mod.modifierTypeId)).length > 0)
         .map(pi => ({ ...pi, modifiers: pi.modifiers.filter(x => !removedModifierTypes.includes(x.modifierTypeId)) }));
-      externalIdsToDelete.push(...explicitUpdateInstances.map(pi => this.Catalog.productInstances[pi.id]!.displayFlags.hideFromPos === false && pi.displayFlags?.hideFromPos === true ? GetSquareExternalIds(pi.externalIDs ?? this.Catalog.productInstances[pi.id]!.externalIDs) : []).flat());
+      externalIdsToDelete.push(...explicitUpdateInstances.map(pi => this.Catalog.productInstances[pi.id]!.displayFlags.pos.hide === false && pi.displayFlags?.pos.hide === true ? GetSquareExternalIds(pi.externalIDs ?? this.Catalog.productInstances[pi.id]!.externalIDs) : []).flat());
       const adjustedUpdatedInstances: IProductInstance[] = [
         ...implicitUpdateInstances,
         ...explicitUpdateInstances.map(pi => {
           const oldInstance = this.Catalog.productInstances[pi.id]!;
           // these need to be deleted from square since they were previously not hidden from POS and now they are
-          const needToDeleteSquareCatalogItem = oldInstance.displayFlags.hideFromPos === false && pi.displayFlags?.hideFromPos === true;
+          const needToDeleteSquareCatalogItem = oldInstance.displayFlags.pos.hide === false && pi.displayFlags?.pos.hide === true;
           const mergedExternalIds = ProductInstanceUpdateMergeExternalIds(this.Catalog.productInstances[pi.id]!.externalIDs, pi.externalIDs);
           const newExternalIds = needToDeleteSquareCatalogItem ? GetNonSquareExternalIds(mergedExternalIds) : mergedExternalIds;
           if (needToDeleteSquareCatalogItem) {
@@ -1201,7 +1203,7 @@ export class CatalogProvider implements WProvider {
           return { ...oldInstance, ...pi, externalIDs: newExternalIds };
         })];
       existingSquareExternalIds.push(...adjustedUpdatedInstances.map((pi) => GetSquareExternalIds(pi.externalIDs)).flat());
-      return { product: mergedProduct, updateInstances: adjustedUpdatedInstances, insertInstances: adjustedInsertInstances, batchIter: i, index: b.index };
+      return { product: mergedProduct, updateInstances: adjustedUpdatedInstances, insertInstances: adjustedInsertInstances, batchIter: i, index: b.index, changedPrinterGroup };
     });
 
     const batchIter = adjustedUpdateBatches.length;
@@ -1219,16 +1221,16 @@ export class CatalogProvider implements WProvider {
     // now that we have square catalog items we can add on the insert and update objects
     catalogObjectsForUpsert.push(...adjustedUpdateBatches.flatMap((b) => {
       const updateCatalogObjects = b.updateInstances.flatMap((pi, j) => {
-        return pi.displayFlags.hideFromPos ? [] : [ProductInstanceToSquareCatalogObject(
+        return pi.displayFlags.pos.hide ? [] : [ProductInstanceToSquareCatalogObject(
           LocationsConsidering3pFlag(b.product.displayFlags.is3p),
           b.product,
           pi,
-          b.product.printerGroup ? this.#printerGroups[b.product.printerGroup] : null,
+          b.changedPrinterGroup && b.product.printerGroup ? this.#printerGroups[b.product.printerGroup] : null,
           this.CatalogSelectors, existingSquareObjects,
           ('0000000' + (((b.batchIter) * 1000) + j)).slice(-7))];
       });
       const insertCatalogObjects = b.insertInstances.flatMap((pi, k) => {
-        return pi.displayFlags.hideFromPos ? [] : [ProductInstanceToSquareCatalogObject(
+        return pi.displayFlags.pos.hide ? [] : [ProductInstanceToSquareCatalogObject(
           LocationsConsidering3pFlag(b.product.displayFlags.is3p),
           b.product,
           pi,
@@ -1245,7 +1247,7 @@ export class CatalogProvider implements WProvider {
       const adjustedProduct: Omit<IProduct, 'id' | 'baseProductId'> = { ...b.product, externalIDs: GetNonSquareExternalIds(b.product.externalIDs) };
       const adjustedInstances: Omit<IProductInstance, 'id' | 'productId'>[] = b.instances.map(x => ({ ...x, externalIDs: GetNonSquareExternalIds(x.externalIDs) }))
       // first add the stuff to square so we can write to the DB in two operations
-      catalogObjectsForUpsert.push(...adjustedInstances.filter(pi => pi.displayFlags.hideFromPos !== true).map((pi, j) =>
+      catalogObjectsForUpsert.push(...adjustedInstances.filter(pi => pi.displayFlags.pos.hide !== true).map((pi, j) =>
         ProductInstanceToSquareCatalogObject(
           LocationsConsidering3pFlag(adjustedProduct.displayFlags.is3p),
           adjustedProduct,
@@ -1400,7 +1402,7 @@ export class CatalogProvider implements WProvider {
     const filteredExternalIds = GetNonSquareExternalIds(instance.externalIDs);
     let adjustedInstance: Omit<IProductInstance, 'id'> = { ...instance, externalIDs: filteredExternalIds };
 
-    if (instance.displayFlags.hideFromPos !== true) {
+    if (instance.displayFlags.pos.hide !== true) {
       // add the product instance to the square catalog here
       const product = this.#catalog.products[adjustedInstance.productId]!.product;
       const upsertResponse = await SquareProviderInstance.UpsertCatalogObject(ProductInstanceToSquareCatalogObject(
@@ -1447,11 +1449,11 @@ export class CatalogProvider implements WProvider {
     const mappings: CatalogIdMapping[] = [];
     const catalogObjects = batches.map((b, i) => {
       const mergedInstance = { ...oldProductInstances[i], ...b.productInstance };
-      return mergedInstance.displayFlags.hideFromPos === true ? [] : [ProductInstanceToSquareCatalogObject(
+      return mergedInstance.displayFlags.pos.hide === true ? [] : [ProductInstanceToSquareCatalogObject(
         LocationsConsidering3pFlag(b.product.displayFlags.is3p),
         b.product,
         mergedInstance,
-        b.product.printerGroup ? this.#printerGroups[b.product.printerGroup] : null,
+        null, // explicitly null because we're not modifying the printer group in this code path. IF this is incorrect, then add back "b.product.printerGroup ? this.#printerGroups[b.product.printerGroup] : "
         this.CatalogSelectors, existingSquareObjects, ('000' + i).slice(-3))];
     }).flat();
     if (catalogObjects.length > 0) {

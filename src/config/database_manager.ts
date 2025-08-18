@@ -352,6 +352,50 @@ const UPGRADE_MIGRATION_FUNCTIONS: IMigrationFunctionObject = {
   }],
   "0.6.5": [{ major: 0, minor: 6, patch: 6 }, async () => {
   }],
+  "0.6.6": [{ major: 0, minor: 6, patch: 7 }, async () => {
+    {
+      // migrate hideFromPos, posName to pos.hide, pos.name and set pos.skip_customization to the same value as order.skip_customization
+      const WProductInstanceSchema = mongoose.model('WPrODUctInstanceSCHeMa', new Schema({
+        displayFlags: {
+          hideFromPos: Boolean,
+          posName: String,
+          pos: {
+            // name used internally in the POS, so things like BEERNAME pint and BEERNAME growler fill can exist without muddying up the menu names
+            // eg: ABT 12 growler fill
+            name: String,
+            hide: Boolean,
+            skip_customization: Boolean
+          },
+          order: {
+            skip_customization: Boolean,
+          }
+        }
+      }));
+      const elts = await WProductInstanceSchema.find();
+      await Promise.all(elts.map(async (prod) => {
+        if (prod.displayFlags) {
+          prod.displayFlags.pos = {
+            name: prod.displayFlags.posName,
+            hide: prod.displayFlags.hideFromPos,
+            skip_customization: prod.displayFlags.order?.skip_customization || false
+          };
+          delete prod.displayFlags.posName;
+          delete prod.displayFlags.hideFromPos;
+          return await prod.save()
+            .then(doc => {
+              logger.info(`Updated ProductInstanceModel ${doc.id} with POS scoped fields: ${JSON.stringify(doc.displayFlags!.pos)}`);
+              return doc;
+            })
+            .catch(err => {
+              logger.error(`Failed to update ProductInstanceModel ${prod.id} got error: ${JSON.stringify(err)}`);
+              return Promise.reject(err);
+            });
+        }
+        logger.warn(`ProductInstanceModel ${prod.id} has no displayFlags, skipping.`);
+        return prod;
+      }));
+    }
+  }],
 }
 
 export class DatabaseManager implements WProvider {

@@ -475,7 +475,7 @@ export const ProductInstanceToSquareCatalogObject = (
   locationIds: string[],
   product: Pick<IProduct, 'modifiers' | 'price' | 'disabled'>,
   productInstance: Omit<IProductInstance, 'id' | 'productId'>,
-  printerGroup: PrinterGroup | null,
+  printerGroup: PrinterGroup | null, // this needs to be null if not wanting to modify it, so we don't clobber the menu category
   catalogSelectors: ICatalogSelectors,
   currentObjects: Pick<CatalogObject, 'id' | 'version' | 'itemData'>[],
   batch: string): CatalogObject => {
@@ -555,10 +555,10 @@ export const ProductInstanceToSquareCatalogObject = (
       availableOnline: true,
       isArchived: isBlanketDisabled,
       descriptionHtml: productInstance.description,
-      name: productInstance.displayFlags.posName ? productInstance.displayFlags.posName : productInstance.displayName,
+      name: productInstance.displayFlags.pos.name ? productInstance.displayFlags.pos.name : productInstance.displayName,
       productType: productTypeItem,
       taxIds: [SQUARE_TAX_RATE_CATALOG_ID],
-      skipModifierScreen: product.modifiers.length === 0 || productInstance.displayFlags.order.skip_customization,
+      skipModifierScreen: product.modifiers.length === 0 || productInstance.displayFlags.pos.skip_customization,
       modifierListInfo,
       variations: [{
         id: squareItemVariationId,
