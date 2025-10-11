@@ -1,30 +1,42 @@
 import { WProvider } from '../types/WProvider';
-import { FulfillmentConfig, ReduceArrayToMapByKey, IWSettings, PostBlockedOffToFulfillmentsRequest, SetLeadTimesRequest, WDateUtils } from '@wcp/wcpshared';
+import { FulfillmentConfig, ReduceArrayToMapByKey, IWSettings, PostBlockedOffToFulfillmentsRequest, SetLeadTimesRequest, WDateUtils, SeatingResource } from '@wcp/wcpshared';
 import { HydratedDocument } from 'mongoose';
 import logger from '../logging';
 import { KeyValueModel, IKeyValueStore } from '../models/settings/KeyValueSchema';
 import { SettingsModel } from '../models/settings/SettingsSchema';
 import { FulfillmentModel } from '../models/settings/FulfillmentSchema';
 import { Promise } from 'bluebird';
+import { SeatingResourceModel } from '../models/orders/WSeatingResource';
 
 export class DataProvider implements WProvider {
   #settings: IWSettings;
   #fulfillments: Record<string, FulfillmentConfig>;
   #keyvalueconfig: { [key: string]: string };
+  #seatingResources: Record<string, SeatingResource>;
 
   constructor() {
     this.#fulfillments = {};
+    this.#seatingResources = {};
     this.#settings = { additional_pizza_lead_time: 5, config: {} };
     this.#keyvalueconfig = {};
   }
 
-  syncFulfillments = async() => {
+  syncFulfillments = async () => {
     logger.debug(`Syncing Fulfillments.`);
     try {
       this.#fulfillments = ReduceArrayToMapByKey((await FulfillmentModel.find().exec()).map(x => x.toObject()), 'id');
     } catch (err) {
-      logger.error(`Failed fetching option types with error: ${JSON.stringify(err)}`);
-    } 
+      logger.error(`Failed fetching fulfillments with error: ${JSON.stringify(err)}`);
+    }
+  }
+
+  syncSeatingResources = async () => {
+    logger.debug(`Syncing Seating Resources.`);
+    try {
+      this.#seatingResources = ReduceArrayToMapByKey((await SeatingResourceModel.find().exec()).map(x => x.toObject()), 'id');
+    } catch (err) {
+      logger.error(`Failed fetching seating resources with error: ${JSON.stringify(err)}`);
+    }
   }
 
   Bootstrap = async () => {
@@ -49,7 +61,7 @@ export class DataProvider implements WProvider {
         this.#keyvalueconfig[found_key_value_store.settings[i].key] = found_key_value_store.settings[i].value;
       }
     }
-    
+
     // check for and populate settings, including operating hours
     const found_settings = await SettingsModel.findOne();
     logger.info("Found settings: %o", found_settings);
@@ -66,6 +78,11 @@ export class DataProvider implements WProvider {
   get Fulfillments() {
     return this.#fulfillments;
   }
+
+  get SeatingResources() {
+    return this.#seatingResources;
+  }
+
   get KeyValueConfig() {
     return this.#keyvalueconfig;
   }
@@ -132,7 +149,7 @@ export class DataProvider implements WProvider {
       });
   }
 
-  /** precondition: references to this fulfillment have already been removed from the catalog! */
+  /** this probably should get deleted. We want to disable seating resources and repurpose disabled ones otherwise this might become a data management nightmare */
   deleteFulfillment = async (id: string) => {
     return FulfillmentModel.findByIdAndDelete(id)
       .then(doc => {
@@ -142,6 +159,51 @@ export class DataProvider implements WProvider {
       })
       .catch(err => {
         logger.error(`Error deleting fulfillment: ${JSON.stringify(err)}`);
+        return Promise.reject(err);
+      });
+  }
+
+
+  setSeatingResource = async (seatingResource: Omit<SeatingResource, 'id'>) => {
+    const sr = new SeatingResourceModel(seatingResource);
+    const savePromise = sr.save()
+      .then(x => {
+        logger.debug(`Saved new seating resource: ${JSON.stringify(x)}`);
+        this.#seatingResources[x.id] = x;
+        return x;
+      })
+      .catch(err => {
+        logger.error(`Error saving new seating resource: ${JSON.stringify(err)}`);
+        return Promise.reject(err);
+      });
+    return savePromise;
+  }
+
+  updateSeatingResource = async (id: string, seatingResource: Partial<Omit<SeatingResource, 'id'>>) => {
+    return SeatingResourceModel.findByIdAndUpdate(id,
+      seatingResource,
+      { new: true })
+      .then(doc => {
+        logger.debug(`Updated Seating Resource[${id}]: ${JSON.stringify(doc)}`);
+        this.#seatingResources[id] = doc!;
+        return doc;
+      })
+      .catch(err => {
+        logger.error(`Error updating Seating Resource: ${JSON.stringify(err)}`);
+        return Promise.reject(err);
+      });
+  }
+
+  /** precondition: references to this seating resource have already been removed from the catalog! */
+  deleteSeatingResource = async (id: string) => {
+    return SeatingResourceModel.findByIdAndDelete(id)
+      .then(doc => {
+        logger.debug(`Deleted seating resource[${id}]: ${JSON.stringify(doc)}`);
+        delete this.#seatingResources[id];
+        return doc;
+      })
+      .catch(err => {
+        logger.error(`Error deleting seating resource: ${JSON.stringify(err)}`);
         return Promise.reject(err);
       });
   }
