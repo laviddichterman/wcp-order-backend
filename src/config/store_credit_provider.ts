@@ -259,9 +259,14 @@ export class StoreCreditProvider {
       const new_entry = [entry[0], entry[1], entry[2], newBalance, entry[4], updatedBy, date_modified, entry[7], entry[8], entry[9], newLockAsString.enc, newLockAsString.iv, newLockAsString.auth];
       const new_range = `${ACTIVE_SHEET}!${2 + creditCodeIndex}:${2 + creditCodeIndex}`;
       // TODO switch to volatile-esq update API call
-      await GoogleProviderInstance.UpdateValuesInSheet(DataProviderInstance.KeyValueConfig.STORE_CREDIT_SHEET, new_range, new_entry);
-      logger.info(`Refunded ${MoneyToDisplayString(amount, true)} to code ${code} yielding balance of ${newBalance}.`);
-      return { success: true, entry: new_entry, index: creditCodeIndex };
+      try {
+        await GoogleProviderInstance.UpdateValuesInSheet(DataProviderInstance.KeyValueConfig.STORE_CREDIT_SHEET, new_range, new_entry);
+        logger.info(`Refunded ${MoneyToDisplayString(amount, true)} to code ${code} yielding balance of ${newBalance}.`);
+        return { success: true, entry: new_entry, index: creditCodeIndex };
+      } catch (err) {
+        logger.error(`Failed to refund ${MoneyToDisplayString(amount, true)} to code ${code}, error: ${JSON.stringify(err)}`);
+        return { success: false };
+      }
     } else {
       logger.error(`Not sure how, but the store credit key wasn't found: ${code}`);
       return { success: false };
