@@ -12,7 +12,7 @@ const OAuth2 = google.auth.OAuth2;
 export class GoogleProvider implements WProvider {
 
   #accessToken: string;
-  #smtpTransport : nodemailer.Transporter<SMTPTransport.SentMessageInfo>;
+  #smtpTransport: nodemailer.Transporter<SMTPTransport.SentMessageInfo>;
   #calendarAPI;
   #sheetsAPI;
   #oauth2Client: OAuth2Client;
@@ -94,8 +94,8 @@ export class GoogleProvider implements WProvider {
     return this.#accessToken;
   };
 
-  SendEmail = async (from : string | Mail.Address, to : string | Mail.Address, subject : string, replyto : string, htmlbody : string, attachments : Mail.Attachment[] = [], retry=0, max_retry=5) => {    
-    const mailOptions : Mail.Options = {
+  SendEmail = async (from: string | Mail.Address, to: string | Mail.Address, subject: string, replyto: string, htmlbody: string, attachments: Mail.Attachment[] = [], retry = 0, max_retry = 5) => {
+    const mailOptions: Mail.Options = {
       from: from,
       to: to,
       subject: subject,
@@ -104,12 +104,12 @@ export class GoogleProvider implements WProvider {
       attachments
     };
     const call_fxn = async () => {
-      try { 
+      try {
         const res = await this.#smtpTransport.sendMail(mailOptions);
         logger.debug(`Sent mail with subject ${subject} to ${to}`);
         return res;
       }
-      catch (error) { 
+      catch (error) {
         logger.error(`Email of ${JSON.stringify(mailOptions)} not sent, got error: ${error}`);
         //this.#smtpTransport.close(); not sure if this is needed or not?
         throw error;
@@ -118,11 +118,11 @@ export class GoogleProvider implements WProvider {
     return await ExponentialBackoff(call_fxn, () => true, retry, max_retry);
   };
 
-  CreateCalendarEvent = async ( eventJson: calendar_v3.Schema$Event,
-    retry=0, 
-    max_retry=5) => {
+  CreateCalendarEvent = async (eventJson: calendar_v3.Schema$Event,
+    retry = 0,
+    max_retry = 5) => {
     const call_fxn = async () => {
-      try { 
+      try {
         const event = await this.#calendarAPI.events.insert({
           auth: this.#oauth2Client,
           calendarId: 'primary',
@@ -135,16 +135,16 @@ export class GoogleProvider implements WProvider {
         logger.error("event not created: %o", event);
         logger.error(err);
         throw (err);
-      }  
+      }
     }
     return await ExponentialBackoff(call_fxn, () => true, retry, max_retry);
   };
 
-  DeleteCalendarEvent = async ( eventId: string,
-    retry=0, 
-    max_retry=5) => {
+  DeleteCalendarEvent = async (eventId: string,
+    retry = 0,
+    max_retry = 5) => {
     const call_fxn = async () => {
-      try { 
+      try {
         await this.#calendarAPI.events.delete({
           auth: this.#oauth2Client,
           calendarId: 'primary',
@@ -156,16 +156,16 @@ export class GoogleProvider implements WProvider {
       catch (err) {
         logger.error(`Event not deleted, got error: ${err}`);
         throw (err);
-      }  
+      }
     }
     return await ExponentialBackoff(call_fxn, () => true, retry, max_retry);
   };
 
-  ModifyCalendarEvent = async ( eventId: string, sparseEvent: Partial<Omit<calendar_v3.Schema$Event, 'id'>>,
-    retry=0, 
-    max_retry=5) => {
+  ModifyCalendarEvent = async (eventId: string, sparseEvent: Partial<Omit<calendar_v3.Schema$Event, 'id'>>,
+    retry = 0,
+    max_retry = 5) => {
     const call_fxn = async () => {
-      try { 
+      try {
         const response = await this.#calendarAPI.events.patch({
           auth: this.#oauth2Client,
           calendarId: 'primary',
@@ -178,62 +178,110 @@ export class GoogleProvider implements WProvider {
       catch (err) {
         logger.error(`Event not updated, got error: ${err}`);
         throw (err);
-      }  
+      }
     }
     return await ExponentialBackoff(call_fxn, () => true, retry, max_retry);
   };
 
-  GetEventsForDate = async (min_date : string, max_date : string, tz : string) => {
-    const res = await this.#calendarAPI.events.list({
-      auth: this.#oauth2Client,
-      calendarId: 'primary',
-      timeMin: min_date,
-      timeMax: max_date,
-      timeZone: tz,
-      maxResults: 2500
-    });
-    return(res.data.items);
-  }
+  GetEventsForDate = async (min_date: string, max_date: string, tz: string,
+    retry = 0,
+    max_retry = 5) => {
 
-  AppendToSheet = async (sheetId : string, range : string, fields: any[]) => {
-    const res = await this.#sheetsAPI.spreadsheets.values.append({
-      auth: this.#oauth2Client,
-      spreadsheetId: sheetId,
-      range: range,
-      valueInputOption: "USER_ENTERED",
-      insertDataOption: "INSERT_ROWS",
-      requestBody: {
-        majorDimension: "ROWS",
-        values: [fields]
+    const call_fxn = async () => {
+      try {
+        const response = await this.#calendarAPI.events.list({
+          auth: this.#oauth2Client,
+          calendarId: 'primary',
+          timeMin: min_date,
+          timeMax: max_date,
+          timeZone: tz,
+          maxResults: 2500
+        });
+        return response.data.items;
       }
-    });
-    return(res.data);
+      catch (err) {
+        logger.error(`Unable to get events for date, got error: ${err}`);
+        throw (err);
+      }
+    }
+    return await ExponentialBackoff(call_fxn, () => true, retry, max_retry);
   }
 
-  GetValuesFromSheet = async (sheetId : string, range : string) => {
-    const res = await this.#sheetsAPI.spreadsheets.values.get({
-      auth: this.#oauth2Client,
-      spreadsheetId: sheetId,
-      range: range,
-      valueRenderOption: "UNFORMATTED_VALUE",
-      dateTimeRenderOption: "FORMATTED_STRING",
-      majorDimension: "ROWS",
-    });
-    return(res.data);
+  AppendToSheet = async (sheetId: string, range: string, fields: any[],
+    retry = 0,
+    max_retry = 5
+  ) => {
+    const call_fxn = async () => {
+      try {
+        const response = await this.#sheetsAPI.spreadsheets.values.append({
+          auth: this.#oauth2Client,
+          spreadsheetId: sheetId,
+          range: range,
+          valueInputOption: "USER_ENTERED",
+          insertDataOption: "INSERT_ROWS",
+          requestBody: {
+            majorDimension: "ROWS",
+            values: [fields]
+          }
+        });
+        return response.data;
+      }
+      catch (err) {
+        logger.error(`Unable to append to sheet, got error: ${err}`);
+        throw (err);
+      }
+    }
+    return await ExponentialBackoff(call_fxn, () => true, retry, max_retry);
+  }
+
+  GetValuesFromSheet = async (sheetId: string, range: string,
+    retry = 0,
+    max_retry = 5
+  ) => {
+    const call_fxn = async () => {
+      try {
+        const response = await this.#sheetsAPI.spreadsheets.values.get({
+          auth: this.#oauth2Client,
+          spreadsheetId: sheetId,
+          range: range,
+          valueRenderOption: "UNFORMATTED_VALUE",
+          dateTimeRenderOption: "FORMATTED_STRING",
+          majorDimension: "ROWS",
+        });
+        return response.data;
+      }
+      catch (err) {
+        logger.error(`Unable to get values from sheet, got error: ${err}`);
+        throw (err);
+      }
+    }
+    return await ExponentialBackoff(call_fxn, () => true, retry, max_retry);
   };
 
-  UpdateValuesInSheet = async (sheetId : string, range : string, fields : any[]) => {
-    const res = await this.#sheetsAPI.spreadsheets.values.update({
-      auth: this.#oauth2Client,
-      spreadsheetId: sheetId,
-      range: range,
-      valueInputOption: "USER_ENTERED",
-      requestBody: {
-        majorDimension: "ROWS",
-        values: [fields]
+  UpdateValuesInSheet = async (sheetId: string, range: string, fields: any[],
+    retry = 0,
+    max_retry = 5
+  ) => {
+    const call_fxn = async () => {
+      try {
+        const response = await this.#sheetsAPI.spreadsheets.values.update({
+          auth: this.#oauth2Client,
+          spreadsheetId: sheetId,
+          range: range,
+          valueInputOption: "USER_ENTERED",
+          requestBody: {
+            majorDimension: "ROWS",
+            values: [fields]
+          }
+        });
+        return response.data;
       }
-    });
-    return(res.data);
+      catch (err) {
+        logger.error(`Unable to update values in sheet, got error: ${err}`);
+        throw (err);
+      }
+    }
+    return await ExponentialBackoff(call_fxn, () => true, retry, max_retry);
   }
 
 };
