@@ -203,6 +203,23 @@ export const CreateOrderStoreCredit = (locationId: string, referenceId: string, 
   }
 }
 
+export const CreateOrderStoreCreditForRefund = (locationId: string, referenceId: string, amount: IMoney, note: string): Order => {
+  return {
+    ...CreateOrderStoreCredit(locationId, referenceId, amount, note),
+    discounts: [{
+      type: 'FIXED_AMOUNT',
+      scope: 'ORDER',
+      name: "Refund",
+      amountMoney: IMoneyToBigIntMoney(amount),
+      appliedMoney: IMoneyToBigIntMoney(amount),
+    }],
+    pricingOptions: {
+      autoApplyDiscounts: true,
+      autoApplyTaxes: false
+    },
+  }
+}
+
 export const CreateOrdersForPrintingFromCart = (
   locationId: string,
   referenceId: string,
@@ -442,8 +459,8 @@ export const PrinterGroupToSquareCatalogObjectPlusDummyProduct = (locationIds: s
     presentAtLocationIds: locationIds,
     ...(versionItem !== null ? { version: versionItem } : {}),
     itemData: {
-      categories: [ {id: squareCategoryId } ],
-      reportingCategory: {id: squareCategoryId },
+      categories: [{ id: squareCategoryId }],
+      reportingCategory: { id: squareCategoryId },
       availableElectronically: true,
       availableForPickup: true,
       availableOnline: true,
@@ -479,7 +496,7 @@ export const ProductInstanceToSquareCatalogObject = (
   catalogSelectors: ICatalogSelectors,
   currentObjects: Pick<CatalogObject, 'id' | 'version' | 'itemData'>[],
   batch: string
-  ): CatalogObject => {
+): CatalogObject => {
   // todo: we need a way to handle naming of split/super custom product instances
   // do we need to add an additional variation on the square item corresponding to the base product instance for split and otherwise unruly product instances likely with pricingType: VARIABLE?
   // maybe we add variations for each half and half combo?
@@ -547,7 +564,7 @@ export const ProductInstanceToSquareCatalogObject = (
   const currentItemCategories = currentObjects.find(x => x.id === squareItemId)?.itemData?.categories ?? []
   const newPrinterGroupCategory = printerGroup ? GetSquareIdFromExternalIds(printerGroup.externalIDs, 'CATEGORY')! : null;
   const oldPrinterGroupCategory = currentObjects.find(x => x.id === squareItemId)?.itemData?.reportingCategory?.id ?? null;
-  const otherCategories = currentItemCategories.filter(x=>x.id !== oldPrinterGroupCategory);
+  const otherCategories = currentItemCategories.filter(x => x.id !== oldPrinterGroupCategory);
 
   return {
     id: squareItemId,
@@ -556,7 +573,7 @@ export const ProductInstanceToSquareCatalogObject = (
     presentAtLocationIds: locationIds,
     ...(versionItem !== null ? { version: versionItem } : {}),
     itemData: {
-      ...(printerGroup ? { categories: [...otherCategories, { id: newPrinterGroupCategory! } ], reportingCategory: { id: newPrinterGroupCategory! } } : { categories: otherCategories }),
+      ...(printerGroup ? { categories: [...otherCategories, { id: newPrinterGroupCategory! }], reportingCategory: { id: newPrinterGroupCategory! } } : { categories: otherCategories }),
       abbreviation: productInstance.shortcode.slice(0, 24),
       availableElectronically: true,
       availableForPickup: true,

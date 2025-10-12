@@ -54,6 +54,7 @@ const CancelOrderValidationChain = [
   ...IdempotentOrderIdPutValidationChain,
   body('reason').trim().exists(),
   body('emailCustomer').exists().toBoolean(true),
+  body('refundToOriginalPayment').optional().toBoolean(true),
 ];
 
 const ConfirmOrderValidationChain = [
@@ -140,10 +141,11 @@ export class OrderController implements IExpressController {
   private putCancelOrder = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const idempotencyKey = req.get('idempotency-key')!;
+      const refundToOriginalPayment = req.body.refundToOriginalPayment as boolean || false;
       const orderId = req.params.oId;
       const reason = req.body.reason as string;
       const emailCustomer = req.body.emailCustomer as boolean;
-      const response = await OrderManagerInstance.CancelOrder(idempotencyKey, orderId, reason, emailCustomer);
+      const response = await OrderManagerInstance.CancelOrder(idempotencyKey, orderId, reason, emailCustomer, refundToOriginalPayment);
       res.status(response.status).json(response);
     } catch (error) {
       SendFailureNoticeOnErrorCatch(req, error);

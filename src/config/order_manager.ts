@@ -38,14 +38,17 @@ import {
   OrderPaymentProposed,
   DetermineCartBasedLeadTime,
   CartByPrinterGroup,
-  CanThisBeOrderedAtThisTimeAndFulfillmentCatalog
+  CanThisBeOrderedAtThisTimeAndFulfillmentCatalog,
+  StoreCreditType,
+  IMoney,
+
 } from "@wcp/wcpshared";
 
 import { WProvider } from '../types/WProvider';
 
 import { formatRFC3339, format, Interval, isSameMinute, formatISO, addHours, isSameDay, subMinutes, isBefore, subDays } from 'date-fns';
 import { GoogleProviderInstance } from "./google";
-import { SquareProviderInstance } from "./square";
+import { SquareProviderInstance, SquareError } from "./square";
 import { StoreCreditProviderInstance } from "./store_credit_provider";
 import { CatalogProviderInstance } from './catalog_provider';
 import { DataProviderInstance } from './dataprovider';
@@ -54,11 +57,10 @@ import crypto from 'crypto';
 import { WOrderInstanceModel } from "../models/orders/WOrderInstance";
 import { Order as SquareOrder } from "square";
 import { SocketIoProviderInstance } from "./socketio_provider";
-import { CreateOrderFromCart, CreateOrderForMessages, CreateOrdersForPrintingFromCart, GetSquareIdFromExternalIds, BigIntMoneyToIntMoney, LineItemsToOrderInstanceCart } from "./SquareWarioBridge";
+import { CreateOrderFromCart, CreateOrderForMessages, CreateOrdersForPrintingFromCart, GetSquareIdFromExternalIds, BigIntMoneyToIntMoney, LineItemsToOrderInstanceCart, CreateOrderStoreCreditForRefund } from "./SquareWarioBridge";
 import { FilterQuery } from "mongoose";
 import { calendar_v3 } from "googleapis";
 import { UTCDate } from "@date-fns/utc";
-type CrudFunctionResponseWithStatusCode = (order: WOrderInstance) => ResponseWithStatusCode<CrudOrderResponse>;
 const WCP = "Windy City Pie";
 
 const IL_AREA_CODES = ["217", "309", "312", "630", "331", "618", "708", "773", "815", "779", "847", "224", "872"];
@@ -127,6 +129,47 @@ const CreateExternalCancelationEmail = async function (
     service_title,
     EMAIL_ADDRESS,
     `${message ? `<p>${message}</p>` : ""}<br />${customer_name},<br />This message serves to inform you that we've canceled your order previously scheduled for ${display_time}. We hope to see you again in the near future!`);
+}
+
+async function IssueRefundCreditForOrder(squareOrder: SquareOrder, customerInfo: CustomerInfoDto, amount: IMoney): Promise<{ success: true; } & { [k: string]: unknown } | {
+  success: false;
+  result: null;
+  error: SquareError[];
+}> {
+  let undoPaymentResponse: { success: true; } & { [k: string]: unknown } | {
+    success: false;
+    result: null;
+    error: SquareError[];
+  };
+  // refund to store credit
+  const create_order_store_credit = await SquareProviderInstance.CreateOrder(
+    CreateOrderStoreCreditForRefund(DataProviderInstance.KeyValueConfig.SQUARE_LOCATION, squareOrder.referenceId!, amount, `Refund for order ${squareOrder.id!} cancellation`));
+  undoPaymentResponse = create_order_store_credit;
+  if (create_order_store_credit.success && create_order_store_credit.result.order?.id) {
+    const zero_payment = await SquareProviderInstance.CreatePayment({
+      amount: { currency: CURRENCY.USD, amount: 0 },
+      autocomplete: true,
+      locationId: create_order_store_credit.result.order.locationId!,
+      referenceId: "",
+      squareOrderId: create_order_store_credit.result.order.id!,
+      sourceId: "CASH"
+    });
+    undoPaymentResponse = zero_payment;
+    if (zero_payment.success) {
+      const issue_credit_response = await StoreCreditProviderInstance.IssueCredit({
+        addedBy: 'WARIO',
+        amount: amount,
+        creditType: StoreCreditType.MONEY,
+        reason: `Refund for ${squareOrder.id!}`,
+        expiration: null,
+        recipientEmail: customerInfo.email,
+        recipientNameFirst: customerInfo.givenName,
+        recipientNameLast: customerInfo.familyName,
+      });
+      undoPaymentResponse = issue_credit_response.status === 200 ? { success: true, result: issue_credit_response, error: [] } : { success: false, result: null, error: [{ category: "API_ERROR", code: "INTERNAL_SERVER_ERROR", detail: "Failed issuing store credit" }] };
+    }
+  }
+  return undoPaymentResponse;
 }
 
 function GenerateOrderPaymentDisplay(payment: OrderPayment, isHtml: boolean) {
@@ -565,10 +608,10 @@ export class OrderManager implements WProvider {
       const SQORDER_MSG = lockedOrder.metadata.find(x => x.key === 'SQORDER_MSG')?.value?.split(',') ?? [];
       const expoPrinters = Object.values(CatalogProviderInstance.PrinterGroups).filter(x => x.isExpo);
       if (expoPrinters.length > 0) {
-        
+
         const message: string[] = [
           ...Object.values(rebuiltCart).flat().map(x => `${x.quantity}x: ${x.product.m.name}`),
-          `Move to ${destination}`, 
+          `Move to ${destination}`,
           ...(additionalMessage ? [additionalMessage] : []),
         ];
         const messages = expoPrinters.map(pg => ({
@@ -696,7 +739,7 @@ export class OrderManager implements WProvider {
     }
   }
 
-  private CancelLockedOrder = async (lockedOrder: WOrderInstance, reason: string, emailCustomer: boolean): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
+  private CancelLockedOrder = async (lockedOrder: WOrderInstance, reason: string, emailCustomer: boolean, refundToOriginalPayment: boolean): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
     logger.debug(`Found order to cancel for ${JSON.stringify(lockedOrder.customerInfo, null, 2)}, order ID: ${lockedOrder.id}. lock applied.`);
     const errors: WError[] = [];
     try {
@@ -715,16 +758,29 @@ export class OrderManager implements WProvider {
         }));
       }
 
-      // refund square payments
+      // refund payments
       await Promise.all(lockedOrder.payments.map(async (payment) => {
         if (payment.t === PaymentMethod.StoreCredit) {
           // refund the credit in the store credit DB
-          await StoreCreditProviderInstance.RefundStoreCredit(payment.payment.code, payment.amount, 'WARIO');
+          const creditRefundResponse = await StoreCreditProviderInstance.RefundStoreCredit(payment.payment.code, payment.amount, 'WARIO');
+          if (creditRefundResponse.success === false) {
+            const errorDetail = `Failed to refund store credit for payment ID: ${payment.processorId}. This generally means that the store credit code is invalid (somehow) or Google sheets is having issues.`;
+            logger.error(errorDetail);
+            // todo: need to figure out how to proceed here
+          }
         }
-        let undoPaymentResponse;
-        if (lockedOrder.status === WOrderStatus.CONFIRMED) {
-          // TODO: see if we can re-make the payment to a different order
-          undoPaymentResponse = await SquareProviderInstance.RefundPayment(payment.processorId, payment.amount, reason);
+        let undoPaymentResponse: { success: true; } & { [k: string]: unknown } | {
+          success: false;
+          result: null;
+          error: SquareError[];
+        };
+        if (payment.status === TenderBaseStatus.COMPLETED) {
+          if (!refundToOriginalPayment && payment.t === PaymentMethod.CreditCard) {
+            // refund to store credit
+            undoPaymentResponse = await IssueRefundCreditForOrder(squareOrder, lockedOrder.customerInfo, payment.amount);
+          } else {
+            undoPaymentResponse = await SquareProviderInstance.RefundPayment(payment.processorId, payment.amount, reason);
+          }
         } else {
           undoPaymentResponse = await SquareProviderInstance.CancelPayment(payment.processorId);
         }
@@ -817,7 +873,7 @@ export class OrderManager implements WProvider {
       }
 
       const orderVersion = retrieveSquareOrderResponse.result.order!.version!;
-      
+
       const squareOrder = retrieveSquareOrderResponse.result.order!;
       // cancel square fulfillment(s) and the order if it's not paid
       if (squareOrder.state === 'OPEN') {
@@ -1111,7 +1167,11 @@ export class OrderManager implements WProvider {
     // adjust DB event
     return await WOrderInstanceModel.findOneAndUpdate(
       { locked: lockedOrder.locked, _id: lockedOrder.id },
-      { locked: null, status: WOrderStatus.CONFIRMED }, // TODO: payments status need to be changed as committed to the DB if not 3p
+      {
+        locked: null, 
+        status: WOrderStatus.CONFIRMED,
+        payments: lockedOrder.payments.map(p => ({ ...p, status: TenderBaseStatus.COMPLETED }))
+      },
       { new: true })
       .then(async (updatedOrder) => {
         // return success/failure
@@ -1168,10 +1228,10 @@ export class OrderManager implements WProvider {
     );
   }
 
-  public CancelOrder = async (idempotencyKey: string, orderId: string, reason: string, emailCustomer: boolean): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
+  public CancelOrder = async (idempotencyKey: string, orderId: string, reason: string, emailCustomer: boolean, refundToOriginalPayment: boolean): Promise<ResponseWithStatusCode<CrudOrderResponse>> => {
     return await this.LockAndActOnOrder(idempotencyKey, orderId,
       { status: { $in: [WOrderStatus.OPEN, WOrderStatus.CONFIRMED] } },
-      (o) => this.CancelLockedOrder(o, reason, emailCustomer)
+      (o) => this.CancelLockedOrder(o, reason, emailCustomer, refundToOriginalPayment)
     );
   }
 
@@ -1428,7 +1488,7 @@ export class OrderManager implements WProvider {
           rebuiltCart);
 
         SocketIoProviderInstance.EmitOrder(savedOrder);
-        
+
         // success!
         return { status: 200, success: true, result: savedOrder };
 

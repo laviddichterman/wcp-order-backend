@@ -13,6 +13,7 @@ import { ApiResponse, RetryConfiguration } from 'square/dist/types/core';
 export const SQUARE_BATCH_CHUNK_SIZE = process.env.WARIO_SQUARE_BATCH_CHUNK_SIZE ? parseInt(process.env.WARIO_SQUARE_BATCH_CHUNK_SIZE) : 25;
 
 type SquareProviderApiCallReturnSuccess<T> = { success: true; result: T; error: SquareError[]; };
+export type { Error as SquareError } from 'square';
 
 type SquareProviderApiCallReturnValue<T> = SquareProviderApiCallReturnSuccess<T> |
 { success: false; result: null; error: SquareError[]; };
