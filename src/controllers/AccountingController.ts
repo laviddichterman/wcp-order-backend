@@ -5,7 +5,7 @@ import { GoogleProviderInstance } from '../config/google';
 import { addDays, formatRFC3339, parseISO, startOfDay } from 'date-fns';
 import { OrderManagerInstance } from '../config/order_manager';
 import { CatalogProviderInstance } from './../config/catalog_provider';
-import { CoreCartEntry, CreateProductWithMetadataFromV2Dto, RoundToTwoDecimalPlaces, WDateUtils, WOrderStatus, WProduct } from '@wcp/wcpshared';
+import { CoreCartEntry, CreateProductWithMetadataFromV2Dto, RoundToTwoDecimalPlaces, WDateUtils, WOrderStatus, WProduct } from '@wcp/wario-shared';
 
 const tipsregex = /Tip Amount: \$([0-9]+(?:\.[0-9]{1,2})?)/;
 

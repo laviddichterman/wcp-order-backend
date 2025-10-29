@@ -1,4 +1,4 @@
-import { DiscountMethod, OrderLineDiscount, OrderLineDiscountCodeAmount, OrderManualAmountDiscount, OrderManualPercentDiscount, TenderBaseStatus } from "@wcp/wcpshared";
+import { DiscountMethod, OrderLineDiscount, OrderLineDiscountCodeAmount, OrderManualAmountDiscount, OrderManualPercentDiscount, TenderBaseStatus } from "@wcp/wario-shared";
 import { WMoney } from "../WMoney";
 import { Schema } from "mongoose";
 import { WEncryptStringLockSchema } from "./WEncryptStringLock";

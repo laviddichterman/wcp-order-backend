@@ -5,7 +5,7 @@ import { CatalogProviderInstance } from './catalog_provider';
 import { DataProviderInstance } from './dataprovider';
 import WApp from '../App';
 import { format, intervalToDuration, formatDuration } from 'date-fns';
-import { FulfillmentConfig, ICatalog, IWSettings, SeatingResource, WDateUtils, WOrderInstance } from '@wcp/wcpshared';
+import { FulfillmentConfig, ICatalog, IWSettings, SeatingResource, WDateUtils, WOrderInstance } from '@wcp/wario-shared';
 import { SocketIoJwtAuthenticateAndAuthorize } from './authorization';
 
 

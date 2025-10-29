@@ -1,4 +1,4 @@
-import { IProductInstance, PriceDisplay } from "@wcp/wcpshared";
+import { IProductInstance, PriceDisplay } from "@wcp/wario-shared";
 import { KeyValueEntrySchema } from "../../settings/KeyValueSchema";
 import mongoose, { Schema } from "mongoose";
 import path from "path";

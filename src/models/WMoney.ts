@@ -1,4 +1,4 @@
-import { IMoney, CURRENCY } from "@wcp/wcpshared";
+import { IMoney, CURRENCY } from "@wcp/wario-shared";
 import {Schema} from "mongoose";
 
 // NOTE: this is a mix-in and probably won't be instantiated directly

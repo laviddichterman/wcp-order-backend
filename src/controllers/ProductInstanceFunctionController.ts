@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { body, param } from 'express-validator';
-import { IAbstractExpression, WFunctional } from '@wcp/wcpshared';
+import { IAbstractExpression, WFunctional } from '@wcp/wario-shared';
 import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
 
 import logger from '../logging';

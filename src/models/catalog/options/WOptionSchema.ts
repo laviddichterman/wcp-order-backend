@@ -1,6 +1,6 @@
 import mongoose, {Schema} from "mongoose";
 import path from "path";
-import { IOption } from "@wcp/wcpshared";
+import { IOption } from "@wcp/wario-shared";
 import { WMoney } from "../../WMoney";
 import { IntervalSchema } from "../../IntervalSchema";
 import { KeyValueEntrySchema } from "../../settings/KeyValueSchema";

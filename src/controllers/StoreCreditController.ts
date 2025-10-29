@@ -9,7 +9,7 @@ import { CheckJWT, ScopeEditCredit } from '../config/authorization';
 import { StoreCreditProviderInstance } from '../config/store_credit_provider';
 import { GoogleProviderInstance } from '../config/google';
 
-import { SpendCreditResponse, ValidateLockAndSpendRequest, CURRENCY, IssueStoreCreditRequest, StoreCreditType, PurchaseStoreCreditRequest, PurchaseStoreCreditResponse, MoneyToDisplayString } from '@wcp/wcpshared';
+import { SpendCreditResponse, ValidateLockAndSpendRequest, CURRENCY, IssueStoreCreditRequest, StoreCreditType, PurchaseStoreCreditRequest, MoneyToDisplayString } from '@wcp/wario-shared';
 import { BigIntStringify } from '../utils';
 
 const CreditCodeValidationChain = [
@@ -116,7 +116,6 @@ export class StoreCreditController implements IExpressController {
       const nonce = req.body.nonce;
       const typedRequest: PurchaseStoreCreditRequest = {
         amount: req.body.amount,
-        addedBy: DataProviderInstance.KeyValueConfig.STORE_NAME,
         recipientEmail: req.body.recipientEmail,
         recipientNameFirst: req.body.recipientNameFirst,
         recipientNameLast: req.body.recipientNameLast,

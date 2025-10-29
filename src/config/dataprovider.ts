@@ -1,5 +1,5 @@
 import { WProvider } from '../types/WProvider';
-import { FulfillmentConfig, ReduceArrayToMapByKey, IWSettings, PostBlockedOffToFulfillmentsRequest, SetLeadTimesRequest, WDateUtils, SeatingResource } from '@wcp/wcpshared';
+import { FulfillmentConfig, ReduceArrayToMapByKey, IWSettings, PostBlockedOffToFulfillmentsRequest, SetLeadTimesRequest, WDateUtils, SeatingResource } from '@wcp/wario-shared';
 import { HydratedDocument } from 'mongoose';
 import logger from '../logging';
 import { KeyValueModel, IKeyValueStore } from '../models/settings/KeyValueSchema';

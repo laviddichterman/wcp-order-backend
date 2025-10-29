@@ -1,7 +1,7 @@
 import logger from '../logging';
 import { WProvider } from '../types/WProvider';
 import PACKAGE_JSON from '../../package.json';
-import { SEMVER, WDateUtils } from '@wcp/wcpshared';
+import { SEMVER, WDateUtils } from '@wcp/wario-shared';
 import DBVersionModel from '../models/DBVersionSchema';
 import { WOptionModel as WOptionModelActual } from '../models/catalog/options/WOptionSchema';
 import { WOptionTypeModel as WOptionTypeModelActual } from '../models/catalog/options/WOptionTypeSchema';

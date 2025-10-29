@@ -1,4 +1,4 @@
-import { SEMVER } from "@wcp/wcpshared";
+import { SEMVER } from "@wcp/wario-shared";
 import mongoose, {Schema} from "mongoose";
 import path from 'path';
 

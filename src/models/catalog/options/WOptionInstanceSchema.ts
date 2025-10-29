@@ -1,5 +1,5 @@
 import { Schema } from "mongoose";
-import { IOptionInstance, OptionPlacement, OptionQualifier, ProductModifierEntry } from "@wcp/wcpshared";
+import { IOptionInstance, OptionPlacement, OptionQualifier, ProductModifierEntry } from "@wcp/wario-shared";
 
 export const WOptionInstanceSchema = new Schema<IOptionInstance>({
   optionId: {

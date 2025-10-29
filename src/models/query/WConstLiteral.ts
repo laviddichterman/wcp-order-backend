@@ -8,7 +8,7 @@ import {
   IConstLiteralExpression,
   OptionPlacement,
   OptionQualifier
-} from "@wcp/wcpshared";
+} from "@wcp/wario-shared";
 import { Schema } from "mongoose";
 
 export const WConstLiteralSchema = new Schema<IConstLiteralExpression>({

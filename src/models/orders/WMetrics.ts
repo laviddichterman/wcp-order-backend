@@ -1,5 +1,5 @@
 import { Schema } from "mongoose";
-import { Metrics } from "@wcp/wcpshared";
+import { Metrics } from "@wcp/wario-shared";
 
 export const WMetricsSchema = new Schema<Metrics>({
     pageLoadTime: Number,

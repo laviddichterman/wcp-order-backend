@@ -1,4 +1,4 @@
-import { EncryptStringLock } from "@wcp/wcpshared";
+import { EncryptStringLock } from "@wcp/wario-shared";
 import { Schema } from "mongoose";
 
 export const WEncryptStringLockSchema = new Schema<EncryptStringLock>({

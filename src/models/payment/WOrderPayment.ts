@@ -1,5 +1,5 @@
 import { Schema } from "mongoose";
-import { OrderPayment, PaymentMethod, TenderBaseStatus, StoreCreditPayment, CreditPayment, CashPayment, CreditPaymentAllocated, StoreCreditPaymentAllocated, CashPaymentAllocated } from "@wcp/wcpshared";
+import { OrderPayment, PaymentMethod, TenderBaseStatus, StoreCreditPayment, CreditPayment, CashPayment, CreditPaymentAllocated, StoreCreditPaymentAllocated, CashPaymentAllocated } from "@wcp/wario-shared";
 import { WMoney } from "../WMoney";
 import { WEncryptStringLockSchema } from "./WEncryptStringLock";
 

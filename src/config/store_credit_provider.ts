@@ -1,7 +1,7 @@
 import voucher_codes from 'voucher-code-generator';
 import { startOfDay, isValid, isBefore, parseISO, format } from 'date-fns';
 import qrcode from 'qrcode';
-import { ValidateLockAndSpendRequest, ValidateLockAndSpendSuccess, ValidateAndLockCreditResponse, WDateUtils, StoreCreditType, IMoney, IssueStoreCreditRequest, CURRENCY, MoneyToDisplayString, PurchaseStoreCreditRequest, PurchaseStoreCreditResponse, PaymentMethod, OrderPayment, CreditPayment } from "@wcp/wcpshared";
+import { ValidateLockAndSpendRequest, ValidateLockAndSpendSuccess, ValidateAndLockCreditResponse, WDateUtils, StoreCreditType, IMoney, IssueStoreCreditRequest, CURRENCY, MoneyToDisplayString, PurchaseStoreCreditRequest, PurchaseStoreCreditResponse, PaymentMethod, PurchaseStoreCreditRequestSendEmail } from "@wcp/wario-shared";
 import { GoogleProviderInstance } from "./google";
 import { SquareProviderInstance } from "./square";
 import { DataProviderInstance } from './dataprovider';
@@ -38,7 +38,7 @@ const CreateExternalEmailSender = async ({ amount, senderEmail, recipientNameFir
     [{ filename: "qrcode.png", content: qr_code_fs, cid: creditCode }]);
 };
 
-const CreateExternalEmailRecipient = async ({ amount, senderName, recipientNameFirst, recipientNameLast, recipientEmail, recipientMessage }: PurchaseStoreCreditRequest, creditCode: string, qr_code_fs: internal.PassThrough) => {
+const CreateExternalEmailRecipient = async ({ amount, senderName, recipientNameFirst, recipientNameLast, recipientEmail, recipientMessage }: PurchaseStoreCreditRequestSendEmail, creditCode: string, qr_code_fs: internal.PassThrough) => {
   const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
   const STORE_NAME = DataProviderInstance.KeyValueConfig.STORE_NAME;
   const amountString = MoneyToDisplayString(amount, true);

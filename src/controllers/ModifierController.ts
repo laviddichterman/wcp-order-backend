@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { body, param } from 'express-validator';
-import { CURRENCY, DISPLAY_AS, IOptionType, MODIFIER_CLASS } from '@wcp/wcpshared';
+import { CURRENCY, DISPLAY_AS, IOptionType, MODIFIER_CLASS } from '@wcp/wario-shared';
 
 import logger from '../logging';
 import expressValidationMiddleware from '../middleware/expressValidationMiddleware';

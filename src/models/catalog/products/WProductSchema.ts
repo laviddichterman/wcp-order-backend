@@ -1,4 +1,4 @@
-import { IProduct } from "@wcp/wcpshared";
+import { IProduct } from "@wcp/wario-shared";
 import mongoose, {Schema} from "mongoose";
 import { WMoney } from "../../WMoney";
 import path from 'path';

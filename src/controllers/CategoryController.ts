@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { body, param } from 'express-validator';
-import { CALL_LINE_DISPLAY, CategoryDisplay } from '@wcp/wcpshared';
+import { CALL_LINE_DISPLAY, CategoryDisplay } from '@wcp/wario-shared';
 
 import logger from '../logging';
 

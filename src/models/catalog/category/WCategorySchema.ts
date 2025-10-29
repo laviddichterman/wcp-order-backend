@@ -1,5 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
-import { ICategory, CALL_LINE_DISPLAY, CategoryDisplay } from '@wcp/wcpshared';
+import { ICategory, CALL_LINE_DISPLAY, CategoryDisplay } from '@wcp/wario-shared';
 import path from 'path';
 
 type MT = Omit<ICategory, "id">;

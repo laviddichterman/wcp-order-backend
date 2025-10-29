@@ -42,7 +42,7 @@ import {
   StoreCreditType,
   IMoney,
 
-} from "@wcp/wcpshared";
+} from "@wcp/wario-shared";
 
 import { WProvider } from '../types/WProvider';
 

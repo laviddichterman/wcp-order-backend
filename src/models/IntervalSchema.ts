@@ -1,4 +1,4 @@
-import { IWInterval } from "@wcp/wcpshared";
+import { IWInterval } from "@wcp/wario-shared";
 import {Schema} from "mongoose";
 
 export const IntervalSchema = new Schema<IWInterval>({

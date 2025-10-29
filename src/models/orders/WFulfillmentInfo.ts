@@ -1,5 +1,5 @@
 import { Schema } from "mongoose";
-import { AddressComponent, DeliveryAddressValidateResponse, DeliveryInfoDto, DineInInfoDto, FulfillmentDto, ThirdPartyInfo, WFulfillmentStatus, WSeatingStatus, WSeatingInfo } from "@wcp/wcpshared";
+import { AddressComponent, DeliveryAddressValidateResponse, DeliveryInfoDto, DineInInfoDto, FulfillmentDto, ThirdPartyInfo, WFulfillmentStatus, WSeatingStatus, WSeatingInfo } from "@wcp/wario-shared";
 
 export const WSeatingInfoSchema = new Schema<WSeatingInfo>({
   // Corresponding to a WSeatingSchema

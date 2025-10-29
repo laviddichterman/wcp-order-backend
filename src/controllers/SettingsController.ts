@@ -7,7 +7,7 @@ import IExpressController from '../types/IExpressController';
 import { CheckJWT, ScopeWriteKVStore, ScopeWriteOrderConfig } from '../config/authorization';
 import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
 import { areKeysValidFulfillments, isFulfillmentDefined } from '../types/Validations';
-import { PostBlockedOffToFulfillmentsRequest, SetLeadTimesRequest } from '@wcp/wcpshared';
+import { PostBlockedOffToFulfillmentsRequest, SetLeadTimesRequest } from '@wcp/wario-shared';
 
 const BlockOffValidationChain = [  
   body('fulfillmentIds').isArray({ min: 1 }),

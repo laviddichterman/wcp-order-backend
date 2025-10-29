@@ -1,6 +1,6 @@
 import path from 'path';
 import mongoose, { Schema } from 'mongoose';
-import { PrinterGroup } from '@wcp/wcpshared';
+import { PrinterGroup } from '@wcp/wario-shared';
 import { KeyValueEntrySchema } from '../settings/KeyValueSchema';
 
 type MT = Omit<PrinterGroup, "id">;

@@ -1,4 +1,4 @@
-import { PrepTiming } from "@wcp/wcpshared";
+import { PrepTiming } from "@wcp/wario-shared";
 import { Schema } from "mongoose";
 
 export const PrepTimingSchema = new Schema<PrepTiming>({

@@ -1,4 +1,4 @@
-import { FulfillmentType, FulfillmentConfig, DayOfTheWeek, DateIntervalEntry } from "@wcp/wcpshared";
+import { FulfillmentType, FulfillmentConfig, DayOfTheWeek, DateIntervalEntry } from "@wcp/wario-shared";
 import mongoose, { Schema } from "mongoose";
 import path from 'path';
 import { IntervalSchema } from "../IntervalSchema";

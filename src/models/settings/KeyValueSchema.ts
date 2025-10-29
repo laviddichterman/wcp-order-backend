@@ -1,4 +1,4 @@
-import { KeyValue } from "@wcp/wcpshared";
+import { KeyValue } from "@wcp/wario-shared";
 import mongoose, {Schema} from "mongoose";
 import path from 'path';
 

@@ -1,6 +1,6 @@
 import mongoose, { Schema } from "mongoose";
 import path from 'path';
-import { OrderInstanceFunction } from "@wcp/wcpshared";
+import { OrderInstanceFunction } from "@wcp/wario-shared";
 import { WAbstractOrderExpressionSchema } from "./WAbstractOrderExpression";
 
 type MT = Omit<OrderInstanceFunction, "id">;

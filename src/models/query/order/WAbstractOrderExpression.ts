@@ -5,7 +5,7 @@ import {
   LogicalFunctionOperator,
   OrderInstanceFunctionType,
   AbstractOrderExpression
-} from "@wcp/wcpshared";
+} from "@wcp/wario-shared";
 import { Schema } from "mongoose";
 import { WConstLiteralSchema } from "../WConstLiteral";
 

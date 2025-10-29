@@ -9,7 +9,7 @@ import { DataProviderInstance } from '../config/dataprovider';
 import logger from '../logging';
 import IExpressController from '../types/IExpressController';
 import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
-import { DeliveryAddressValidateRequest, DeliveryAddressValidateResponse } from '@wcp/wcpshared';
+import { DeliveryAddressValidateRequest, DeliveryAddressValidateResponse } from '@wcp/wario-shared';
 import { body } from 'express-validator';
 import { isFulfillmentDefined } from '../types/Validations';
 

@@ -1,6 +1,6 @@
 import mongoose, { Schema } from "mongoose";
 import path from "path";
-import { OrderTax, TipSelection, WOrderInstance, WOrderStatus } from "@wcp/wcpshared";
+import { OrderTax, TipSelection, WOrderInstance, WOrderStatus } from "@wcp/wario-shared";
 import { CustomerInfoSchema } from "./WCustomerInfo";
 import { OrderCartEntrySchema } from "./WOrderCartEntry";
 import { FulfillmentInfo } from "./WFulfillmentInfo";

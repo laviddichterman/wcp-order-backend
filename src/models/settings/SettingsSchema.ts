@@ -1,4 +1,4 @@
-import { IWSettings } from "@wcp/wcpshared";
+import { IWSettings } from "@wcp/wario-shared";
 import mongoose, { Schema } from "mongoose";
 import path from 'path';
 

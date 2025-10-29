@@ -26,7 +26,7 @@ import {
   UpdateIProductUpdateIProductInstance,
   UpdateProductBatch,
   UpsertProductBatch
-} from "@wcp/wcpshared";
+} from "@wcp/wario-shared";
 import DBVersionModel from '../models/DBVersionSchema';
 import { WCategoryModel } from '../models/catalog/category/WCategorySchema';
 import { WProductInstanceModel } from '../models/catalog/products/WProductInstanceSchema';
@@ -39,7 +39,7 @@ import { PrinterGroupModel } from "../models/catalog/WPrinterGroupSchema";
 import { DataProviderInstance } from "./dataprovider";
 import { SocketIoProviderInstance } from "./socketio_provider";
 import logger from '../logging';
-import { chunk } from 'lodash';
+import { chunk } from 'es-toolkit/compat';
 import { WProvider } from "../types/WProvider";
 import { SquareProviderInstance, SQUARE_BATCH_CHUNK_SIZE } from "./square";
 import { GenerateSquareReverseMapping, GetNonSquareExternalIds, GetSquareExternalIds, GetSquareIdIndexFromExternalIds, IdMappingsToExternalIds, ModifierTypeToSquareCatalogObject, PrinterGroupToSquareCatalogObjectPlusDummyProduct, ProductInstanceToSquareCatalogObject } from "./SquareWarioBridge";
@@ -84,7 +84,7 @@ export const ProductInstanceUpdateMergeExternalIds = (originalExternalIds: KeyVa
 
 /**
  * checks that a passed instance doesn't explicitly declare a modifier that isn't allowed
- * TODO: move this to WCPShared 
+ * TODO: move this to wario-shared 
  */
 const ValidateModifiersForInstance = function (productModifierSpecification: IProductModifier[], instanceModifierSpecification: ProductModifierEntry[]) {
   const mtidsInInstanceSpec = new Set(...instanceModifierSpecification.map((x) => x.modifierTypeId));
