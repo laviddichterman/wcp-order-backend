@@ -1,8 +1,8 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { body, param } from 'express-validator';
 import { SeatingResource, SeatingShape } from '@wcp/wario-shared';
 
-import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
+import validationMiddleware from '../middleware/validationMiddleware';
+import { SeatingResourceIdParams, SeatingResourceDto } from '../dto/catalog/SeatingResourceDtos';
 import logger from '../logging';
 
 import IExpressController from '../types/IExpressController';
@@ -10,48 +10,6 @@ import { CheckJWT, ScopeDeleteCatalog, ScopeWriteCatalog } from '../config/autho
 import { DataProviderInstance } from '../config/dataprovider';
 import { SocketIoProviderInstance } from '../config/socketio_provider';
 import { CatalogProviderInstance } from '../config/catalog_provider';
-
-const MAX_DIMENSION = 1440;
-const MAX_RESORUCE_DIMENSION = MAX_DIMENSION/2;
-
-/**
- * export interface SeatingResource {
-  id: string;
-  name: string;
-  // capacity is a soft limit, it indicates the typical or recommended number of guests for this resource
-  // the number of seats at this resource, not a hard limit
-  capacity: number;
-  shape: SeatingShape;
-  sectionId: string;
-  center: { x: number; y: number; };
-  // shapeDims is either radius in x and y direction for ellipses or half the x length and y length for rectangles, pre-rotation 
-  shapeDims: { x: number; y: number; };
-  rotation: number; // degrees
-  disabled: boolean; // default false
-};
-
- */
-const SeatingResourceByIdValidationChain = [
-  param('srid').trim().escape().exists().isMongoId(), 
-];
-
-const SeatingResourceValidationChain = [
-  body('name').trim().exists(),
-  body('capacity').isInt({min: 0}),
-  body('shape').exists().isIn(Object.keys(SeatingShape)),
-  // body('sectionId').trim().escape().isMongoId(), 
-  body('center.x').isFloat({ min: 0, max: MAX_DIMENSION }),
-  body('center.y').isFloat({ min: 0, max: MAX_DIMENSION }),
-  body('shapeDims.x').isFloat({ min: 0, max: MAX_RESORUCE_DIMENSION }),
-  body('shapeDims.y').isFloat({ min: 0, max: MAX_RESORUCE_DIMENSION }),
-  body('rotation').exists().isFloat({ min: 0 }),
-  body('disabled').optional().isBoolean()
-];
-
-const EditSeatingResourceValidationChain = [
-  ...SeatingResourceByIdValidationChain,
-  ...SeatingResourceValidationChain
-];
 
 export class SeatingResourceController implements IExpressController {
   public path = "/api/v1/config/seating";
@@ -62,9 +20,9 @@ export class SeatingResourceController implements IExpressController {
   }
 
   private initializeRoutes() {
-    this.router.post(`${this.path}`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(SeatingResourceValidationChain), this.postSeatingResource);
-    this.router.patch(`${this.path}/:srid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(EditSeatingResourceValidationChain), this.patchSeatingResource);
-    this.router.delete(`${this.path}/:srid`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware(SeatingResourceByIdValidationChain), this.deleteSeatingResource);
+    this.router.post(`${this.path}`, CheckJWT, ScopeWriteCatalog, validationMiddleware(SeatingResourceDto), this.postSeatingResource);
+    this.router.patch(`${this.path}/:srid`, CheckJWT, ScopeWriteCatalog, validationMiddleware(SeatingResourceIdParams, { source: 'params' }), validationMiddleware(SeatingResourceDto), this.patchSeatingResource);
+    this.router.delete(`${this.path}/:srid`, CheckJWT, ScopeDeleteCatalog, validationMiddleware(SeatingResourceIdParams, { source: 'params' }), this.deleteSeatingResource);
   };
   private postSeatingResource = async (req: Request, res: Response, next: NextFunction) => {
     try {

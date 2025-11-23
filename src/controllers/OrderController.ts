@@ -1,90 +1,29 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { body, param, header, query } from 'express-validator';
 import { CreateOrderRequestV2, CURRENCY, DiscountMethod, FulfillmentTime, PaymentMethod, TenderBaseStatus, WFulfillmentStatus, WOrderInstance, WOrderStatus } from '@wcp/wario-shared';
-import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
+import validationMiddleware from '../middleware/validationMiddleware';
 import { DataProviderInstance } from '../config/dataprovider';
 import { OrderManagerInstance } from '../config/order_manager';
 import IExpressController from '../types/IExpressController';
 import { GoogleProviderInstance } from '../config/google';
 import { CheckJWT, ScopeReadOrders, ScopeWriteOrders, ScopeCancelOrders } from '../config/authorization';
-import { isFulfillmentDefined } from '../types/Validations';
+import { 
+  OrderIdParams, 
+  QueryOrdersDto, 
+  CreateOrderDto, 
+  CancelOrderDto, 
+  ConfirmOrderDto, 
+  MoveOrderDto, 
+  RescheduleOrderDto 
+} from '../dto/order/OrderDtos';
+import HttpException from '../types/HttpException';
 
-const OrderIdValidationChain = [
-  param('oId').trim().escape().exists().isMongoId(),
-]
-
-const CreateOrderValidationChain = [
-  body('fulfillment.status').exists().equals(WFulfillmentStatus.PROPOSED),
-  body('fulfillment.selectedService').exists().isMongoId().custom(isFulfillmentDefined),
-  body('fulfillment.selectedDate').isISO8601(),
-  body('fulfillment.selectedTime').isInt({ min: 0, max: 1440 }).exists(),
-  body('customerInfo.givenName').trim().exists().isLength({ min: 1 }),
-  body('customerInfo.familyName').trim().exists().isLength({ min: 1 }),
-  body('customerInfo.mobileNum').trim().escape().exists(),
-  body('customerInfo.email').isEmail().exists(),
-  body('customerInfo.referral').trim().escape(),
-  body('proposedDiscounts').isArray(),
-  body('proposedDiscounts.*.t').exists().equals(DiscountMethod.CreditCodeAmount),
-  body('proposedDiscounts.*.status').exists().equals(TenderBaseStatus.AUTHORIZED),
-  body('proposedDiscounts.*.discount.amount.amount').exists().isInt({ min: 0 }),
-  body('proposedDiscounts.*.discount.amount.currency').exists().isIn(Object.values(CURRENCY)),
-  body('proposedDiscounts.*.discount.balance.amount').isInt({ min: 0 }).exists(),
-  body('proposedDiscounts.*.discount.balance.currency').exists().isIn(Object.values(CURRENCY)),
-  body('proposedDiscounts.*.discount.code').exists().isString().isLength({ min: 19, max: 19 }),
-  body('proposedDiscounts.*.discount.lock.enc').exists().isString(),
-  body('proposedDiscounts.*.discount.lock.iv').exists().isString(),
-  body('proposedDiscounts.*.discount.lock.auth').exists().isString(),
-  body('proposedPayments').isArray(),
-  body('proposedPayments.*.t').exists().isIn([PaymentMethod.CreditCard, PaymentMethod.StoreCredit]),
-  body('proposedPayments.*.status').exists().equals(TenderBaseStatus.PROPOSED),
-  body('cart.*.categoryId').exists().isMongoId(),
-  body('cart.*.quantity').exists().isInt({ min: 1 }),
-  body('cart.*.product').exists(),
-  body('tip.isSuggestion').exists().toBoolean(true),
-  body('tip.isPercentage').exists().toBoolean(true),
-  body('specialInstructions').optional({ nullable: true }).trim()
-];
-
-const IdempotentOrderIdPutValidationChain = [
-  header('idempotency-key').exists(),
-  ...OrderIdValidationChain
-]
-
-const CancelOrderValidationChain = [
-  ...IdempotentOrderIdPutValidationChain,
-  body('reason').trim().exists(),
-  body('emailCustomer').exists().toBoolean(true),
-  body('refundToOriginalPayment').optional().toBoolean(true),
-];
-
-const ConfirmOrderValidationChain = [
-  ...IdempotentOrderIdPutValidationChain,
-  body('additionalMessage').trim().exists(),
-]
-
-const MoveOrderValidationChain = [
-  ...IdempotentOrderIdPutValidationChain,
-  body('destination').trim().exists(),
-  body('additionalMessage').trim().exists(),
-]
-
-const RescheduleOrderValidationChain = [
-  ...IdempotentOrderIdPutValidationChain,
-  body('selectedDate').isISO8601(),
-  body('selectedTime').isInt({ min: 0, max: 1440 }).exists(),
-  body('emailCustomer').exists().toBoolean(true),
-  body('additionalMessage').trim().exists(),
-]
-
-const AdjustOrderValidationChain = [
-  ...IdempotentOrderIdPutValidationChain,
-  // HASN'T EVEN BEEN LOOKED AT EVEN A LITTLE BIT. DO NOT SUBMIT THIS CODE UNTIL IT'S VALIDATED OR THE PATCH METHOD IS COMMENTED OUT
-]
-
-const QueryOrdersValidationChain = [
-  query('date').optional({ nullable: true, checkFalsy: true }).isISO8601(),
-  query('status').optional({ nullable: true, checkFalsy: true }).isIn(Object.values(WOrderStatus)),
-]
+// Middleware to check for idempotency-key header
+const checkIdempotencyKey = (req: Request, res: Response, next: NextFunction) => {
+  if (!req.headers['idempotency-key']) {
+    return next(new HttpException(400, 'idempotency-key header is required'));
+  }
+  next();
+};
 
 const SendFailureNoticeOnErrorCatch = (req: Request, error: any) => {
   const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;
@@ -105,15 +44,15 @@ export class OrderController implements IExpressController {
   }
 
   private initializeRoutes() {
-    this.router.post(`${this.path}`, expressValidationMiddleware(CreateOrderValidationChain), this.postOrder);
-    this.router.get(`${this.path}/:oId`, CheckJWT, ScopeReadOrders, expressValidationMiddleware(OrderIdValidationChain), this.getOrder);
-    this.router.get(`${this.path}`, CheckJWT, ScopeReadOrders, expressValidationMiddleware(QueryOrdersValidationChain), this.getOrders);
+    this.router.post(`${this.path}`, validationMiddleware(CreateOrderDto), this.postOrder);
+    this.router.get(`${this.path}/:oId`, CheckJWT, ScopeReadOrders, validationMiddleware(OrderIdParams, { source: 'params' }), this.getOrder);
+    this.router.get(`${this.path}`, CheckJWT, ScopeReadOrders, validationMiddleware(QueryOrdersDto, { source: 'query' }), this.getOrders);
     this.router.put(`${this.path}/unlock`, CheckJWT, ScopeWriteOrders, this.putUnlock);
-    this.router.put(`${this.path}/:oId/cancel`, CheckJWT, ScopeCancelOrders, expressValidationMiddleware(CancelOrderValidationChain), this.putCancelOrder);
-    this.router.put(`${this.path}/:oId/send`, CheckJWT, ScopeWriteOrders, expressValidationMiddleware(IdempotentOrderIdPutValidationChain), this.putSendOrder);
-    this.router.put(`${this.path}/:oId/confirm`, CheckJWT, ScopeWriteOrders, expressValidationMiddleware(ConfirmOrderValidationChain), this.putConfirmOrder);
-    this.router.put(`${this.path}/:oId/move`, CheckJWT, ScopeWriteOrders, expressValidationMiddleware(MoveOrderValidationChain), this.putMoveOrder);
-    this.router.put(`${this.path}/:oId/reschedule`, CheckJWT, ScopeWriteOrders, expressValidationMiddleware(RescheduleOrderValidationChain), this.putRescheduleOrder);
+    this.router.put(`${this.path}/:oId/cancel`, CheckJWT, ScopeCancelOrders, checkIdempotencyKey, validationMiddleware(OrderIdParams, { source: 'params' }), validationMiddleware(CancelOrderDto), this.putCancelOrder);
+    this.router.put(`${this.path}/:oId/send`, CheckJWT, ScopeWriteOrders, checkIdempotencyKey, validationMiddleware(OrderIdParams, { source: 'params' }), this.putSendOrder);
+    this.router.put(`${this.path}/:oId/confirm`, CheckJWT, ScopeWriteOrders, checkIdempotencyKey, validationMiddleware(OrderIdParams, { source: 'params' }), validationMiddleware(ConfirmOrderDto), this.putConfirmOrder);
+    this.router.put(`${this.path}/:oId/move`, CheckJWT, ScopeWriteOrders, checkIdempotencyKey, validationMiddleware(OrderIdParams, { source: 'params' }), validationMiddleware(MoveOrderDto), this.putMoveOrder);
+    this.router.put(`${this.path}/:oId/reschedule`, CheckJWT, ScopeWriteOrders, checkIdempotencyKey, validationMiddleware(OrderIdParams, { source: 'params' }), validationMiddleware(RescheduleOrderDto), this.putRescheduleOrder);
     // this.router.patch(`${this.path}/:oId`, CheckJWT, ScopeWriteOrders, expressValidationMiddleware(AdjustOrderValidationChain), this.patchAdjustOrder);
   };
 

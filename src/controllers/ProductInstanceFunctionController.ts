@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { body, param } from 'express-validator';
 import { IAbstractExpression, WFunctional } from '@wcp/wario-shared';
-import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
+import validationMiddleware from '../middleware/validationMiddleware';
+import { ProductInstanceFunctionIdParams, ProductInstanceFunctionDto } from '../dto/product/ProductInstanceFunctionDtos';
 
 import logger from '../logging';
 
@@ -9,20 +9,6 @@ import IExpressController from '../types/IExpressController';
 import HttpException from '../types/HttpException';
 import { CheckJWT, ScopeDeleteCatalog, ScopeWriteCatalog } from '../config/authorization';
 import { CatalogProviderInstance } from '../config/catalog_provider';
-const PIFByIdValidationChain = [
-  param('fxnid').trim().escape().exists().isMongoId(),
-];
-
-const PIFValidationChain = [
-  body('name').trim().exists(),
-  body('expression').exists()
-];
-
-const EditPIFValidationChain = [
-  ...PIFByIdValidationChain,
-  ...PIFValidationChain
-]
-
 export class ProductInstanceFunctionController implements IExpressController {
   public path = "/api/v1/query/language/productinstancefunction";
   public router = Router({ mergeParams: true });
@@ -32,9 +18,9 @@ export class ProductInstanceFunctionController implements IExpressController {
   }
 
   private initializeRoutes() {
-    this.router.post(`${this.path}`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(PIFValidationChain), this.postPIF);
-    this.router.patch(`${this.path}/:fxnid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(EditPIFValidationChain), this.patchPIF);
-    this.router.delete(`${this.path}/:fxnid`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware(PIFByIdValidationChain), this.deletePIF);
+    this.router.post(`${this.path}`, CheckJWT, ScopeWriteCatalog, validationMiddleware(ProductInstanceFunctionDto), this.postPIF);
+    this.router.patch(`${this.path}/:fxnid`, CheckJWT, ScopeWriteCatalog, validationMiddleware(ProductInstanceFunctionIdParams, { source: 'params' }), validationMiddleware(ProductInstanceFunctionDto), this.patchPIF);
+    this.router.delete(`${this.path}/:fxnid`, CheckJWT, ScopeDeleteCatalog, validationMiddleware(ProductInstanceFunctionIdParams, { source: 'params' }), this.deletePIF);
   };
   private postPIF = async (req: Request, res: Response, next: NextFunction) => {
     try {

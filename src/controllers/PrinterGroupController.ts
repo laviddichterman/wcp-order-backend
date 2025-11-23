@@ -1,37 +1,12 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { body, param } from 'express-validator';
 
 import logger from '../logging';
 
 import IExpressController from '../types/IExpressController';
 import { CheckJWT, ScopeDeleteCatalog, ScopeWriteCatalog, ScopeWriteOrders } from '../config/authorization';
 import { CatalogProviderInstance } from '../config/catalog_provider';
-import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
-
-const PrinterGroupByIdValidationChain = [
-  param('pgId').trim().escape().exists().isMongoId(),
-];
-
-const PrinterGroupValidationChain = [
-  body('name').trim().exists(),
-  body('externalIDs').isArray(),
-  body('externalIDs.*.key').exists(),
-  body('externalIDs.*.value').exists(),
-  body('isExpo').toBoolean(true),
-  body('singleItemPerTicket').toBoolean(true),
-];
-
-const EditPrinterGroupValidationChain = [
-  ...PrinterGroupByIdValidationChain,
-  ...PrinterGroupValidationChain
-]
-
-const DeleteAndReassignPrinterGroupValidationChain = [
-  ...PrinterGroupByIdValidationChain,
-  body('reassign').toBoolean(true),
-  body('printerGroup').optional({nullable: true}).trim().escape().isMongoId(),
-];
-
+import validationMiddleware from '../middleware/validationMiddleware';
+import { PrinterGroupIdParams, PrinterGroupDto, DeleteAndReassignPrinterGroupDto } from '../dto/catalog/PrinterGroupDtos';
 
 export class PrinterGroupController implements IExpressController {
   public path = "/api/v1/menu/printergroup";
@@ -43,9 +18,9 @@ export class PrinterGroupController implements IExpressController {
 
   private initializeRoutes() {
     this.router.get(`${this.path}`, CheckJWT, ScopeWriteOrders, this.getPrinterGroups);
-    this.router.post(`${this.path}`, CheckJWT, ScopeWriteOrders, ScopeWriteCatalog, expressValidationMiddleware(PrinterGroupValidationChain), this.postPrinterGroup);
-    this.router.patch(`${this.path}/:pgId`, CheckJWT, ScopeWriteOrders, ScopeWriteCatalog, expressValidationMiddleware(EditPrinterGroupValidationChain), this.patchPrinterGroup);
-    this.router.delete(`${this.path}/:pgId`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware(DeleteAndReassignPrinterGroupValidationChain), this.deletePrinterGroup);
+    this.router.post(`${this.path}`, CheckJWT, ScopeWriteOrders, ScopeWriteCatalog, validationMiddleware(PrinterGroupDto), this.postPrinterGroup);
+    this.router.patch(`${this.path}/:pgId`, CheckJWT, ScopeWriteOrders, ScopeWriteCatalog, validationMiddleware(PrinterGroupIdParams, { source: 'params' }), validationMiddleware(PrinterGroupDto), this.patchPrinterGroup);
+    this.router.delete(`${this.path}/:pgId`, CheckJWT, ScopeDeleteCatalog, validationMiddleware(PrinterGroupIdParams, { source: 'params' }), validationMiddleware(DeleteAndReassignPrinterGroupDto), this.deletePrinterGroup);
   };
 
   private getPrinterGroups = async (_: Request, res: Response, __: NextFunction) => {

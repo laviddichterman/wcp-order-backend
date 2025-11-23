@@ -1,113 +1,21 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { body, param } from 'express-validator';
 import { CURRENCY, IProduct, IProductDisplayFlags, OptionPlacement, OptionQualifier, PriceDisplay, type UpsertProductBatch} from '@wcp/wario-shared';
-import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
+import validationMiddleware from '../middleware/validationMiddleware';
 import logger from '../logging';
 
 import IExpressController from '../types/IExpressController';
 import { CheckJWT, ScopeDeleteCatalog, ScopeWriteCatalog } from '../config/authorization';
 import { CatalogProviderInstance } from '../config/catalog_provider';
-import { isFulfillmentDefined, isValidDisabledValue } from '../types/Validations';
-
-const ProductClassesByIdsInBodyValidationChain = [
-  body('pids').isArray({ min: 1 }),
-  body('pids.*.').trim().escape().exists().isMongoId(),
-];
-
-const ProductClassByIdValidationChain = [
-  param('pid').trim().escape().exists().isMongoId(),
-];
-
-const ProductInstanceByIdValidationChain = [
-  param('piid').trim().escape().exists().isMongoId(),
-];
-
-const ProductInstanceValidationChain = (prefix: string) => [
-  body(`${prefix}displayName`).trim().exists(),
-  body(`${prefix}description`).trim(),
-  body(`${prefix}shortcode`).trim().escape().exists().isLength({ min: 1 }),
-  body(`${prefix}externalIDs`).isArray(),
-  body(`${prefix}externalIDs.*.key`).exists().isLength({ min: 1 }),
-  body(`${prefix}externalIDs.*.value`).exists(),
-  body(`${prefix}displayFlags.pos.name`).optional({nullable: true}).trim(),
-  body(`${prefix}displayFlags.pos.hide`).toBoolean(true),
-  body(`${prefix}displayFlags.pos.skip_customization`).toBoolean(true),
-  body(`${prefix}displayFlags.menu.ordinal`).exists().isInt({ min: 0 }),
-  body(`${prefix}displayFlags.menu.hide`).toBoolean(true),
-  body(`${prefix}displayFlags.menu.price_display`).exists().isIn(Object.keys(PriceDisplay)),
-  body(`${prefix}displayFlags.menu.adornment`).trim(),
-  body(`${prefix}displayFlags.menu.suppress_exhaustive_modifier_list`).toBoolean(true),
-  body(`${prefix}displayFlags.menu.show_modifier_options`).toBoolean(true),
-  body(`${prefix}displayFlags.order.ordinal`).exists().isInt({ min: 0 }),
-  body(`${prefix}displayFlags.order.hide`).toBoolean(true),
-  body(`${prefix}displayFlags.order.skip_customization`).toBoolean(true),
-  body(`${prefix}displayFlags.order.price_display`).exists().isIn(Object.keys(PriceDisplay)),
-  body(`${prefix}displayFlags.order.adornment`).trim(),
-  body(`${prefix}displayFlags.order.suppress_exhaustive_modifier_list`).toBoolean(true),
-  body(`${prefix}ordinal`).exists().isInt({ min: 0 }),
-  body(`${prefix}modifiers`).isArray(),
-  body(`${prefix}modifiers.*.modifierTypeId`).trim().escape().exists().isMongoId(),
-  body(`${prefix}modifiers.*.options`).isArray(),
-  body(`${prefix}modifiers.*.options.*.optionId`).trim().escape().exists().isMongoId(),
-  body(`${prefix}modifiers.*.options.*.placement`).exists().isIn(Object.values(OptionPlacement)),
-  body(`${prefix}modifiers.*.options.*.qualifier`).exists().isIn(Object.values(OptionQualifier))
-];
-
-const ProductClassValidationChain = (prefix: string) => [
-  body(`${prefix}price.amount`).isInt({ min: 0 }).exists(),
-  body(`${prefix}price.currency`).exists().isIn(Object.values(CURRENCY)),
-  body(`${prefix}disabled`).custom(isValidDisabledValue),
-  body(`${prefix}serviceDisable.*`).custom(isFulfillmentDefined),
-  body(`${prefix}externalIDs`).isArray(),
-  body(`${prefix}externalIDs.*.key`).exists().isLength({ min: 1 }),
-  body(`${prefix}externalIDs.*.value`).exists(),
-  body(`${prefix}modifiers.*.mtid`).trim().escape().exists().isMongoId(),
-  body(`${prefix}modifiers.*.enable`).optional({ nullable: true }).isMongoId(),
-  body(`${prefix}modifiers.*.serviceDisable.*`).custom(isFulfillmentDefined),
-  body(`${prefix}category_ids.*`).trim().escape().exists().isMongoId(),
-  body(`${prefix}displayFlags.flavor_max`).isFloat({ min: 0 }),
-  body(`${prefix}displayFlags.bake_max`).isFloat({ min: 0 }),
-  body(`${prefix}displayFlags.bake_differential`).isFloat({ min: 0 }),
-  // TODO: ensure show_name_of_base_product is TRUE if modifier list length === 0
-  body(`${prefix}displayFlags.show_name_of_base_product`).toBoolean(true),
-  body(`${prefix}displayFlags.singular_noun`).trim(),
-  body(`${prefix}displayFlags.is3p`).exists().toBoolean(true),
-  body(`${prefix}displayFlags.order_guide.warnings.*`).trim().escape().exists().isMongoId(),
-  body(`${prefix}displayFlags.order_guide.suggestions.*`).trim().escape().exists().isMongoId(),
-  body(`${prefix}printerGroup`).optional({ nullable: true }).isMongoId(),
-  // TODO need proper deep validation of availability and timing fields
-  body(`${prefix}availbility`).optional({ nullable: true }).isArray(),
-  body(`${prefix}availbility.*`).isObject(),
-  body(`${prefix}timing`).optional({ nullable: true }).isObject(),
-];
-
-const AddProductClassValidationChain = (prefix: string) => [
-  ...ProductClassValidationChain(`${prefix}.product.`),
-  body(`${prefix}.instances`).isArray({ min: 1 }),
-  ...ProductInstanceValidationChain(`${prefix}.instances.*.`)
-];
-
-const BatchAddProductClassValidationChain = [
-  body().isArray({min: 1}),
-  ...AddProductClassValidationChain('*')
-];
-
-const EditProductClassValidationChain = [
-  ...ProductClassByIdValidationChain,
-  ...ProductClassValidationChain('')
-];
-
-const AddProductInstanceValidationChain = [
-  ...ProductClassByIdValidationChain,
-  ...ProductInstanceValidationChain("")
-];
-
-
-const EditProductInstanceValidationChain = [
-  ...ProductInstanceByIdValidationChain,
-  ...ProductInstanceValidationChain("")
-];
-
+import { 
+  ProductIdParams, 
+  ProductInstanceIdParams, 
+  ProductAndInstanceIdParams,
+  ProductInstanceDto, 
+  ProductClassDto, 
+  CreateProductDto, 
+  BatchCreateProductsDto, 
+  BatchDeleteProductsDto 
+} from '../dto/product/ProductDtos';
 
 export class ProductController implements IExpressController {
   public path = "/api/v1/menu/product";
@@ -118,14 +26,14 @@ export class ProductController implements IExpressController {
   }
 
   private initializeRoutes() {
-    this.router.post(`${this.path}`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(AddProductClassValidationChain('')), this.postProductClass);
-    this.router.post(`${this.path}batch`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(BatchAddProductClassValidationChain), this.batchPostProducts);
-    this.router.patch(`${this.path}/:pid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(EditProductClassValidationChain), this.patchProductClass);
-    this.router.delete(`${this.path}/:pid`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware(ProductClassByIdValidationChain), this.deleteProductClass);
-    this.router.post(`${this.path}batch/batchDelete`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware(ProductClassesByIdsInBodyValidationChain), this.batchDeleteProductClasses);
-    this.router.post(`${this.path}/:pid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(AddProductInstanceValidationChain), this.postProductInstance);
-    this.router.patch(`${this.path}/:pid/:piid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(EditProductInstanceValidationChain), this.patchProductInstance);
-    this.router.delete(`${this.path}/:pid/:piid`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware([...ProductClassByIdValidationChain, ...ProductInstanceByIdValidationChain]), this.deleteProductInstance);
+    this.router.post(`${this.path}`, CheckJWT, ScopeWriteCatalog, validationMiddleware(CreateProductDto), this.postProductClass);
+    this.router.post(`${this.path}batch`, CheckJWT, ScopeWriteCatalog, validationMiddleware(BatchCreateProductsDto), this.batchPostProducts);
+    this.router.patch(`${this.path}/:pid`, CheckJWT, ScopeWriteCatalog, validationMiddleware(ProductIdParams, { source: 'params' }), validationMiddleware(ProductClassDto), this.patchProductClass);
+    this.router.delete(`${this.path}/:pid`, CheckJWT, ScopeDeleteCatalog, validationMiddleware(ProductIdParams, { source: 'params' }), this.deleteProductClass);
+    this.router.post(`${this.path}batch/batchDelete`, CheckJWT, ScopeDeleteCatalog, validationMiddleware(BatchDeleteProductsDto), this.batchDeleteProductClasses);
+    this.router.post(`${this.path}/:pid`, CheckJWT, ScopeWriteCatalog, validationMiddleware(ProductIdParams, { source: 'params' }), validationMiddleware(ProductInstanceDto), this.postProductInstance);
+    this.router.patch(`${this.path}/:pid/:piid`, CheckJWT, ScopeWriteCatalog, validationMiddleware(ProductAndInstanceIdParams, { source: 'params' }), validationMiddleware(ProductInstanceDto), this.patchProductInstance);
+    this.router.delete(`${this.path}/:pid/:piid`, CheckJWT, ScopeDeleteCatalog, validationMiddleware(ProductAndInstanceIdParams, { source: 'params' }), this.deleteProductInstance);
   };
   private postProductClass = async (req: Request, res: Response, next: NextFunction) => {
     try {

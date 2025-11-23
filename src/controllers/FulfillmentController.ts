@@ -1,8 +1,8 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { body, param } from 'express-validator';
 import { FulfillmentConfig, FulfillmentType } from '@wcp/wario-shared';
 
-import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
+import validationMiddleware from '../middleware/validationMiddleware';
+import { FulfillmentIdParams, FulfillmentDto } from '../dto/catalog/FulfillmentDtos';
 import logger from '../logging';
 
 import IExpressController from '../types/IExpressController';
@@ -11,57 +11,6 @@ import { DataProviderInstance } from '../config/dataprovider';
 import { SocketIoProviderInstance } from '../config/socketio_provider';
 import { CatalogProviderInstance } from '../config/catalog_provider';
 
-
-const FulfillmentConfigByIdValidationChain = [
-  param('fid').trim().escape().exists().isMongoId(), 
-];
-
-const FulfillmentValidationChain = [
-  body('displayName').trim().exists(),
-  body('shortcode').trim().escape().exists(),
-  body('ordinal').isInt({min: 0}),
-  body('exposeFulfillment').exists().isBoolean({ strict: true }),
-  body('service').exists().isIn(Object.keys(FulfillmentType)),
-  body('terms').isArray().exists(),
-  body('terms.*').trim(),
-  body('messages.DESCRIPTION').isString().trim().optional({nullable: true}),
-  body('messages.CONFIRMATION').isString().trim().exists(),
-  body('messages.INSTRUCTIONS').isString().trim().exists(),
-  body('menuBaseCategoryId').trim().escape().exists().isMongoId(),
-  body('orderBaseCategoryId').trim().escape().exists().isMongoId(),
-  body('orderSupplementaryCategoryId').trim().optional({nullable: true}).isMongoId(),
-  body('requirePrepayment').exists().isBoolean({ strict: true }),
-  body('allowPrepayment').exists().isBoolean({ strict: true }),
-  body('allowTipping').exists().isBoolean({ strict: true }),
-  body('autograt.function').optional({nullable: true}).isMongoId(),
-  body('autograt.percentage').optional({nullable: true}).isFloat({ gt: 0 }),
-  body('serviceCharge').optional({nullable: true}).isMongoId(),
-  body('leadTime').exists().isInt({min: 1}),
-  body('leadTimeOffset').exists().isInt({min: -100, max: 1440}),
-  body('operatingHours').isObject().exists(),
-  body('operatingHours.*').isArray(),
-  body('operatingHours.*.*.start').isInt({ min: 0, max: 1440 }),
-  body('operatingHours.*.*.end').isInt({ min: 0, max: 1440 }),
-  body('specialHours').exists().isArray(),
-  body('specialHours.*.key').isISO8601(),
-  body('specialHours.*.value').isArray(),
-  body('specialHours.*.value.*.start').isInt({ min: 0, max: 1440 }),
-  body('specialHours.*.value.*.end').isInt({ min: 0, max: 1440 }),
-  body('blockedOff').exists().isArray(),
-  body('blockedOff.*.key').isISO8601(),
-  body('blockedOff.*.value.*.start').isInt({ min: 0, max: 1440 }),
-  body('blockedOff.*.value.*.end').isInt({ min: 0, max: 1440 }) ,
-  body('minDuration').exists().isInt({ min: 0 }),
-  body('maxDuration').exists().isInt({ min: 0 }),
-  body('timeStep').exists().isInt({ min: 1 }),
-  body('maxGuests').optional({nullable: true}).isInt({ min: 0 }),
-  body('serviceArea').optional({nullable: true})
-];
-
-const EditFulfillmentValidationChain = [
-  ...FulfillmentConfigByIdValidationChain,
-  ...FulfillmentValidationChain
-];
 
 export class FulfillmentController implements IExpressController {
   public path = "/api/v1/config/fulfillment";
@@ -72,9 +21,9 @@ export class FulfillmentController implements IExpressController {
   }
 
   private initializeRoutes() {
-    this.router.post(`${this.path}`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(FulfillmentValidationChain), this.postFulfillment);
-    this.router.patch(`${this.path}/:fid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(EditFulfillmentValidationChain), this.patchFulfillment);
-    this.router.delete(`${this.path}/:fid`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware(FulfillmentConfigByIdValidationChain), this.deleteFulfillment);
+    this.router.post(`${this.path}`, CheckJWT, ScopeWriteCatalog, validationMiddleware(FulfillmentDto), this.postFulfillment);
+    this.router.patch(`${this.path}/:fid`, CheckJWT, ScopeWriteCatalog, validationMiddleware(FulfillmentIdParams, { source: 'params' }), validationMiddleware(FulfillmentDto), this.patchFulfillment);
+    this.router.delete(`${this.path}/:fid`, CheckJWT, ScopeDeleteCatalog, validationMiddleware(FulfillmentIdParams, { source: 'params' }), this.deleteFulfillment);
   };
   private postFulfillment = async (req: Request, res: Response, next: NextFunction) => {
     try {

@@ -8,20 +8,11 @@ import * as turf from '@turf/turf'
 import { DataProviderInstance } from '../config/dataprovider';
 import logger from '../logging';
 import IExpressController from '../types/IExpressController';
-import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
+import validationMiddleware from '../middleware/validationMiddleware';
 import { DeliveryAddressValidateRequest, DeliveryAddressValidateResponse } from '@wcp/wario-shared';
-import { body } from 'express-validator';
-import { isFulfillmentDefined } from '../types/Validations';
+import { DeliveryAddressValidateDto } from '../dto/delivery/DeliveryAddressDtos';
 
 const client = new Client({});
-
-const DeliveryAddressValidationChain = [
-  body('fulfillmentId').trim().exists().isMongoId().custom(isFulfillmentDefined),
-  body('address').trim().escape().exists(),
-  body('zipcode').trim().escape().exists().isLength({ min: 5, max: 5 }),
-  body('city').trim().escape().exists(),
-  body('state').trim().escape().exists()
-];
 
 export class DeliveryAddressController implements IExpressController {
   public path = "/api/v1/addresses";
@@ -32,8 +23,8 @@ export class DeliveryAddressController implements IExpressController {
   }
 
   private initializeRoutes() {
-    this.router.get(`${this.path}`, expressValidationMiddleware(DeliveryAddressValidationChain), this.validateAddress);
-    this.router.get(`${this.path}/validate`, expressValidationMiddleware(DeliveryAddressValidationChain), this.validateAddress);
+    this.router.get(`${this.path}`, validationMiddleware(DeliveryAddressValidateDto), this.validateAddress);
+    this.router.get(`${this.path}/validate`, validationMiddleware(DeliveryAddressValidateDto), this.validateAddress);
     //this.router.post(`${this.path}`, CheckJWT, ScopeWriteKVStore, this.setDeliveryArea);
   };
 

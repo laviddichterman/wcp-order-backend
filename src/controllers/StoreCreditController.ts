@@ -1,6 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { body, query } from 'express-validator';
-import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
+import validationMiddleware from '../middleware/validationMiddleware';
 import logger from '../logging';
 
 import { DataProviderInstance } from '../config/dataprovider';
@@ -11,48 +10,9 @@ import { GoogleProviderInstance } from '../config/google';
 
 import { SpendCreditResponse, ValidateLockAndSpendRequest, CURRENCY, IssueStoreCreditRequest, StoreCreditType, PurchaseStoreCreditRequest, MoneyToDisplayString } from '@wcp/wario-shared';
 import { BigIntStringify } from '../utils';
+import { CreditCodeQuery, PurchaseStoreCreditDto, IssueStoreCreditDto, SpendStoreCreditDto } from '../dto/payment/StoreCreditDtos';
 
-const CreditCodeValidationChain = [
-  query('code').exists().isLength({min: 19, max: 19})
-];
-
-const PurchaseStoreCreditValidationChain = [
-  body('amount.amount').isInt({ min: 100, max: 200000 }).exists(),
-  body('amount.currency').exists().isIn(Object.values(CURRENCY)),
-  body('senderName').trim().exists(),
-  body('senderEmail').isEmail().exists(),
-  body('recipientNameFirst').trim().exists(),
-  body('recipientNameLast').trim().exists(),
-  body('recipientEmail').optional({nullable: true, checkFalsy: true}).trim().isEmail(),
-  body('sendEmailToRecipient').toBoolean(true),
-  body('recipientMessage').optional({nullable: true}).trim()
-];
-
-const SpendStoreCreditValidationChain = [
-  body('code').exists().isLength({min: 19, max: 19}),
-  body('amount.amount').exists().isInt({min: 1}),
-  body('amount.currency').exists().isIn(Object.values(CURRENCY)),
-  body('updatedBy').exists(),
-  body('lock.enc').exists().isString(),
-  body('lock.iv').exists().isString(),
-  body('lock.auth').exists().isString()
-];
-
-const IssueStoreCreditValidationChain = [
-  body('amount.amount').isInt({ min: 100, max: 50000 }).exists(),
-  body('amount.currency').exists().isIn(Object.values(CURRENCY)),
-  body('recipientNameFirst').trim().exists().isLength({ min: 1 }),
-  body('recipientNameLast').trim().exists().isLength({ min: 1 }),
-  body('recipientEmail').exists().trim().isEmail(),
-  body('creditType').trim().exists().isIn(Object.keys(StoreCreditType)),
-  body('expiration').optional({nullable: true, checkFalsy: true}).isISO8601(),
-  body('addedBy').trim().exists().isLength({ min: 1 }),
-  body('reason').trim().exists().isLength({ min: 1 }),
-];
-
-
-
-export class StoreCreditController implements IExpressController {
+export class StoreCreditController implements IExpressController{
   public path = "/api/v1/payments/storecredit";
   public router = Router({ mergeParams: true });
 
@@ -62,10 +22,10 @@ export class StoreCreditController implements IExpressController {
 
   private initializeRoutes() {
     // todo: move /validate endpoint to ./
-    this.router.get(`${this.path}/validate`, expressValidationMiddleware(CreditCodeValidationChain), this.getValidateCredit);
-    this.router.post(`${this.path}/spend`, expressValidationMiddleware(SpendStoreCreditValidationChain), this.postSpendCredit);
-    this.router.post(`${this.path}/purchase`, expressValidationMiddleware(PurchaseStoreCreditValidationChain), this.postPurchaseCredit);
-    this.router.post(`${this.path}/issue`, CheckJWT, ScopeEditCredit, expressValidationMiddleware(IssueStoreCreditValidationChain), this.postIssueCredit);  };
+    this.router.get(`${this.path}/validate`, validationMiddleware(CreditCodeQuery, { source: 'query' }), this.getValidateCredit);
+    this.router.post(`${this.path}/spend`, validationMiddleware(SpendStoreCreditDto), this.postSpendCredit);
+    this.router.post(`${this.path}/purchase`, validationMiddleware(PurchaseStoreCreditDto), this.postPurchaseCredit);
+    this.router.post(`${this.path}/issue`, CheckJWT, ScopeEditCredit, validationMiddleware(IssueStoreCreditDto), this.postIssueCredit);  };
 
   private getValidateCredit = async (req: Request, res: Response, next: NextFunction) => {
     const EMAIL_ADDRESS = DataProviderInstance.KeyValueConfig.EMAIL_ADDRESS;

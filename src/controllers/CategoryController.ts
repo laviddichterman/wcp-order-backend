@@ -1,5 +1,4 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { body, param } from 'express-validator';
 import { CALL_LINE_DISPLAY, CategoryDisplay } from '@wcp/wario-shared';
 
 import logger from '../logging';
@@ -7,35 +6,8 @@ import logger from '../logging';
 import IExpressController from '../types/IExpressController';
 import { CheckJWT, ScopeDeleteCatalog, ScopeWriteCatalog } from '../config/authorization';
 import { CatalogProviderInstance } from '../config/catalog_provider';
-import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
-import { isFulfillmentDefined } from '../types/Validations';
-
-const CategoryByIdValidationChain = [
-  param('catid').trim().escape().exists().isMongoId(),
-];
-
-const CategoryValidationChain = [
-  body('name').trim().exists(),
-  body('description').trim(),
-  body('subheading').trim(),
-  body('footnotes').trim(),
-  body('ordinal').exists().isInt({ min: 0 }),
-  body('parent_id').trim().escape().isMongoId().optional({ nullable: true }),
-  body('display_flags.call_line_name').trim().escape(),
-  body('display_flags.call_line_display').isIn(Object.keys(CALL_LINE_DISPLAY)),
-  body('display_flags.nesting').isIn(Object.keys(CategoryDisplay)),
-  body('serviceDisable.*').custom(isFulfillmentDefined)
-];
-
-const EditCategoryValidationChain = [
-  ...CategoryByIdValidationChain,
-  ...CategoryValidationChain
-]
-
-const DeleteCategoryValidationChain = [
-  ...CategoryByIdValidationChain,
-  body('delete_contained_products').optional().toBoolean(true),
-]
+import validationMiddleware from '../middleware/validationMiddleware';
+import { CategoryIdParams, CategoryDto, DeleteCategoryDto } from '../dto/catalog/CategoryDtos';
 
 export class CategoryController implements IExpressController {
   public path = "/api/v1/menu/category";
@@ -46,9 +18,9 @@ export class CategoryController implements IExpressController {
   }
 
   private initializeRoutes() {
-    this.router.post(`${this.path}`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(CategoryValidationChain), this.postCategory);
-    this.router.patch(`${this.path}/:catid`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(EditCategoryValidationChain), this.patchCategory);
-    this.router.delete(`${this.path}/:catid`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware(DeleteCategoryValidationChain), this.deleteCategory);
+    this.router.post(`${this.path}`, CheckJWT, ScopeWriteCatalog, validationMiddleware(CategoryDto), this.postCategory);
+    this.router.patch(`${this.path}/:catid`, CheckJWT, ScopeWriteCatalog, validationMiddleware(CategoryIdParams, { source: 'params' }), validationMiddleware(CategoryDto), this.patchCategory);
+    this.router.delete(`${this.path}/:catid`, CheckJWT, ScopeDeleteCatalog, validationMiddleware(CategoryIdParams, { source: 'params' }), validationMiddleware(DeleteCategoryDto), this.deleteCategory);
   };
   private postCategory = async (req: Request, res: Response, next: NextFunction) => {
     try {
