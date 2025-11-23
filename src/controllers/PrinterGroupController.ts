@@ -4,7 +4,7 @@ import { body, param } from 'express-validator';
 import logger from '../logging';
 
 import IExpressController from '../types/IExpressController';
-import { CheckJWT, ScopeDeleteCatalog, ScopeWriteCatalog } from '../config/authorization';
+import { CheckJWT, ScopeDeleteCatalog, ScopeWriteCatalog, ScopeWriteOrders } from '../config/authorization';
 import { CatalogProviderInstance } from '../config/catalog_provider';
 import expressValidationMiddleware from '../middleware/expressValidationMiddleware';
 
@@ -42,9 +42,9 @@ export class PrinterGroupController implements IExpressController {
   }
 
   private initializeRoutes() {
-    this.router.get(`${this.path}`, CheckJWT, ScopeWriteCatalog, this.getPrinterGroups);
-    this.router.post(`${this.path}`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(PrinterGroupValidationChain), this.postPrinterGroup);
-    this.router.patch(`${this.path}/:pgId`, CheckJWT, ScopeWriteCatalog, expressValidationMiddleware(EditPrinterGroupValidationChain), this.patchPrinterGroup);
+    this.router.get(`${this.path}`, CheckJWT, ScopeWriteOrders, this.getPrinterGroups);
+    this.router.post(`${this.path}`, CheckJWT, ScopeWriteOrders, ScopeWriteCatalog, expressValidationMiddleware(PrinterGroupValidationChain), this.postPrinterGroup);
+    this.router.patch(`${this.path}/:pgId`, CheckJWT, ScopeWriteOrders, ScopeWriteCatalog, expressValidationMiddleware(EditPrinterGroupValidationChain), this.patchPrinterGroup);
     this.router.delete(`${this.path}/:pgId`, CheckJWT, ScopeDeleteCatalog, expressValidationMiddleware(DeleteAndReassignPrinterGroupValidationChain), this.deletePrinterGroup);
   };
 
