@@ -75,6 +75,8 @@ export class WApp {
     const DBPASS = process.env.DBPASS || undefined;
     const DBENDPOINT = process.env.DBENDPOINT || '127.0.0.1:27017';
     const url = `mongodb://${DBENDPOINT}/${DBTABLE}`;
+    // Mongoose 7 changed strictQuery default to true; preserve v6 behavior
+    mongoose.set('strictQuery', false);
     mongoose.connect(url, { user: DBUSER, pass: DBPASS });
     mongoose.connection
       .on('error', error => { throw error })

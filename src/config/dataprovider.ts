@@ -1,8 +1,7 @@
 import { WProvider } from '../types/WProvider';
 import { FulfillmentConfig, ReduceArrayToMapByKey, IWSettings, PostBlockedOffToFulfillmentsRequest, SetLeadTimesRequest, WDateUtils, SeatingResource } from '@wcp/wario-shared';
-import { HydratedDocument } from 'mongoose';
 import logger from '../logging';
-import { KeyValueModel, IKeyValueStore } from '../models/settings/KeyValueSchema';
+import { KeyValueModel } from '../models/settings/KeyValueSchema';
 import { SettingsModel } from '../models/settings/SettingsSchema';
 import { FulfillmentModel } from '../models/settings/FulfillmentSchema';
 import { Promise } from 'bluebird';
@@ -87,14 +86,23 @@ export class DataProvider implements WProvider {
     return this.#keyvalueconfig;
   }
 
-  set Settings(da) {
+  /**
+   * Update settings in memory and persist to database.
+   * Mongoose 7 removed callback support, so this is now an async method.
+   */
+  updateSettings = async (da: IWSettings) => {
     this.#settings = da;
-    SettingsModel.findOne(function (_err: Error, db_settings: HydratedDocument<IWSettings>) {
-      Object.assign(db_settings, da);
-      db_settings.save()
-        .then(() => { logger.debug("Saved settings %o", db_settings) })
-        .catch(err => { logger.error("Error saving settings %o", err) });
-    });
+    try {
+      const db_settings = await SettingsModel.findOne();
+      if (db_settings) {
+        Object.assign(db_settings, da);
+        await db_settings.save();
+        logger.debug("Saved settings %o", db_settings);
+      }
+    } catch (err) {
+      logger.error("Error saving settings %o", err);
+      throw err;
+    }
   }
 
 
@@ -208,18 +216,27 @@ export class DataProvider implements WProvider {
       });
   }
 
-  set KeyValueConfig(da) {
+  /**
+   * Update key/value config in memory and persist to database.
+   * Mongoose 7 removed callback support, so this is now an async method.
+   */
+  updateKeyValueConfig = async (da: { [key: string]: string }) => {
     this.#keyvalueconfig = da;
-    KeyValueModel.findOne(function (_err: Error, db_key_values: HydratedDocument<IKeyValueStore>) {
-      const settings_list = [];
-      for (var i in da) {
-        settings_list.push({ key: i, value: da[i] });
+    try {
+      const db_key_values = await KeyValueModel.findOne();
+      if (db_key_values) {
+        const settings_list: { key: string; value: string }[] = [];
+        for (const i in da) {
+          settings_list.push({ key: i, value: da[i] });
+        }
+        db_key_values.settings = settings_list;
+        await db_key_values.save();
+        logger.debug("Saved key/value config %o", db_key_values);
       }
-      db_key_values.settings = settings_list;
-      db_key_values.save()
-        .then(() => { logger.debug("Saved key/value config %o", db_key_values) })
-        .catch(err => { logger.error("Error saving key/value config %o", err) });
-    });
+    } catch (err) {
+      logger.error("Error saving key/value config %o", err);
+      throw err;
+    }
   }
 };
 

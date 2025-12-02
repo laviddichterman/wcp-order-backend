@@ -91,7 +91,7 @@ export class SettingsController implements IExpressController {
   }
   private setSettings = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      DataProviderInstance.Settings = req.body;
+      await DataProviderInstance.updateSettings(req.body);
       SocketIoProviderInstance.socketRO.emit('WCP_SETTINGS', DataProviderInstance.Settings);
       const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/`;
       res.setHeader('Location', location);

@@ -45,7 +45,7 @@ export class KeyValueStoreController implements IExpressController {
       if (!errors.isEmpty()) {
         return res.status(422).json({ errors: errors.array() });
       }
-      DataProviderInstance.KeyValueConfig = req.body;
+      await DataProviderInstance.updateKeyValueConfig(req.body);
       const location = `${req.protocol}://${req.get('host')}${req.originalUrl}/`;
       res.setHeader('Location', location);
       return res.status(201).send(DataProviderInstance.KeyValueConfig);
