@@ -534,7 +534,7 @@ body('proposedPayments.*.t').isIn([PaymentMethod.CreditCard, PaymentMethod.Store
 
 ```mermaid
 graph LR
-    A[@wcp/wario-shared] -->|Import Types| B[Controller]
+    A[wario-shared] -->|Import Types| B[Controller]
     A -->|Import Types| C[Model Schema]
     B -->|Validate via express-validator| D[Request Handler]
     D -->|Pass to| E[Provider/Manager]
